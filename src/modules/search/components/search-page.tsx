@@ -87,6 +87,13 @@ export function SearchPage(props: SearchPageProps) {
     } catch { /* offline */ }
   }, []);
 
+  // URL sync without re-triggering the ?q= auto-run effect below.
+  const lastAutoRef = React.useRef<string | null>(null);
+  const setUrl = React.useCallback((q: string | null, t: "research" | "citecheck" = "research") => {
+    lastAutoRef.current = q;
+    try { window.history.replaceState(null, "", t === "citecheck" ? "/search?tool=citecheck" : q ? `/search?q=${encodeURIComponent(q)}` : "/search"); } catch { /* ignore */ }
+  }, []);
+
   const search = useSearch({ onRunDone: () => void refreshHistory(), onError: (m) => { if (!/OPENAI_API_KEY/i.test(m)) toast.error("Synthesis failed", { description: m }); } });
   const { run, agent } = search;
   const terms = React.useMemo(() => extractTerms(run.query || query), [run.query, query]);
@@ -107,17 +114,19 @@ export function SearchPage(props: SearchPageProps) {
     setActiveSource((cur) => (cur && s.sources.includes(cur) ? cur : s.sources[0] ?? null));
     const savedMatch = extra.savedSearchId ?? saved.find((x) => x.query.trim() === text)?.id;
     search.start(text, s, { savedSearchId: savedMatch });
-    try { window.history.replaceState(null, "", `/search?q=${encodeURIComponent(text)}`); } catch { /* ignore */ }
-  }, [query, saved, search, pushRecentQuery]);
+    setUrl(text);
+  }, [query, saved, search, pushRecentQuery, setUrl]);
 
-  // auto-run from ?q= (command palette, deep links) once settings are hydrated
-  const lastAutoRef = React.useRef<string | null>(null);
+  // auto-run from ?q= (command palette, deep links) once settings are hydrated. Keyed on the URL only:
+  // `lastAutoRef` holds the query we last ran or wrote to the URL, so our own replaceState never re-triggers a run.
+  const submitRef = React.useRef(submit);
+  submitRef.current = submit;
   React.useEffect(() => {
     if (!hydrated || !urlQ.trim() || tool === "citecheck") return;
     if (lastAutoRef.current === urlQ) return;
     lastAutoRef.current = urlQ;
-    submit(urlQ);
-  }, [hydrated, urlQ, tool, submit]);
+    submitRef.current(urlQ);
+  }, [hydrated, urlQ, tool]);
 
   const copyCite = React.useCallback((hit: SearchHit) => {
     const cite = formatBluebook(hit);
@@ -143,7 +152,7 @@ export function SearchPage(props: SearchPageProps) {
   const openHit = React.useCallback((hit: SearchHit) => { setReaderHit(hit); setReaderOpen(true); setSelectedId(hit.id); }, []);
 
   const runSaved = React.useCallback((s: SavedSearch) => { replaceSettings(s.settings); setHistoryOpen(false); setTool("research"); submit(s.query, s.settings, { savedSearchId: s.id }); }, [replaceSettings, submit]);
-  const restoreRun = React.useCallback((r: SearchRun) => { replaceSettings(r.settings); setQuery(r.query); setHistoryOpen(false); setTool("research"); setSelectedId(null); setActiveSource(r.settings.sources[0] ?? null); search.restore(r); try { window.history.replaceState(null, "", `/search?q=${encodeURIComponent(r.query)}`); } catch { /* ignore */ } }, [replaceSettings, search]);
+  const restoreRun = React.useCallback((r: SearchRun) => { replaceSettings(r.settings); setQuery(r.query); setHistoryOpen(false); setTool("research"); setSelectedId(null); setActiveSource(r.settings.sources[0] ?? null); search.restore(r); setUrl(r.query); }, [replaceSettings, search, setUrl]);
   const rerun = React.useCallback((r: SearchRun) => { replaceSettings(r.settings); setHistoryOpen(false); setTool("research"); submit(r.query, r.settings, { savedSearchId: r.savedSearchId }); }, [replaceSettings, submit]);
 
   const togglePin = async (s: SavedSearch) => { await fetch(`/api/search/saved/${s.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned: !s.pinned }) }); void refreshHistory(); };
@@ -163,10 +172,7 @@ export function SearchPage(props: SearchPageProps) {
     } catch (e) { toast.error("Could not save search", { description: e instanceof Error ? e.message : String(e) }); } finally { setSaving(false); }
   };
 
-  const switchTool = (t: "research" | "citecheck") => {
-    setTool(t);
-    try { window.history.replaceState(null, "", t === "citecheck" ? "/search?tool=citecheck" : run.query ? `/search?q=${encodeURIComponent(run.query)}` : "/search"); } catch { /* ignore */ }
-  };
+  const switchTool = (t: "research" | "citecheck") => { setTool(t); setUrl(run.query || null, t); };
 
   // ---- keyboard: j/k move, Enter open, c cite, m memo, / focus ----
   React.useEffect(() => {
@@ -205,19 +211,19 @@ export function SearchPage(props: SearchPageProps) {
   const topbar = (
     <TopbarSlot>
       <SearchIcon className="size-4 text-muted-foreground" />
-      <button onClick={() => { search.clear(); setQuery(""); setTool("research"); try { window.history.replaceState(null, "", "/search"); } catch { /* ignore */ } }} className="text-sm font-semibold hover:text-primary cursor-pointer">Search</button>
+      <button onClick={() => { search.clear(); setQuery(""); setTool("research"); setUrl(null); }} className="shrink-0 text-sm font-semibold hover:text-primary cursor-pointer">Search</button>
       {tool === "citecheck" ? (
         <><ChevronRight className="size-3.5 text-muted-foreground" /><span className="text-sm text-muted-foreground">Citation checker</span></>
       ) : run.query ? (
         <><ChevronRight className="size-3.5 text-muted-foreground" /><span className="max-w-[28vw] truncate font-mono text-xs text-muted-foreground" title={run.query}>{run.query}</span>{search.isStreaming || loadingCount > 0 ? <Loader2 className="size-3.5 animate-spin text-muted-foreground" /> : null}</>
       ) : null}
-      <div className="ml-2 hidden items-center rounded-md border p-0.5 md:flex">
+      <div className="ml-2 hidden shrink-0 items-center rounded-md border p-0.5 md:flex">
         <button onClick={() => switchTool("research")} className={cn("flex h-6 items-center gap-1 rounded px-2 text-[11px] cursor-pointer", tool === "research" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground")}><Scale className="size-3" /> Research</button>
         <button onClick={() => switchTool("citecheck")} className={cn("flex h-6 items-center gap-1 rounded px-2 text-[11px] cursor-pointer", tool === "citecheck" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground")}><ShieldCheck className="size-3" /> Citation checker</button>
       </div>
       <div className="flex-1" />
-      {currentMatter && <Badge variant="outline" className="hidden lg:inline-flex max-w-[220px] truncate">{currentMatter.shortName}{currentMatter.caption ? ` · ${currentMatter.caption}` : ""}</Badge>}
-      {!props.aiConfigured && <Tip label="AI synthesis disabled until OPENAI_API_KEY is set"><Link href="/settings#ai"><Badge variant="warning" className="cursor-pointer">No OpenAI key</Badge></Link></Tip>}
+      {currentMatter && <Badge variant="outline" className="hidden shrink-0 xl:inline-flex">{currentMatter.shortName}</Badge>}
+      {!props.aiConfigured && <Tip label="AI synthesis disabled until OPENAI_API_KEY is set"><Link href="/settings#ai" className="shrink-0"><Badge variant="warning" className="cursor-pointer">No OpenAI key</Badge></Link></Tip>}
       <Tip label="Saved searches & history"><Button variant="ghost" size="sm" onClick={() => setHistoryOpen(true)}><History className="size-4" /> <span className="hidden sm:inline">History</span></Button></Tip>
       {mode === "results" && tool === "research" && (
         <Popover open={saveOpen} onOpenChange={setSaveOpen}>

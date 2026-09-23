@@ -157,13 +157,20 @@ export function guessStatuteCite(title?: string): string | undefined {
   return undefined;
 }
 
+/** Keyword excerpts often start with the item's own name; strip it so the card does not repeat the title. */
+function trimTitleFromSnippet(title: string, snippet: string) {
+  const t = clean(title), s = clean(snippet).replace(/^…/, "");
+  if (t && s.toLowerCase().startsWith(t.toLowerCase())) return s.slice(t.length).replace(/^[\s—–:.\-]+/, "").trim();
+  return s;
+}
+
 export function normalizeLibrary(raw: RawLibrary): SearchHit {
   return {
     id: `library:${raw.id}`,
     source: "library",
     title: raw.name,
     subtitle: [raw.type.toUpperCase(), raw.practice_area].filter(Boolean).join(" · "),
-    snippet: clean(raw.passage) || clean(raw.description),
+    snippet: trimTitleFromSnippet(raw.name, raw.passage) || clean(raw.description),
     score: raw.score,
     library: { type: raw.type, tags: raw.tags, practiceArea: raw.practice_area, officeDocId: raw.office_doc_id, description: raw.description },
     authority: "n/a",

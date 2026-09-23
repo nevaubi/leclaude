@@ -311,7 +311,7 @@ export function recordRun(input: { id: string; query: string; settings: SearchSe
     counts,
     totals: input.outcome.totals,
     errors: input.outcome.errors.length ? input.outcome.errors : undefined,
-    synthesis: input.synthesis ? input.synthesis.slice(0, 6000) : undefined,
+    synthesis: input.synthesis ? input.synthesis.slice(0, 12_000) : undefined,
     topHits: topHits.slice(0, 12),
     ownerId: CURRENT_USER.id,
     matterId: input.settings.matterId ?? null,

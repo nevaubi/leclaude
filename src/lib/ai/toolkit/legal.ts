@@ -22,7 +22,6 @@ interface CLSearchResult {
 export const COURT_GROUPS: Record<string, string> = {
   "scotus": "scotus",
   "federal-appellate": "ca1 ca2 ca3 ca4 ca5 ca6 ca7 ca8 ca9 ca10 ca11 cadc cafc",
-  "federal-district": "",
   "4th-circuit": "ca4 dsc dnc dmd dvae dvaw dwvn dwvs",
   "7th-circuit": "ca7 ilnd ilcd ilsd innd insd wied wiwd",
   "9th-circuit": "ca9 cacd caed cand casd",

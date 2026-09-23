@@ -126,12 +126,14 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
                 <div className="min-w-0 flex-1">
                   <SheetTitle className="text-base leading-snug">{result?.title ?? hit.title}</SheetTitle>
                   <SheetDescription className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
-                    {hit.cite && <span className="font-mono text-foreground/80">{hit.cite}</span>}
-                    {(hit.courtId || hit.court) && <span>· {courtAbbreviation(hit.courtId, hit.court)}</span>}
-                    {hit.date && <span>· {formatDate(hit.date)}</span>}
-                    <span>· {SOURCE_LABEL[hit.source]}</span>
+                    {[
+                      hit.cite ? <span key="cite" className="font-mono text-foreground/80">{hit.cite}</span> : null,
+                      hit.courtId || hit.court ? <span key="court">{courtAbbreviation(hit.courtId, hit.court)}</span> : null,
+                      hit.date ? <span key="date">{formatDate(hit.date)}</span> : null,
+                      <span key="source">{SOURCE_LABEL[hit.source]}</span>,
+                      result ? <span key="len" className="tabular">{result.length.toLocaleString()} chars</span> : null,
+                    ].filter(Boolean).map((el, i) => <React.Fragment key={i}>{i > 0 && <span className="opacity-50">·</span>}{el}</React.Fragment>)}
                     {hit.authority && hit.authority !== "n/a" && <Badge variant={hit.authority === "binding" ? "success" : "muted"} className="py-0 capitalize">{hit.authority}</Badge>}
-                    {result && <span className="tabular">· {result.length.toLocaleString()} chars</span>}
                   </SheetDescription>
                 </div>
               </div>

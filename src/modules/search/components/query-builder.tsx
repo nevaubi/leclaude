@@ -42,7 +42,7 @@ export function QueryBuilder({ query, onApply }: { query: string; onApply: (q: s
         <div className="flex items-center gap-1">
           <Input value={proxA} onChange={(e) => setProxA(e.target.value)} placeholder="warn" className="h-7 text-xs" />
           <span className="text-muted-foreground">within</span>
-          <Input value={proxN} onChange={(e) => setProxN(e.target.value)} className="h-7 w-12 text-xs tabular" />
+          <Input value={proxN} onChange={(e) => setProxN(e.target.value)} className="h-7 w-14 text-center text-xs tabular" inputMode="numeric" />
           <Input value={proxB} onChange={(e) => setProxB(e.target.value)} placeholder="adequate" className="h-7 text-xs" />
         </div>
         <Label>Case name</Label><Input value={caseName} onChange={(e) => setCaseName(e.target.value)} placeholder="Meridian" className="h-7 text-xs" />

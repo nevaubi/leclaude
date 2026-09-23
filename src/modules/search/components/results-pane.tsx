@@ -131,7 +131,17 @@ export function ResultsPane(p: ResultsPaneProps) {
           </div>
         ) : hits.length === 0 ? (
           <div className="p-6">
-            <EmptyState icon={SearchX} title={p.filter ? "Nothing matches the filter" : active === "web" ? "No web sources yet" : `No ${SOURCE_SHORT[active].toLowerCase()} results`} description={active === "web" ? "Web pages the research agent cites while it works appear here (requires the Web chip and an OpenAI key)." : "Try broader terms, remove a jurisdiction filter, or widen the date range."} />
+            <EmptyState
+              icon={SearchX}
+              title={p.filter ? "Nothing matches the filter" : active === "web" ? "No web sources yet" : `No ${SOURCE_SHORT[active].toLowerCase()} results`}
+              description={
+                active === "web"
+                  ? "Web pages the research agent cites while it works appear here (requires the Web chip and an OpenAI key)."
+                  : (active === "library" || active === "ediscovery") && p.run.settings?.matterId
+                    ? "Results are limited to the selected matter context. Choose “No matter context” in the query bar to search every matter and folder."
+                    : "Try broader terms, remove a jurisdiction filter, or widen the date range."
+              }
+            />
           </div>
         ) : (
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
