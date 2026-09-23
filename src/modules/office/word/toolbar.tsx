@@ -3,7 +3,7 @@ import * as React from "react";
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import {
-  AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, Image as ImageIcon, Indent, Italic, Link2, List, ListOrdered, ListTodo, Minus, Outdent, PaintBucket, Plus, Redo2, Scissors, Sigma, Strikethrough, Subscript, Superscript, Table as TableIcon, Underline, Undo2, Workflow, type LucideIcon,
+  AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, Image as ImageIcon, Indent, Italic, Link2, List, ListOrdered, ListTodo, Outdent, PaintBucket, Plus, Redo2, Scissors, Sigma, Strikethrough, Subscript, Superscript, Table as TableIcon, Type, Underline, Undo2, Workflow, type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ function TBtn({ icon: Icon, label, shortcut, active, onClick, disabled }: { icon
   );
 }
 
-const Sep = () => <span className="mx-1 h-5 w-px shrink-0 bg-border" />;
+const Sep = () => <span className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
 
 export function currentParagraphStyle(editor: Editor): ParagraphStyle {
   if (editor.isActive("heading", { pStyle: "title" })) return "title";
@@ -104,28 +104,22 @@ export function WordToolbar(props: ToolbarProps) {
       <TBtn icon={Redo2} label="Redo" shortcut="⌘⇧Z" onClick={() => editor.chain().focus().redo().run()} disabled={!state.canRedo} />
       <Sep />
       <Select value={state.style} onValueChange={(v) => applyParagraphStyle(editor, v as ParagraphStyle)}>
-        <SelectTrigger size="sm" className="h-7 w-[138px] shrink-0 text-xs" aria-label="Paragraph style"><SelectValue /></SelectTrigger>
-        <SelectContent>{PARAGRAPH_STYLES.map((s) => <SelectItem key={s.id} value={s.id}><span className="flex w-full items-center justify-between gap-3">{s.label}{s.shortcut && <kbd className="ml-auto">{s.shortcut}</kbd>}</span></SelectItem>)}</SelectContent>
+        <SelectTrigger size="sm" className="h-7 w-[118px] shrink-0 text-xs" aria-label="Paragraph style"><SelectValue /></SelectTrigger>
+        <SelectContent>{PARAGRAPH_STYLES.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}</SelectContent>
       </Select>
       <Select value={fontId} onValueChange={(v) => { const f = FONT_FAMILIES.find((x) => x.id === v)!; if (v === settings.font) editor.chain().focus().unsetFontFamily().run(); else editor.chain().focus().setFontFamily(f.css).run(); }}>
-        <SelectTrigger size="sm" className="h-7 w-[132px] shrink-0 text-xs" aria-label="Font family"><SelectValue /></SelectTrigger>
+        <SelectTrigger size="sm" className="h-7 w-[112px] shrink-0 text-xs" aria-label="Font family"><SelectValue /></SelectTrigger>
         <SelectContent>{FONT_FAMILIES.map((f) => <SelectItem key={f.id} value={f.id}><span style={{ fontFamily: f.css }}>{f.label}</span></SelectItem>)}</SelectContent>
       </Select>
-      <div className="flex h-7 shrink-0 items-center rounded-md border">
-        <button type="button" className="px-1 text-muted-foreground hover:text-foreground cursor-pointer" aria-label="Decrease font size" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setFontSize(`${Math.max(6, sizePt - 1)}pt`).run()}><Minus className="size-3" /></button>
-        <Select value={String(sizePt)} onValueChange={(v) => { if (Number(v) === settings.fontSize) editor.chain().focus().unsetFontSize().run(); else editor.chain().focus().setFontSize(`${v}pt`).run(); }}>
-          <SelectTrigger size="sm" className="h-6 w-[52px] border-0 px-1 text-xs shadow-none tabular" aria-label="Font size"><SelectValue /></SelectTrigger>
-          <SelectContent>{Array.from(new Set([...FONT_SIZES, sizePt])).sort((a, b) => a - b).map((s) => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}</SelectContent>
-        </Select>
-        <button type="button" className="px-1 text-muted-foreground hover:text-foreground cursor-pointer" aria-label="Increase font size" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setFontSize(`${Math.min(72, sizePt + 1)}pt`).run()}><Plus className="size-3" /></button>
-      </div>
+      <Select value={String(sizePt)} onValueChange={(v) => { if (Number(v) === settings.fontSize) editor.chain().focus().unsetFontSize().run(); else editor.chain().focus().setFontSize(`${v}pt`).run(); }}>
+        <SelectTrigger size="sm" className="h-7 w-[58px] shrink-0 px-1.5 text-xs tabular" aria-label="Font size (⌘⇧, / ⌘⇧.)"><SelectValue /></SelectTrigger>
+        <SelectContent>{Array.from(new Set([...FONT_SIZES, sizePt])).sort((a, b) => a - b).map((s) => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}</SelectContent>
+      </Select>
       <Sep />
       <TBtn icon={Bold} label="Bold" shortcut="⌘B" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()} />
       <TBtn icon={Italic} label="Italic" shortcut="⌘I" active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()} />
       <TBtn icon={Underline} label="Underline" shortcut="⌘U" active={state.underline} onClick={() => editor.chain().focus().toggleUnderline().run()} />
       <TBtn icon={Strikethrough} label="Strikethrough" shortcut="⌘⇧S" active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()} />
-      <TBtn icon={Superscript} label="Superscript" shortcut="⌘." active={state.sup} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
-      <TBtn icon={Subscript} label="Subscript" shortcut="⌘," active={state.sub} onClick={() => editor.chain().focus().toggleSubscript().run()} />
       <Popover>
         <Tip label="Text color"><PopoverTrigger asChild><button type="button" onMouseDown={(e) => e.preventDefault()} aria-label="Text color" className="inline-flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-accent cursor-pointer"><Baseline className="size-4" style={state.color ? { color: state.color } : undefined} /></button></PopoverTrigger></Tip>
         <PopoverContent className="w-auto p-2" align="start">
@@ -144,7 +138,17 @@ export function WordToolbar(props: ToolbarProps) {
           <Button variant="ghost" size="xs" className="mt-2 w-full" onClick={() => editor.chain().focus().unsetHighlight().run()}>Remove highlight</Button>
         </PopoverContent>
       </Popover>
-      <TBtn icon={Eraser} label="Clear formatting" shortcut="⌘\\" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} />
+      <DropdownMenu>
+        <Tip label="More formatting"><DropdownMenuTrigger asChild><button type="button" onMouseDown={(e) => e.preventDefault()} aria-label="More formatting" data-state={state.sup || state.sub ? "on" : "off"} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-accent cursor-pointer"><Type className="size-4" /></button></DropdownMenuTrigger></Tip>
+        <DropdownMenuContent align="start">
+          <DropdownMenuCheckboxItem checked={state.sup} onCheckedChange={() => editor.chain().focus().toggleSuperscript().run()}><Superscript /> Superscript <span className="ml-auto text-[10px] text-muted-foreground">⌘.</span></DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem checked={state.sub} onCheckedChange={() => editor.chain().focus().toggleSubscript().run()}><Subscript /> Subscript <span className="ml-auto text-[10px] text-muted-foreground">⌘,</span></DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem checked={editor.isActive("smallCaps")} onCheckedChange={() => editor.chain().focus().toggleSmallCaps().run()}>Small caps</DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem checked={editor.isActive("code")} onCheckedChange={() => editor.chain().focus().toggleCode().run()}>Monospace</DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}><Eraser /> Clear formatting <span className="ml-auto text-[10px] text-muted-foreground">⌘\</span></DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Sep />
       <TBtn icon={AlignLeft} label="Align left" shortcut="⌘⇧L" active={state.left} onClick={() => editor.chain().focus().setTextAlign("left").run()} />
       <TBtn icon={AlignCenter} label="Center" shortcut="⌘⇧E" active={state.center} onClick={() => editor.chain().focus().setTextAlign("center").run()} />
@@ -161,9 +165,9 @@ export function WordToolbar(props: ToolbarProps) {
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>{state.ordered ? "Remove numbering" : "Numbered list"}</DropdownMenuItem>
+          <DropdownMenuCheckboxItem checked={state.task} onCheckedChange={() => editor.chain().focus().toggleTaskList().run()}><ListTodo /> Checklist <span className="ml-auto text-[10px] text-muted-foreground">⌘⇧9</span></DropdownMenuCheckboxItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <TBtn icon={ListTodo} label="Checklist" shortcut="⌘⇧9" active={state.task} onClick={() => editor.chain().focus().toggleTaskList().run()} />
       <TBtn icon={Outdent} label="Decrease indent" shortcut="⇧Tab" onClick={() => { if (editor.isActive("listItem")) editor.chain().focus().liftListItem("listItem").run(); else editor.chain().focus().setParagraphIndent(-1).run(); }} />
       <TBtn icon={Indent} label="Increase indent" shortcut="Tab" onClick={() => { if (editor.isActive("listItem")) editor.chain().focus().sinkListItem("listItem").run(); else editor.chain().focus().setParagraphIndent(1).run(); }} />
       <DropdownMenu>
@@ -186,7 +190,7 @@ export function WordToolbar(props: ToolbarProps) {
       </DropdownMenu>
       <Sep />
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 shrink-0 gap-1 px-1.5 font-normal" onMouseDown={(e) => e.preventDefault()}><Plus className="size-4" /> Insert <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 shrink-0 gap-1 px-1.5 font-normal" onMouseDown={(e) => e.preventDefault()} aria-label="Insert"><Plus className="size-4" /><span className="hidden min-[1700px]:inline">Insert</span><ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
           <DropdownMenuItem onClick={() => onInsert("table")}><TableIcon /> Table</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onInsert("image")}><ImageIcon /> Image…</DropdownMenuItem>
@@ -208,7 +212,7 @@ export function WordToolbar(props: ToolbarProps) {
       </DropdownMenu>
       {state.inTable && (
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 shrink-0 gap-1 px-1.5 font-normal" onMouseDown={(e) => e.preventDefault()}><TableIcon className="size-4" /> Table <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 shrink-0 gap-1 px-1.5 font-normal" onMouseDown={(e) => e.preventDefault()} aria-label="Table"><TableIcon className="size-4" /><span className="hidden min-[1700px]:inline">Table</span><ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>Insert row above</DropdownMenuItem>
             <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>Insert row below</DropdownMenuItem>
@@ -226,7 +230,7 @@ export function WordToolbar(props: ToolbarProps) {
         </DropdownMenu>
       )}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 shrink-0 gap-1 px-1.5 font-normal" onMouseDown={(e) => e.preventDefault()}><PaintBucket className="size-4" /> Page <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 shrink-0 gap-1 px-1.5 font-normal" onMouseDown={(e) => e.preventDefault()} aria-label="Page setup"><PaintBucket className="size-4" /><span className="hidden min-[1700px]:inline">Page</span><ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>Size · {PAGE_SIZES[settings.pageSize].label.split(" ")[0]}</DropdownMenuSubTrigger>
@@ -256,8 +260,8 @@ export function WordToolbar(props: ToolbarProps) {
       {trackChanges || changes.length > 0 ? (
         <>
           <div className="flex-1" />
-          <div className="flex shrink-0 items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 text-xs">
-            <span className="tabular text-muted-foreground">{changes.length} tracked change{changes.length === 1 ? "" : "s"}</span>
+          <div className="flex shrink-0 items-center gap-0.5 rounded-md border bg-muted/40 px-1.5 py-0.5 text-xs">
+            <span className="tabular text-muted-foreground whitespace-nowrap">{changes.length} tracked change{changes.length === 1 ? "" : "s"}</span>
             <button type="button" aria-label="Previous change" disabled={!changes.length} onClick={() => onChangeNav(-1)} className="rounded p-0.5 hover:bg-accent disabled:opacity-40 cursor-pointer"><ChevronLeft className="size-3.5" /></button>
             <span className="tabular text-[11px] text-muted-foreground">{changes.length ? `${changeIndex + 1}/${changes.length}` : "–"}</span>
             <button type="button" aria-label="Next change" disabled={!changes.length} onClick={() => onChangeNav(1)} className="rounded p-0.5 hover:bg-accent disabled:opacity-40 cursor-pointer"><ChevronRight className="size-3.5" /></button>
@@ -265,8 +269,8 @@ export function WordToolbar(props: ToolbarProps) {
             <Tip label="Accept current change"><button type="button" disabled={!changes.length} onClick={onAcceptCurrent} className="rounded px-1 text-success hover:bg-success/10 disabled:opacity-40 cursor-pointer">✓</button></Tip>
             <Tip label="Reject current change"><button type="button" disabled={!changes.length} onClick={onRejectCurrent} className="rounded px-1 text-destructive hover:bg-destructive/10 disabled:opacity-40 cursor-pointer">✕</button></Tip>
             <span className="mx-0.5 h-4 w-px bg-border" />
-            <button type="button" disabled={!changes.length} onClick={onAcceptAll} className="rounded px-1.5 py-0.5 font-medium hover:bg-accent disabled:opacity-40 cursor-pointer">Accept all</button>
-            <button type="button" disabled={!changes.length} onClick={onRejectAll} className="rounded px-1.5 py-0.5 font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 cursor-pointer">Reject all</button>
+            <button type="button" disabled={!changes.length} onClick={onAcceptAll} className="whitespace-nowrap rounded px-1 py-0.5 font-medium hover:bg-accent disabled:opacity-40 cursor-pointer">Accept all</button>
+            <button type="button" disabled={!changes.length} onClick={onRejectAll} className="whitespace-nowrap rounded px-1 py-0.5 font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 cursor-pointer">Reject all</button>
           </div>
         </>
       ) : null}

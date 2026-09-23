@@ -7,7 +7,7 @@
 import type { OfficeScope } from "@/modules/office/shared/types";
 import { docStats, estimatePages, flattenBlocks, type DocBlock, type DocSection, type DocStats, type PMNode } from "./doc-model";
 
-export interface SnapshotBlock extends DocBlock {}
+export type SnapshotBlock = DocBlock;
 
 export interface WordSnapshot {
   title: string;

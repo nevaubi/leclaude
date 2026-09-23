@@ -121,7 +121,11 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
     remove: async (commentId: string) => { await fetch(`/api/office/docs/${idRef.current}/comments?commentId=${commentId}`, { method: "DELETE" }); },
   }), []);
 
-  return { doc, docId: idRef.current, loading, error, saveState, lastSavedAt, contentRef, markDirty, save, setTitle, versions, comments };
+  const docId = doc?.id ?? idRef.current;
+  return React.useMemo(
+    () => ({ doc, docId, loading, error, saveState, lastSavedAt, contentRef, markDirty, save, setTitle, versions, comments }),
+    [doc, docId, loading, error, saveState, lastSavedAt, markDirty, save, setTitle, versions, comments],
+  );
 }
 
 export function saveStateLabel(state: SaveState, lastSavedAt: Date | null) {

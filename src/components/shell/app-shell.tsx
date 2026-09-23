@@ -32,6 +32,7 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
       const target = e.target as HTMLElement | null;
       const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        if (target?.isContentEditable) return; // editors use ⌘K for links
         e.preventDefault();
         setPaletteOpen(true);
         return;

@@ -146,6 +146,7 @@ export function extractPlainText(content: unknown): string {
     if (Array.isArray(n)) { n.forEach(walk); return; }
     if (typeof n === "object") {
       const o = n as Record<string, unknown>;
+      if (Array.isArray(o.marks) && (o.marks as { type?: string }[]).some((m) => m?.type === "deletion")) return; // tracked deletions are not live text
       if (typeof o.text === "string") out.push(o.text);
       if (typeof o.value === "string" || typeof o.value === "number") out.push(String(o.value));
       for (const k of ["content", "children", "cells", "rows", "slides", "elements", "sheets", "blocks", "paragraphs"]) if (o[k]) walk(o[k]);

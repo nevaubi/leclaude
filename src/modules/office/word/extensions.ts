@@ -121,15 +121,15 @@ declare module "@tiptap/core" {
   }
 }
 
-/** Reuse the change id of an adjacent mark by the same author (continuous typing/backspacing stays one change). */
-function adjacentChangeId(doc: PMNode, pos: number, type: "insertion" | "deletion", author: string): string | null {
-  const check = (p: number, side: -1 | 1): string | null => {
+/** Attributes of an adjacent change mark by the same author, so continuous typing / backspacing stays one change. */
+function adjacentChange(doc: PMNode, pos: number, type: "insertion" | "deletion", author: string): Record<string, unknown> | null {
+  const check = (p: number, side: -1 | 1): Record<string, unknown> | null => {
     if (p < 0 || p > doc.content.size) return null;
     const $p = doc.resolve(p);
     const node = side < 0 ? $p.nodeBefore : $p.nodeAfter;
     if (!node?.isText) return null;
     const m = node.marks.find((x) => x.type.name === type && x.attrs.author === author);
-    return m ? (m.attrs.id as string) : null;
+    return m ? { ...m.attrs } : null;
   };
   return check(pos, -1) ?? check(pos, 1);
 }
@@ -167,11 +167,13 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
 
           for (const t of trs) {
             if (!t.docChanged) continue;
-            if (t.getMeta("trackChanges") === "ignore" || t.getMeta("history$") || t.getMeta("addToHistory") === false || t.getMeta("blockId")) continue;
+            if (t.getMeta("trackChanges") === "ignore" || t.getMeta("history$") || t.getMeta("addToHistory") === false || t.getMeta("blockId") || t.getMeta("preventUpdate")) continue;
             const wasBackspace = oldState.selection.empty && t.steps.length === 1;
             t.steps.forEach((step, i) => {
               if (!(step instanceof ReplaceStep)) return;
               const docBefore = t.docs[i];
+              // Whole-document replacement (content load / restore) is never a tracked edit.
+              if (step.from === 0 && step.to === docBefore.content.size) return;
               const mapAfter = t.mapping.slice(i + 1);
               const { from, to, slice } = step;
               const insertedSize = slice.size;
@@ -188,13 +190,13 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
                 if (sameBlock) {
                   const deleted = docBefore.slice(from, to).content;
                   const nodes: PMNode[] = [];
-                  let delId: string | null = adjacentChangeId(tr.doc, insFrom, "deletion", author);
+                  let delAttrs: Record<string, unknown> | null = adjacentChange(tr.doc, insFrom, "deletion", author);
                   deleted.forEach((n) => {
                     if (!n.isText) { nodes.push(n); return; }
                     if (n.marks.some((m) => m.type === insType)) return; // deleting our own pending insertion: real delete
                     if (n.marks.some((m) => m.type === delType)) { nodes.push(n); return; } // already deleted
-                    if (!delId) delId = nanoid(8);
-                    const mark = delType.create({ id: delId, author, date: now });
+                    if (!delAttrs) delAttrs = { id: nanoid(8), author, date: now };
+                    const mark = delType.create(delAttrs);
                     nodes.push(n.mark(mark.addToSet(n.marks)));
                   });
                   if (nodes.length) {
@@ -208,12 +210,12 @@ export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesSt
               // 2) Mark inserted text.
               if (insertedSize > 0 && slice.content.size > 0) {
                 const a = insFrom + reinserted, b = insTo + reinserted;
-                let hasText = false;
-                tr.doc.nodesBetween(a, b, (n) => { if (n.isText) hasText = true; });
-                if (hasText && b > a) {
-                  const insId = adjacentChangeId(tr.doc, a, "insertion", author) ?? nanoid(8);
+                let hasText = false, needsMark = false;
+                tr.doc.nodesBetween(a, b, (n) => { if (n.isText) { hasText = true; if (!n.marks.some((m) => m.type === insType && m.attrs.author === author)) needsMark = true; } });
+                if (hasText && b > a && needsMark) {
+                  const attrs = adjacentChange(tr.doc, a, "insertion", author) ?? { id: nanoid(8), author, date: now };
                   tr.removeMark(a, b, delType);
-                  tr.addMark(a, b, insType.create({ id: insId, author, date: now }));
+                  tr.addMark(a, b, insType.create(attrs));
                   modified = true;
                 }
               }
@@ -564,10 +566,11 @@ export const FindHighlights = Extension.create({
   name: "findHighlights",
   addProseMirrorPlugins() {
     const build = (doc: PMNode, ranges: { from: number; to: number }[], current: number) => DecorationSet.create(doc, ranges.map((r, i) => Decoration.inline(r.from, r.to, { class: i === current ? "find-hit find-current" : "find-hit" })));
-    return [new Plugin({
+    type FindState = { decos: DecorationSet; ranges: { from: number; to: number }[]; current: number };
+    return [new Plugin<FindState>({
       key: findKey,
       state: {
-        init: () => ({ decos: DecorationSet.empty, ranges: [], current: -1 }),
+        init: (): FindState => ({ decos: DecorationSet.empty, ranges: [], current: -1 }),
         apply: (tr, old, _o, newState) => {
           const q = tr.getMeta("find") as (FindQuery | null) | undefined;
           if (q !== undefined) {

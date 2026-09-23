@@ -69,14 +69,15 @@ export function saveOfficeDoc(id: string, opts: SaveOptions): OfficeDocument | n
     size: opts.content !== undefined ? JSON.stringify(opts.content ?? null).length : cur.size,
   };
   d.officeDocs.put(next);
-  if (contentChanged) {
+  const explicitVersion = Boolean(opts.version?.force || opts.version?.label || opts.version?.summary);
+  if (contentChanged || explicitVersion) {
     const versions = d.officeVersions.find((v) => v.docId === id).sort((a, b) => b.version - a.version);
     const last = versions[0];
     const stale = !last || Date.now() - new Date(last.createdAt).getTime() > AUTOSAVE_VERSION_INTERVAL_MS;
-    if (opts.version?.force || opts.version?.label || opts.version?.summary || stale) {
+    if (explicitVersion || stale) {
       d.officeVersions.put({ id: nanoid(10), docId: id, version: (last?.version ?? 0) + 1, label: opts.version?.label, summary: opts.version?.summary ?? "Saved changes", authorId: CURRENT_USER.id, authorName: opts.version?.authorName ?? CURRENT_USER.name, createdAt: now, content: next.content, changedFields: countChangedFields(last?.content, next.content) });
     }
-    void reindex(next);
+    if (contentChanged) void reindex(next);
   }
   return next;
 }

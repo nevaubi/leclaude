@@ -48,21 +48,22 @@ export function CommentsSidebar(props: CommentsSidebarProps) {
   const { editor, comments, activeId, onActive, onReply, onResolve, onDelete, onLocate, showResolved, onShowResolved, canvasRef, layoutKey, onClose } = props;
   const [placed, setPlaced] = React.useState<Placed[]>([]);
   const cardRefs = React.useRef(new Map<string, HTMLDivElement>());
+  const columnRef = React.useRef<HTMLDivElement>(null);
   const visible = React.useMemo(() => comments.filter((c) => showResolved || !c.resolved), [comments, showResolved]);
 
   // Layout: anchor top offsets → cards, pushed down to avoid overlap.
   React.useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const canvasRect = canvas.getBoundingClientRect();
-    const scrollTop = canvas.scrollTop;
+    const column = columnRef.current;
+    if (!canvas || !column) return;
+    const colRect = column.getBoundingClientRect();
     const items: Placed[] = [];
     for (const c of visible) {
       const pos = commentAnchorPos(editor, c);
       if (pos == null) continue;
       try {
         const coords = editor.view.coordsAtPos(Math.min(pos, editor.state.doc.content.size));
-        items.push({ c, pos, top: coords.top - canvasRect.top + scrollTop });
+        items.push({ c, pos, top: Math.max(0, coords.top - colRect.top - 4) });
       } catch { /* skip */ }
     }
     items.sort((a, b) => a.pos - b.pos);
@@ -92,18 +93,18 @@ export function CommentsSidebar(props: CommentsSidebarProps) {
   const height = placed.length ? Math.max(...placed.map((p) => p.top + (cardRefs.current.get(p.c.id)?.offsetHeight ?? 120))) + 40 : 0;
 
   return (
-    <div className="relative w-[300px] shrink-0 pl-3 pr-2" style={{ minHeight: height }}>
+    <div ref={columnRef} className="relative w-[260px] shrink-0 pl-3 pr-1" style={{ minHeight: height }}>
       <div className="sticky top-0 z-10 -mx-1 mb-2 flex items-center gap-2 rounded-md border bg-background/90 px-2 py-1 text-xs backdrop-blur">
         <MessageSquare className="size-3.5 text-muted-foreground" />
         <span className="font-medium">Comments</span>
         <span className="tabular text-muted-foreground">{comments.filter((c) => !c.resolved).length} open</span>
         <div className="flex-1" />
-        <button onClick={() => onShowResolved(!showResolved)} className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer">{showResolved ? "Hide resolved" : "Show resolved"}</button>
+        <button onClick={() => onShowResolved(!showResolved)} className={cn("whitespace-nowrap text-[11px] hover:text-foreground cursor-pointer", showResolved ? "text-primary" : "text-muted-foreground")} title="Toggle resolved comments">Resolved</button>
         <button onClick={onClose} aria-label="Hide comments" className="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer"><X className="size-3.5" /></button>
       </div>
       {!visible.length && <div className="pt-6"><EmptyState icon={MessageSquare} title="No comments" description="Select text and press ⌘⇧C, or ask the agent to review the document." className="p-6" /></div>}
       {placed.map(({ c, top }) => (
-        <div key={c.id} ref={(el) => { if (el) cardRefs.current.set(c.id, el); else cardRefs.current.delete(c.id); }} style={{ position: "absolute", top, left: 12, right: 8 }} className={cn("comment-card rounded-lg border bg-card p-2.5 text-xs shadow-xs", c.resolved && "opacity-60")} data-active={activeId === c.id} onClick={() => { onActive(c.id); onLocate(c); }}>
+        <div key={c.id} ref={(el) => { if (el) cardRefs.current.set(c.id, el); else cardRefs.current.delete(c.id); }} style={{ position: "absolute", top, left: 12, right: 4 }} className={cn("comment-card rounded-lg border bg-card p-2.5 text-xs shadow-xs", c.resolved && "opacity-60")} data-active={activeId === c.id} onClick={() => { onActive(c.id); onLocate(c); }}>
           <CommentCard c={c} active={activeId === c.id} onReply={onReply} onResolve={onResolve} onDelete={onDelete} />
         </div>
       ))}

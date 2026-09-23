@@ -398,6 +398,7 @@ export function seedWord(db: Database) {
     const doc = createOfficeDoc({ id: sd.id, kind: "word", title: sd.title, content: sd.v1, matterId: sd.matterId, templateId: sd.templateId, tags: sd.tags, meta: { settings, trackChanges: true } });
     // Backdate creation
     db.officeDocs.update(sd.id, { createdAt: sd.createdAt, updatedAt: sd.createdAt });
+    for (const v of db.officeVersions.find((x) => x.docId === sd.id)) db.officeVersions.update(v.id, { createdAt: sd.createdAt });
     let content = sd.v1;
     sd.versions.forEach((v, i) => {
       content = v.transform(content);
