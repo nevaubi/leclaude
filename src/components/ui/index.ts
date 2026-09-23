@@ -28,3 +28,4 @@ export * from "./context-menu";
 export * from "./radio-group";
 export * from "./resizable";
 export * from "./misc";
+export * from "./relative-time";
