@@ -42,7 +42,9 @@ export interface WorkflowRunRecord extends WorkflowRun {
   updatedAt?: ISODate;
   durationMs?: number;
   /** Loop iteration outputs by loop node id (body steps are recorded here rather than in `steps`). */
-  loopIterations?: Record<ID, { index: number; item: unknown; steps: Record<ID, WorkflowRunStep> }[]>;
+  loopIterations?: Record<ID, { index: number; item: unknown; steps: Record<ID, WorkflowRunStep>; error?: string }[]>;
+  /** Graph as it was when the run started, so the run detail page is stable if the workflow is edited later. */
+  snapshot?: { nodes: Workflow["nodes"]; edges: Workflow["edges"]; inputs?: Workflow["inputs"] };
 }
 
 export type RunEvent =

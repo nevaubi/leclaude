@@ -199,6 +199,8 @@ export const FILTERS: Record<string, (v: unknown, args: string[]) => unknown> = 
   replace: (v, a) => stringify(v).split(a[0] ?? "").join(a[1] ?? ""),
   markdown_quote: (v) => stringify(v).split("\n").map((l) => `> ${l}`).join("\n"),
   bool: (v) => (typeof v === "string" ? ["true", "yes", "1", "on"].includes(v.trim().toLowerCase()) : Boolean(v)),
+  add_days: (v, a) => { const d = v == null || v === "" ? new Date() : new Date(v as string); if (Number.isNaN(d.getTime())) return stringify(v); d.setDate(d.getDate() + (Number(a[0]) || 0)); return d.toISOString().slice(0, 10); },
+  add_bd: (v, a) => { const d = v == null || v === "" ? new Date() : new Date(v as string); if (Number.isNaN(d.getTime())) return stringify(v); let left = Math.abs(Number(a[0]) || 0); const dir = Math.sign(Number(a[0]) || 1) || 1; while (left > 0) { d.setDate(d.getDate() + dir); const wd = d.getDay(); if (wd !== 0 && wd !== 6) left--; } return d.toISOString().slice(0, 10); },
 };
 
 function safeParse(s: string): unknown { try { return JSON.parse(s); } catch { return s; } }
