@@ -22,7 +22,7 @@ import { addDays, addMonths, dateKey, daysBetween, endOfMonth, endOfWeek, fmtDat
 import { EVENT_KINDS, EVENT_KIND_LABEL, type CalendarEntry, type EventInput } from "../types";
 import { useHomeUI, type CalendarView } from "../store";
 import { useHome } from "./home-provider";
-import { CountdownChip, DateInput, EmptyRow, FieldLabel, KIND_STYLE, KindBadge, KindDot, MatterBadge, NONE, PeopleStack, Section, TimeInput } from "./shared";
+import { CountdownChip, DateInput, EmptyRow, FieldLabel, KIND_STYLE, KindBadge, KindDot, MatterBadge, NONE, Section, TimeInput } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Data helpers
@@ -93,7 +93,7 @@ export function CalendarOverview() {
       description={isToday ? fmtDateLong(now) : undefined}
       actions={
         <>
-          <div className="hidden items-center rounded-md border p-0.5 lg:flex">
+          <div className="hidden items-center rounded-md border p-0.5 @md:flex">
             {(["month", "week", "agenda"] as CalendarView[]).map((v) => (
               <button key={v} onClick={() => openView(v)} className="h-6 rounded px-2 text-[11px] capitalize text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer">{v}</button>
             ))}
@@ -392,9 +392,9 @@ function WeekView({ anchor }: { anchor: Date }) {
                 const height = Math.max(22, ((en.getTime() - s.getTime()) / 3600_000) * ROW_H - 2);
                 const overlap = evs.slice(0, idx).filter((o) => { const os = toDate(o.startsAt).getTime(); const oe = (o.endsAt ? toDate(o.endsAt) : new Date(os + 3600_000)).getTime(); return os < en.getTime() && oe > s.getTime(); }).length;
                 return (
-                  <button key={e.id} onClick={() => openEvent(e.id)} className={cn("absolute overflow-hidden rounded-md border border-l-[3px] bg-card px-1.5 py-1 text-left shadow-xs hover:z-20 hover:shadow-md cursor-pointer", KIND_STYLE[e.kind].bar)} style={{ top, height, left: `${4 + overlap * 14}%`, right: 2, zIndex: 1 + overlap }} title={`${e.title} · ${fmtRange(e.startsAt, e.endsAt)}`}>
-                    <div className="truncate text-[11px] font-medium leading-tight">{e.title}</div>
-                    <div className="truncate text-[10px] tabular text-muted-foreground">{fmtRange(e.startsAt, e.endsAt)}{e.location ? ` · ${e.location}` : ""}</div>
+                  <button key={e.id} onClick={() => openEvent(e.id)} className={cn("absolute flex flex-col items-stretch justify-start overflow-hidden rounded-md border border-l-[3px] bg-card px-1.5 py-1 text-left shadow-xs hover:z-20 hover:shadow-md cursor-pointer", KIND_STYLE[e.kind].bar)} style={{ top, height, left: `${4 + overlap * 14}%`, right: 2, zIndex: 1 + overlap }} title={`${e.title} · ${fmtRange(e.startsAt, e.endsAt)}`}>
+                    <div className="truncate text-[11px] font-medium leading-tight">{height < 34 ? `${fmtTime(e.startsAt).replace(":00", "")} ${e.title}` : e.title}</div>
+                    {height >= 34 && <div className="truncate text-[10px] tabular text-muted-foreground">{fmtRange(e.startsAt, e.endsAt)}{e.location ? ` · ${e.location}` : ""}</div>}
                   </button>
                 );
               })}
@@ -555,15 +555,24 @@ function toForm(e: CalendarEntry | null, initial: Partial<EventInput> | null, no
 }
 
 export function EventDialog() {
-  const { events, people, matters, now, createEvent, updateEvent, userId } = useHome();
+  const { events } = useHome();
   const dlg = useHomeUI((s) => s.eventDialog);
   const close = useHomeUI((s) => s.closeEventDialog);
-  const openEvent = useHomeUI((s) => s.openEvent);
   const existing = React.useMemo(() => (dlg.eventId ? events.find((e) => e.id === dlg.eventId) ?? null : null), [events, dlg.eventId]);
-  const [form, setForm] = React.useState<EventForm>(() => toForm(existing, dlg.initial, now));
+  return (
+    <Dialog open={dlg.open} onOpenChange={(o) => { if (!o) close(); }}>
+      {/* DialogContent unmounts on close, so the form re-initialises from props on every open. */}
+      <EventDialogForm existing={existing} initial={dlg.initial} onClose={close} />
+    </Dialog>
+  );
+}
+
+function EventDialogForm({ existing, initial, onClose }: { existing: CalendarEntry | null; initial: Partial<EventInput> | null; onClose: () => void }) {
+  const { people, matters, now, createEvent, updateEvent, userId } = useHome();
+  const openEvent = useHomeUI((s) => s.openEvent);
+  const [form, setForm] = React.useState<EventForm>(() => toForm(existing, initial, now));
   const [saving, setSaving] = React.useState(false);
   const [attendeeQuery, setAttendeeQuery] = React.useState("");
-  React.useEffect(() => { if (dlg.open) { setForm(toForm(existing, dlg.initial, now)); setAttendeeQuery(""); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [dlg.open, dlg.eventId, dlg.initial]);
   const set = <K extends keyof EventForm>(k: K, v: EventForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = async () => {
@@ -583,13 +592,12 @@ export function EventDialog() {
     };
     const res = existing ? await updateEvent(existing.id, payload) : await createEvent(payload);
     setSaving(false);
-    if (res) { toast.success(existing ? "Event updated" : "Event created", { description: `${res.title} · ${fmtDate(res.startsAt, { weekday: "short", month: "short", day: "numeric" })}` }); close(); if (existing) openEvent(existing.id); }
+    if (res) { toast.success(existing ? "Event updated" : "Event created", { description: `${res.title} · ${fmtDate(res.startsAt, { weekday: "short", month: "short", day: "numeric" })}` }); onClose(); if (existing) openEvent(existing.id); }
   };
 
   const filteredPeople = people.filter((p) => !attendeeQuery || p.name.toLowerCase().includes(attendeeQuery.toLowerCase()) || (p.organization ?? "").toLowerCase().includes(attendeeQuery.toLowerCase()));
 
   return (
-    <Dialog open={dlg.open} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent size="lg" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void save(); } }}>
         <DialogHeader>
           <DialogTitle>{existing ? "Edit event" : "New event"}</DialogTitle>
@@ -633,11 +641,10 @@ export function EventDialog() {
         </div>
         <DialogFooter className="items-center">
           <span className="mr-auto text-[11px] text-muted-foreground"><kbd>⌘</kbd> <kbd>↵</kbd> to save</span>
-          <Button variant="outline" onClick={close}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : existing ? "Save changes" : "Create event"}</Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
   );
 }
 

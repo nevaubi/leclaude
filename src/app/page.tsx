@@ -1,11 +1,12 @@
-import { PageHeader, EmptyState } from "@/components/ui/misc";
-import { Construction } from "lucide-react";
+import type { Metadata } from "next";
+import { aiConfig } from "@/lib/ai/config";
+import { loadHomeInitialData } from "@/modules/home/service";
+import { HomePage } from "@/modules/home/components/home-page";
+
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Home" };
 
 export default function Page() {
-  return (
-    <div className="h-full overflow-auto p-6 space-y-6">
-      <PageHeader title="Home" description="News, team updates, calendar and tasks." />
-      <EmptyState icon={Construction} title="Home module is being assembled" description="This route is a placeholder from the platform foundation." />
-    </div>
-  );
+  const initial = loadHomeInitialData({ aiConfigured: aiConfig().hasKey });
+  return <HomePage initial={initial} />;
 }

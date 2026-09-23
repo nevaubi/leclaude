@@ -43,17 +43,21 @@ export function AssistantDock() {
 
   if (!open) {
     return (
-      <aside className="flex w-11 shrink-0 flex-col items-center gap-2 border-l bg-card py-2">
+      <>
+        {/* Small screens: floating button instead of the rail. */}
+        <Button size="icon" className="fixed bottom-4 right-4 z-30 rounded-full shadow-lg lg:hidden" onClick={() => setOpen(true)} aria-label="Open assistant"><Sparkles className="size-5" /></Button>
+        <aside className="hidden w-11 shrink-0 flex-col items-center gap-2 border-l bg-card py-2 lg:flex">
         <Tip label="Open firm assistant" side="left" shortcut="A"><Button variant="ghost" size="icon-sm" onClick={() => setOpen(true)} aria-label="Open assistant"><Sparkles className="size-4 text-primary" /></Button></Tip>
         <button onClick={() => setOpen(true)} className="mt-1 [writing-mode:vertical-rl] rotate-180 text-[10.5px] font-medium uppercase tracking-widest text-muted-foreground hover:text-foreground cursor-pointer">Assistant</button>
         <div className="flex-1" />
         <Tip label="Expand" side="left"><Button variant="ghost" size="icon-sm" onClick={() => setOpen(true)} aria-label="Expand assistant"><PanelRightOpen className="size-4" /></Button></Tip>
-      </aside>
+        </aside>
+      </>
     );
   }
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col border-l bg-card xl:w-[400px]" aria-label="Firm assistant">
+    <aside className="fixed inset-0 z-40 flex w-full flex-col bg-card lg:static lg:inset-auto lg:z-auto lg:w-[360px] lg:shrink-0 lg:border-l xl:w-[400px]" aria-label="Firm assistant">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
         <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="size-3.5" /></span>
         <div className="min-w-0 leading-tight">

@@ -3,7 +3,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChevronsLeft, ChevronsRight, Moon, Scale, Search, Sun, Sparkles, Monitor } from "lucide-react";
+import { Bell, ChevronsLeft, ChevronsRight, Moon, Scale, Search, Sun, Sparkles, Monitor, Menu, X, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV, SECONDARY_NAV } from "./nav";
 import { useShellStore } from "./shell-store";
@@ -22,7 +22,9 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
   const router = useRouter();
   const { sidebarCollapsed, toggleSidebar, setPaletteOpen } = useShellStore();
   const [hydrated, setHydrated] = React.useState(false);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
   React.useEffect(() => setHydrated(true), []);
+  React.useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   // Global keyboard shortcuts: ⌘K palette, "g" chords for navigation.
   React.useEffect(() => {
@@ -60,7 +62,8 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <aside className={cn("flex h-full shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200", collapsed ? "w-[60px]" : "w-[236px]")}>
+      {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileOpen(false)} />}
+      <aside className={cn("h-full shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200", collapsed ? "md:w-[60px]" : "md:w-[236px]", "fixed inset-y-0 left-0 z-50 w-[260px] md:static md:z-auto md:flex", mobileOpen ? "flex shadow-2xl" : "hidden")}>
         <div className={cn("flex h-14 items-center gap-2 border-b border-sidebar-border px-3", collapsed && "justify-center px-0")}>
           <Link href="/" className="flex items-center gap-2 min-w-0">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm"><Scale className="size-4" /></span>
@@ -134,10 +137,11 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-3 md:px-4 backdrop-blur">
+          <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Open navigation" onClick={() => setMobileOpen((o) => !o)}>{mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}</Button>
           <div className="min-w-0 flex-1" id="topbar-slot" />
           <div className="flex items-center gap-1.5">
-            <Badge variant="success" className="hidden md:inline-flex gap-1.5 rounded-full px-2.5 py-1"><Sparkles className="size-3" /> AI live</Badge>
+            <AiStatusBadge />
             <ThemeToggle />
             <Tip label="Notifications">
               <Button variant="ghost" size="icon-sm" className="relative"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-destructive" /></Button>
@@ -164,6 +168,21 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
       </div>
       <CommandPalette />
     </div>
+  );
+}
+
+function AiStatusBadge() {
+  const [status, setStatus] = React.useState<{ configured: boolean; model: string } | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    fetch("/api/ai/status").then((r) => (r.ok ? r.json() : null)).then((j) => { if (alive && j) setStatus({ configured: Boolean(j.configured), model: String(j.model ?? "") }); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  if (!status) return null;
+  return status.configured ? (
+    <Tip label={`OpenAI · ${status.model}`}><Badge variant="success" className="hidden md:inline-flex gap-1.5 rounded-full px-2.5 py-1"><Sparkles className="size-3" /> AI live</Badge></Tip>
+  ) : (
+    <Tip label="Add OPENAI_API_KEY to .env.local to enable AI features"><Link href="/settings#ai"><Badge variant="warning" className="hidden md:inline-flex gap-1.5 rounded-full px-2.5 py-1 cursor-pointer"><KeyRound className="size-3" /> AI: add key</Badge></Link></Tip>
   );
 }
 

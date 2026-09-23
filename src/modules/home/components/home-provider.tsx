@@ -96,7 +96,11 @@ export function HomeProvider({ initial, children }: { initial: HomeInitialData; 
   // Live clock (drives countdown chips and relative times) + persisted UI prefs.
   React.useEffect(() => {
     setNow(new Date());
+    let firstVisit = true;
+    try { firstVisit = !localStorage.getItem("leclaude:home"); } catch { /* storage unavailable */ }
     void useHomeUI.persist.rehydrate();
+    // First visit on a narrower screen: start with the assistant collapsed so the three columns fit.
+    if (firstVisit && window.innerWidth < 1500) useHomeUI.getState().setDockOpen(false);
     const t = setInterval(() => setNow(new Date()), 30_000);
     const onVisible = () => { if (document.visibilityState === "visible") setNow(new Date()); };
     document.addEventListener("visibilitychange", onVisible);

@@ -74,7 +74,7 @@ export function TasksOverview() {
   return (
     <Section
       id="tasks"
-      title="My tasks"
+      title="Tasks"
       icon={CheckSquare}
       count={open.length}
       actions={
@@ -126,7 +126,7 @@ function QuickAdd({ status, className, autoFocusNonce }: { status?: Task["status
     // Lightweight natural-language hints: "!urgent", "!high", "@today", "@tomorrow", "@fri", "#matter".
     let priority: Task["priority"] = "medium";
     let dueAt: string | null = null;
-    let matterId = matterFilter;
+    const matterId = matterFilter;
     let clean = title;
     const pm = /!(urgent|high|medium|low)\b/i.exec(clean); if (pm) { priority = pm[1].toLowerCase() as Task["priority"]; clean = clean.replace(pm[0], ""); }
     const dm = /@(today|tomorrow|mon|tue|wed|thu|fri|sat|sun|\d{4}-\d{2}-\d{2})\b/i.exec(clean);
@@ -346,7 +346,7 @@ const COLUMN_ICON: Record<Task["status"], React.ReactNode> = { todo: <Circle cla
 function BoardColumn({ status, tasks }: { status: Task["status"]; tasks: Task[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
-    <div ref={setNodeRef} className={cn("flex min-h-0 flex-col rounded-lg border bg-muted/30 transition-colors", isOver && "border-primary/40 bg-primary/5")}>
+    <div ref={setNodeRef} data-column={status} className={cn("flex min-h-0 flex-col rounded-lg border bg-muted/30 transition-colors", isOver && "border-primary/40 bg-primary/5")}>
       <div className="flex items-center gap-1.5 px-2.5 py-2 text-[12px] font-semibold">{COLUMN_ICON[status]}{TASK_STATUS_LABEL[status]}<span className="rounded-full bg-background px-1.5 text-[10.5px] font-medium tabular text-muted-foreground">{tasks.length}</span></div>
       <div className="px-2 pb-2"><QuickAdd status={status} /></div>
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2 pb-2 scrollbar-thin">
@@ -360,7 +360,7 @@ function BoardColumn({ status, tasks }: { status: Task["status"]; tasks: Task[] 
 function DraggableCard({ task }: { task: Task }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id, data: { status: task.status } });
   return (
-    <div ref={setNodeRef} className={cn(isDragging && "opacity-30")}>
+    <div ref={setNodeRef} data-task-id={task.id} className={cn(isDragging && "opacity-30")}>
       <BoardCard task={task} handleProps={{ ...attributes, ...listeners }} />
     </div>
   );
@@ -399,17 +399,25 @@ function BoardCard({ task: t, handleProps, overlay }: { task: Task; handleProps?
 interface TaskForm { title: string; description: string; matterId: string; assigneeId: string; status: Task["status"]; priority: Task["priority"]; dueAt: string; tags: string; links: { label: string; href: string }[] }
 
 export function TaskDialog() {
-  const { tasks, people, matters, userId, matterFilter, createTask, updateTask, deleteTask } = useHome();
+  const { tasks } = useHome();
   const dlg = useHomeUI((s) => s.taskDialog);
   const close = useHomeUI((s) => s.closeTaskDialog);
   const existing = React.useMemo(() => (dlg.taskId ? tasks.find((t) => t.id === dlg.taskId) ?? null : null), [tasks, dlg.taskId]);
-  const build = React.useCallback((): TaskForm => {
-    const src = existing ?? dlg.initial;
+  return (
+    <Dialog open={dlg.open} onOpenChange={(o) => { if (!o) close(); }}>
+      {/* DialogContent unmounts on close, so the form re-initialises from props on every open. */}
+      <TaskDialogForm existing={existing} initial={dlg.initial} onClose={close} />
+    </Dialog>
+  );
+}
+
+function TaskDialogForm({ existing, initial, onClose: close }: { existing: Task | null; initial: Partial<TaskInput> | null; onClose: () => void }) {
+  const { people, matters, userId, matterFilter, createTask, updateTask, deleteTask } = useHome();
+  const [form, setForm] = React.useState<TaskForm>(() => {
+    const src = existing ?? initial;
     return { title: src?.title ?? "", description: src?.description ?? "", matterId: src?.matterId ?? matterFilter ?? "", assigneeId: src?.assigneeId ?? userId, status: src?.status ?? "todo", priority: src?.priority ?? "medium", dueAt: src?.dueAt ?? "", tags: (src?.tags ?? []).join(", "), links: src?.links ?? [] };
-  }, [existing, dlg.initial, matterFilter, userId]);
-  const [form, setForm] = React.useState<TaskForm>(build);
+  });
   const [saving, setSaving] = React.useState(false);
-  React.useEffect(() => { if (dlg.open) setForm(build()); }, [dlg.open, build]);
   const set = <K extends keyof TaskForm>(k: K, v: TaskForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = async () => {
@@ -422,7 +430,6 @@ export function TaskDialog() {
   };
 
   return (
-    <Dialog open={dlg.open} onOpenChange={(o) => { if (!o) close(); }}>
       <DialogContent size="lg" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void save(); } }}>
         <DialogHeader>
           <DialogTitle>{existing ? "Edit task" : "New task"}</DialogTitle>
@@ -470,6 +477,5 @@ export function TaskDialog() {
           <Button onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : existing ? "Save changes" : "Create task"}</Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
   );
 }

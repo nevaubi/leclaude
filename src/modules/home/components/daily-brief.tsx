@@ -125,25 +125,34 @@ export function DailyBriefCard({ className }: { className?: string }) {
             )}
           </>
         )}
-        <div className="mt-auto grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          <Stat icon={CalendarClock} label="Today" value={brief.stats.eventsToday} hint={`${brief.stats.eventsThisWeek} this week`} />
-          <Stat icon={AlertTriangle} label="Overdue" value={brief.stats.overdueTasks} tone={brief.stats.overdueTasks ? "text-destructive" : undefined} hint="tasks" />
-          <Stat icon={ListChecks} label="Due in 7d" value={brief.stats.dueSoonTasks} hint="tasks" />
-          <Stat icon={Newspaper} label="Hot news" value={brief.stats.hotNews} hint="last 7 days" />
-        </div>
       </div>
     </section>
   );
 }
 
-function Stat({ icon: Icon, label, value, hint, tone }: { icon: LucideIcon; label: string; value: number; hint?: string; tone?: string }) {
+/** The four numbers behind the brief; rendered next to the greeting. */
+export function BriefStats({ className }: { className?: string }) {
+  const { brief } = useHome();
+  const setFocus = useHomeUI((s) => s.setFocus);
+  const setTaskFilter = useHomeUI((s) => s.setTaskFilter);
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-background/60 px-2 py-1.5">
-      <Icon className={cn("size-3.5 shrink-0 text-muted-foreground", tone)} />
+    <div className={cn("grid max-w-md grid-cols-2 gap-1.5", className)}>
+      <Stat icon={CalendarClock} label="Today" value={brief.stats.eventsToday} hint={`${brief.stats.eventsThisWeek} this week`} onClick={() => setFocus("calendar")} />
+      <Stat icon={AlertTriangle} label="Overdue" value={brief.stats.overdueTasks} tone={brief.stats.overdueTasks ? "text-destructive" : undefined} hint="tasks" onClick={() => { setTaskFilter({ overdue: true }); setFocus("tasks"); }} />
+      <Stat icon={ListChecks} label="Due in 7d" value={brief.stats.dueSoonTasks} hint="tasks" onClick={() => { setTaskFilter({ overdue: false }); setFocus("tasks"); }} />
+      <Stat icon={Newspaper} label="Hot news" value={brief.stats.hotNews} hint="last 7 days" onClick={() => setFocus("news")} />
+    </div>
+  );
+}
+
+function Stat({ icon: Icon, label, value, hint, tone, onClick }: { icon: LucideIcon; label: string; value: number; hint?: string; tone?: string; onClick?: () => void }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-left shadow-xs transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer">
+      <Icon className={cn("size-4 shrink-0 text-muted-foreground", tone)} />
       <div className="min-w-0 leading-tight">
-        <div className={cn("text-sm font-semibold tabular", tone)}>{value}</div>
+        <div className={cn("text-base font-semibold tabular", tone)}>{value}</div>
         <div className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">{label}{hint ? ` · ${hint}` : ""}</div>
       </div>
-    </div>
+    </button>
   );
 }

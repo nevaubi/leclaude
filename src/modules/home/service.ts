@@ -98,8 +98,8 @@ export function keyDateEntries(): CalendarEntry[] {
   for (const m of d.matters.all()) {
     if (m.status === "closed") continue;
     (m.keyDates ?? []).forEach((k, i) => {
-      // Skip key dates already represented by a stored event on the same day for the same matter (deadline/filing).
-      const dup = d.events.findOne((e) => e.matterId === m.id && dateKey(e.startsAt) === k.date && (e.kind === "deadline" || e.kind === "filing"));
+      // Skip key dates already represented by a stored event for the same matter on the same day (deadline, filing, hearing…).
+      const dup = d.events.findOne((e) => e.matterId === m.id && dateKey(e.startsAt) === k.date);
       if (dup) return;
       out.push({ id: `kd_${m.id}_${i}`, title: k.label, matterId: m.id, startsAt: k.date, allDay: true, kind: "deadline", attendeeIds: m.leadAttorneyId ? [m.leadAttorneyId] : [], ruleSource: "Matter key date", derived: { source: "matter-key-date", matterId: m.id, label: k.label } });
     });
