@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
 import { DEFAULT_EDGE_OPTIONS, EDGE_TYPES, EdgeMarkers } from "./edges";
 import { NODE_TYPES } from "./nodes";
-import { fromDomain, useBuilderStore, type WfNode } from "./store";
+import { fromDomain, graphBounds, useBuilderStore, type WfNode } from "./store";
 
 /**
  * Read-only canvas showing a workflow snapshot with step statuses (used on
