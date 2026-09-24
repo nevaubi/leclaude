@@ -1,3 +1,5 @@
+import * as React from "react";
+import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui/misc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -5,6 +7,7 @@ import { aiConfig } from "@/lib/ai/config";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Settings" };
 
 export default function SettingsPage() {
   const cfg = aiConfig();
@@ -27,7 +30,7 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-[180px_1fr] gap-y-2 text-sm">
-            {rows.map(([k, v]) => (<><dt key={k + "k"} className="text-muted-foreground">{k}</dt><dd key={k + "v"} className="font-mono text-xs">{v}</dd></>))}
+            {rows.map(([k, v]) => (<React.Fragment key={k}><dt className="text-muted-foreground">{k}</dt><dd className="font-mono text-xs">{v}</dd></React.Fragment>))}
           </dl>
           {!cfg.hasKey && (
             <pre className="mt-4 rounded-md border bg-muted p-3 text-xs">{`# .env.local\nOPENAI_API_KEY=sk-...\nOPENAI_MODEL=gpt-5.4\nOPENAI_FAST_MODEL=gpt-5.4-mini`}</pre>

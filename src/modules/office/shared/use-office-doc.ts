@@ -28,6 +28,9 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
   const contentRef = React.useRef<C | null>(null);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const idRef = React.useRef(opts.id);
+  /** Serial of the latest content handed to markDirty, and the serial the last successful save covered. */
+  const dirtySerial = React.useRef(0);
+  const savedSerial = React.useRef(0);
   const optsRef = React.useRef(opts);
   optsRef.current = opts;
 
@@ -68,17 +71,21 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
   const save = React.useCallback(async (extra: { title?: string; version?: { label?: string; summary?: string; authorName?: string; force?: boolean }; meta?: Record<string, unknown>; matterId?: string | null } = {}) => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     if (!idRef.current || idRef.current === "new") return null;
+    const serial = dirtySerial.current;
     setSaveState("saving");
     try {
       const res = await fetch(`/api/office/docs/${idRef.current}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: contentRef.current, ...extra }) });
       if (!res.ok) throw new Error(res.statusText);
       const { doc: saved } = (await res.json()) as { doc: Omit<OfficeDocument, "content"> };
+      savedSerial.current = Math.max(savedSerial.current, serial);
       setDoc((d) => (d ? { ...d, ...saved, content: contentRef.current } : d));
-      setSaveState("saved");
+      // Edits made while the request was in flight are still unsaved; their autosave timer is already scheduled.
+      setSaveState(dirtySerial.current === serial ? "saved" : "dirty");
       setLastSavedAt(new Date());
       return saved;
     } catch (e) {
       setSaveState("error");
+      if (dirtySerial.current !== savedSerial.current && !timerRef.current) timerRef.current = setTimeout(() => void save(), optsRef.current.autosaveMs ?? 1500);
       toast.error(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
       return null;
     }
@@ -86,6 +93,7 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
 
   const markDirty = React.useCallback((content: C) => {
     contentRef.current = content;
+    dirtySerial.current += 1;
     setSaveState("dirty");
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => void save(), optsRef.current.autosaveMs ?? 1500);
@@ -99,19 +107,19 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
   // flush on unload
   React.useEffect(() => {
     const onUnload = () => {
-      if (saveState === "dirty" && idRef.current && idRef.current !== "new" && contentRef.current) {
+      if (dirtySerial.current !== savedSerial.current && idRef.current && idRef.current !== "new" && contentRef.current) {
         try { navigator.sendBeacon?.(`/api/office/docs/${idRef.current}`, new Blob([JSON.stringify({ content: contentRef.current })], { type: "application/json" })); } catch {}
       }
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
-  }, [saveState]);
+  }, []);
 
   const versions = React.useMemo(() => ({
     list: async () => { const r = await fetch(`/api/office/docs/${idRef.current}/versions`); return ((await r.json()) as { versions: Omit<OfficeVersion, "content">[] }).versions; },
     get: async (versionId: string) => { const r = await fetch(`/api/office/docs/${idRef.current}/versions?versionId=${versionId}`); return ((await r.json()) as { version: OfficeVersion }).version; },
     checkpoint: async (label: string) => { await save(); const r = await fetch(`/api/office/docs/${idRef.current}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "checkpoint", label }) }); return r.ok; },
-    restore: async (versionId: string) => { const r = await fetch(`/api/office/docs/${idRef.current}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore", versionId }) }); if (!r.ok) return null; const { doc } = (await r.json()) as { doc: OfficeDocument }; contentRef.current = doc.content as C; setDoc(doc); setSaveState("saved"); return doc; },
+    restore: async (versionId: string) => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; } const r = await fetch(`/api/office/docs/${idRef.current}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore", versionId }) }); if (!r.ok) return null; const { doc } = (await r.json()) as { doc: OfficeDocument }; contentRef.current = doc.content as C; savedSerial.current = dirtySerial.current; setDoc(doc); setSaveState("saved"); setLastSavedAt(new Date()); return doc; },
   }), [save]);
 
   const comments = React.useMemo(() => ({

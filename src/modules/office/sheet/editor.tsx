@@ -84,6 +84,8 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
   }, [doc?.id]);
   React.useEffect(() => { if (doc?.title) setTitle(doc.title); }, [doc?.title]);
   React.useEffect(() => { void revision; }, [revision]);
+  // Development hook for browser automation / debugging (never in production builds).
+  React.useEffect(() => { if (process.env.NODE_ENV !== "production") (window as unknown as { __leclaudeSheetStore?: unknown }).__leclaudeSheetStore = useSheetStore; }, []);
 
   const focusGrid = React.useCallback(() => { (document.querySelector(".sheet-grid") as HTMLElement | null)?.focus(); }, []);
   const saveNow = React.useCallback(async () => { const r = await office.save(); if (r) toast.success("Saved"); }, [office]);
