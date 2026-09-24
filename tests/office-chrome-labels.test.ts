@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changePositionLabel, kindBadgeLabel, modKeyFor, pageOfLabel, pluralize, rowRangeLabel, shortcutFor, trackedChangesLabel, NARROW_VIEWPORT } from "@/modules/office/shared/office-chrome";
+import { changePositionLabel, kindBadgeLabel, modKeyFor, pageOfLabel, pluralize, rowRangeLabel, shortcutFor, trackedChangesLabel, NARROW_VIEWPORT } from "@/modules/office/shared/office-chrome-helpers";
 
 describe("office chrome: status and strip labels", () => {
   it("labels the tracked-changes strip", () => {

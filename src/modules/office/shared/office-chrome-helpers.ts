@@ -117,3 +117,54 @@ export function approximatePages(words: number, lineSpacing: number): number {
   const perPage = lineSpacing >= 2 ? 275 : lineSpacing >= 1.5 ? 360 : 500;
   return Math.max(1, Math.ceil(words / perPage));
 }
+
+// ---------------------------------------------------------------------------
+// Status-bar / strip labels and platform hints (used by the Sheet, Slides and
+// PDF editors; tested in tests/office-chrome-labels.test.ts).
+// ---------------------------------------------------------------------------
+
+/** Upper-case file-type badge label: DOCX / XLSX / PPTX / PDF. */
+export function kindBadgeLabel(kind: OfficeKind): string {
+  return KIND_BADGE[kind];
+}
+
+/** "5 tracked changes" / "1 tracked change" / "No tracked changes". */
+export function trackedChangesLabel(count: number): string {
+  if (count <= 0) return "No tracked changes";
+  return `${count} tracked change${count === 1 ? "" : "s"}`;
+}
+
+/** "3 / 5" position label, or "–" when there is nothing to step through. */
+export function changePositionLabel(index: number, count: number): string {
+  if (count <= 0) return "–";
+  return `${Math.max(0, Math.min(index, count - 1)) + 1} / ${count}`;
+}
+
+export function pluralize(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? noun : plural}`;
+}
+
+/** "Rows 1–100" style range label for the sheet status bar. */
+export function rowRangeLabel(first: number, last: number): string {
+  return first === last ? `Row ${first}` : `Rows ${first}–${last}`;
+}
+
+/** "Page 1 of 3". */
+export function pageOfLabel(page: number, pages: number): string {
+  return `Page ${Math.max(1, page)} of ${Math.max(1, pages)}`;
+}
+
+/** Platform modifier for shortcut hints: ⌘ on Apple platforms, Ctrl elsewhere. */
+export function modKeyFor(platform: string | undefined): "⌘" | "Ctrl" {
+  if (!platform) return "⌘";
+  if (/Mac|iPhone|iPad|iPod/i.test(platform)) return "⌘";
+  return /Win|Linux|Android|CrOS|X11/i.test(platform) ? "Ctrl" : "⌘";
+}
+
+/** Rewrites "⌘" in a shortcut hint for the current platform. */
+export function shortcutFor(hint: string, mod: "⌘" | "Ctrl"): string {
+  return mod === "Ctrl" ? hint.replace(/⌘/g, "Ctrl+") : hint;
+}
+
+/** Viewports narrower than this open editors with side panels collapsed. */
+export const NARROW_VIEWPORT = 1180;
