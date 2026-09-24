@@ -216,6 +216,7 @@ export function ImageDialog({ open, onOpenChange, onInsert }: { open: boolean; o
         <DialogHeader><DialogTitle className="flex items-center gap-2"><ImagePlus className="size-4" /> Insert image</DialogTitle><DialogDescription>Upload a file (stored with the deck) or paste a URL. Ask the assistant to generate a demonstrative from a prompt.</DialogDescription></DialogHeader>
         <div className="space-y-3">
           <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) void onFile(f); }} className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground hover:bg-accent/40" onClick={() => inputRef.current?.click()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             {busy ? <Loader2 className="size-5 animate-spin" /> : preview ? <img src={preview} alt="" className="max-h-40 rounded" /> : <><Upload className="size-5" /> Drop an image here or click to choose (PNG, JPG, GIF, SVG)</>}
             <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
           </div>

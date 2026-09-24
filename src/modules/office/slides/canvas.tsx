@@ -61,8 +61,6 @@ export function SlideCanvas({ textEditorRef, onOpenElementEditor, slideNodeRef }
   const editingId = useSlidesStore((s) => s.editingId);
   const zoom = useSlidesStore((s) => s.zoom);
   const showGrid = useSlidesStore((s) => s.showGrid);
-  const snap = useSlidesStore((s) => s.snap);
-  const showGuides = useSlidesStore((s) => s.showGuides);
   const guides = useSlidesStore((s) => s.guides);
   const slide = currentSlideOf({ deck, currentSlideId });
   const theme = deck.theme;
@@ -351,7 +349,6 @@ export function SlideCanvas({ textEditorRef, onOpenElementEditor, slideNodeRef }
                   theme={theme}
                   onChange={(text) => useSlidesStore.getState().updateElement(editing.id, { text }, { history: false })}
                   onCommit={() => { const st = useSlidesStore.getState(); if (st.editingId === editing.id) st.setEditing(null); }}
-                  onCancel={() => useSlidesStore.getState().setEditing(null)}
                 />
               )}
             </div>

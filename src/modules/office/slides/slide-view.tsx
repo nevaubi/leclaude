@@ -23,6 +23,7 @@ export const SlideView = React.memo(function SlideView({ slide, theme, hideEleme
   const bg = resolveColor(slide.background?.color, theme, theme.colors.bg);
   return (
     <div id={id} data-slide-id={slide.id} className={className} style={{ position: "relative", width: SLIDE_W, height: SLIDE_H, background: bg, overflow: "hidden", fontFamily: fontStack(theme.fonts.body), color: theme.colors.fg, ...style }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       {slide.background?.imageUrl && <img src={slide.background.imageUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} draggable={false} />}
       {[...slide.elements].sort((a, b) => a.z - b.z).map((e) => (
         <ElementView key={e.id} element={e} theme={theme} hidden={e.id === hideElementId} lite={lite} />
@@ -169,6 +170,7 @@ function ImageView({ e, theme, base }: { e: DeckElement; theme: DeckTheme; base:
   }
   return (
     <div data-el-id={e.id} style={{ ...base, borderRadius: radius, overflow: "hidden", background: resolveColor(st.fill, theme, "transparent"), border: st.stroke ? `${st.strokeWidth ?? 1}px solid ${resolveColor(st.stroke, theme, "#999")}` : undefined }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={e.src} alt={e.alt ?? ""} draggable={false} style={{ width: "100%", height: "100%", objectFit: st.fit ?? "contain", display: "block" }} />
     </div>
   );

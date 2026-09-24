@@ -97,10 +97,9 @@ export interface TextEditorProps {
   theme: DeckTheme;
   onChange: (text: string) => void;
   onCommit: () => void;
-  onCancel: () => void;
 }
 
-export const TextEditor = React.forwardRef<TextEditorHandle, TextEditorProps>(function TextEditor({ element, theme, onChange, onCommit, onCancel }, ref) {
+export const TextEditor = React.forwardRef<TextEditorHandle, TextEditorProps>(function TextEditor({ element, theme, onChange, onCommit }, ref) {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const initial = React.useRef(element.text ?? "");
 
@@ -190,5 +189,3 @@ export const TextEditor = React.forwardRef<TextEditorHandle, TextEditorProps>(fu
   );
 });
 
-/** Hidden helper for tests / debugging: serialize current DOM state. */
-export function cancelGuard(fn: () => void) { return fn; }
