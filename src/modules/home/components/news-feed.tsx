@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowDownWideNarrow, BookmarkPlus, Building2, Clock, ExternalLink, Gavel, Info, Landmark, Newspaper, RefreshCw, Scale, Search, Sparkles, Briefcase, Factory, type LucideIcon } from "lucide-react";
+import { ArrowDownWideNarrow, BookmarkPlus, Building2, Clock, ExternalLink, Gavel, Info, Landmark, MessageSquareText, Newspaper, RefreshCw, Scale, Search, Briefcase, Factory, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,18 +18,19 @@ import { useHome } from "./home-provider";
 import { EmptyRow, MatterBadge, Section } from "./shared";
 
 const CATEGORY: Record<NewsItem["category"], { label: string; icon: LucideIcon; className: string }> = {
-  court: { label: "Court", icon: Gavel, className: "bg-primary/10 text-primary border-primary/20" },
-  regulatory: { label: "Regulatory", icon: Landmark, className: "bg-chart-2/12 text-chart-2 border-chart-2/25" },
-  legislative: { label: "Legislative", icon: Scale, className: "bg-chart-3/15 text-warning-foreground dark:text-chart-3 border-chart-3/30" },
-  industry: { label: "Industry", icon: Factory, className: "bg-muted text-muted-foreground border-border" },
-  firm: { label: "Firm", icon: Building2, className: "bg-chart-4/12 text-chart-4 border-chart-4/25" },
-  client: { label: "Client", icon: Briefcase, className: "bg-chart-5/10 text-chart-5 border-chart-5/20" },
+  court: { label: "Court", icon: Gavel, className: "text-primary" },
+  regulatory: { label: "Regulatory", icon: Landmark, className: "text-foreground/80" },
+  legislative: { label: "Legislative", icon: Scale, className: "text-foreground/80" },
+  industry: { label: "Industry", icon: Factory, className: "text-muted-foreground" },
+  firm: { label: "Firm", icon: Building2, className: "text-foreground/80" },
+  client: { label: "Client", icon: Briefcase, className: "text-foreground/80" },
 };
 
+/** Category as icon + text; no chip, so a row carries at most the one "New" marker. */
 export function CategoryBadge({ category, className }: { category: NewsItem["category"]; className?: string }) {
   const c = CATEGORY[category];
   const Icon = c.icon;
-  return <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", c.className, className)}><Icon className="size-2.5" />{c.label}</span>;
+  return <span className={cn("inline-flex items-center gap-1 text-[10.5px] font-medium", c.className, className)}><Icon className="size-3" />{c.label}</span>;
 }
 
 export function useVisibleNews() {
@@ -59,17 +60,17 @@ function NewsToolbar({ full }: { full?: boolean }) {
       {full && (
         <div className="relative hidden md:block">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={f.query} onChange={(e) => setNews({ query: e.target.value })} placeholder="Search news…" className="h-7 w-48 pl-7 text-xs" />
+          <Input size="xs" value={f.query} onChange={(e) => setNews({ query: e.target.value })} placeholder="Search news…" className="w-48 pl-7" />
         </div>
       )}
       {full && (
         <Select value={f.practiceArea} onValueChange={(v) => setNews({ practiceArea: v as PracticeArea | "all" })}>
-          <SelectTrigger size="sm" className="h-7 w-44 text-[11px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger size="xs" className="w-44 text-[11px]"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="all">All practice areas</SelectItem>{PRACTICE_AREAS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
         </Select>
       )}
       <Tip label={f.sort === "relevance" ? "Sorted by relevance · click for newest" : "Sorted by newest · click for relevance"}>
-        <Button variant="ghost" size="xs" className="text-[11px] text-muted-foreground" onClick={() => setNews({ sort: f.sort === "relevance" ? "newest" : "relevance" })}>{f.sort === "relevance" ? <Sparkles className="size-3" /> : <Clock className="size-3" />}{f.sort === "relevance" ? "Relevance" : "Newest"}</Button>
+        <Button variant="ghost" size="xs" className="text-[11px] text-muted-foreground" onClick={() => setNews({ sort: f.sort === "relevance" ? "newest" : "relevance" })}>{f.sort === "relevance" ? <ArrowDownWideNarrow className="size-3" /> : <Clock className="size-3" />}{f.sort === "relevance" ? "Relevance" : "Newest"}</Button>
       </Tip>
       <Tip label="Pull the last 7 days from the Federal Register (fails quietly offline)"><Button variant="ghost" size="icon-xs" onClick={() => void refreshNews()} disabled={newsRefreshing} aria-label="Refresh news"><RefreshCw className={cn("size-3.5", newsRefreshing && "animate-spin")} /></Button></Tip>
     </>
@@ -80,9 +81,9 @@ function CategoryChips({ counts }: { counts: Record<string, number> }) {
   const f = useHomeUI((s) => s.news);
   const setNews = useHomeUI((s) => s.setNews);
   const chip = (key: NewsItem["category"] | "all", label: string) => (
-    <button key={key} onClick={() => setNews({ category: key })} className={cn("flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors cursor-pointer", f.category === key ? "border-primary/30 bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>{label}<span className="tabular opacity-60">{counts[key] ?? 0}</span></button>
+    <button key={key} onClick={() => setNews({ category: key })} className={cn("flex h-6 shrink-0 items-center gap-1 rounded-[var(--radius-chip)] border px-2 text-[11px] transition-colors cursor-pointer", f.category === key ? "border-primary/30 bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>{label}<span className="tabular opacity-60">{counts[key] ?? 0}</span></button>
   );
-  return <div className="flex gap-1 overflow-x-auto no-scrollbar px-3 py-2">{chip("all", "All")}{NEWS_CATEGORIES.map((c) => chip(c, CATEGORY[c].label))}</div>;
+  return <div className="flex gap-1 overflow-x-auto no-scrollbar px-2.5 py-1.5">{chip("all", "All")}{NEWS_CATEGORIES.map((c) => chip(c, CATEGORY[c].label))}</div>;
 }
 
 export function NewsOverview() {
@@ -131,10 +132,10 @@ function NewsCard({ item: n, index, full }: { item: NewsItem; index: number; ful
   const ask = () => askAssistant(`About this news item (${n.source}, ${fmtDate(n.publishedAt, { month: "long", day: "numeric", year: "numeric" })}): "${n.title}"\n\n${n.summary}${n.url ? `\nSource: ${n.url}` : ""}\n\nWhat does this mean for ${matters.length ? matters.map((m) => m!.shortName).join(" and ") : "our matters"}, and what should we do about it this week?`);
 
   return (
-    <li className={cn("group px-3 py-2.5 transition-colors hover:bg-accent/40", isNew && "animate-slide-up bg-primary/5")} style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}>
+    <li className={cn("group px-3 py-2 transition-colors hover:bg-accent/40", isNew && "bg-primary/5")} data-index={index}>
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <CategoryBadge category={n.category} />
-        {isNew && <Badge variant="info" className="px-1 py-0 text-[10px]">New</Badge>}
+        {isNew && <Badge variant="info" size="xs">New</Badge>}
         <span className="truncate font-medium text-foreground/80">{n.source}</span>
         <span>·</span>
         <time dateTime={n.publishedAt} title={fmtDate(n.publishedAt, { month: "long", day: "numeric", year: "numeric" })}>{relativeLabel(n.publishedAt, now)}</time>
@@ -143,13 +144,13 @@ function NewsCard({ item: n, index, full }: { item: NewsItem; index: number; ful
           <span className="flex items-center gap-1"><span className="h-1 w-10 overflow-hidden rounded-full bg-muted"><span className={cn("block h-full rounded-full", relevance >= 85 ? "bg-primary" : relevance >= 65 ? "bg-chart-2" : "bg-muted-foreground/50")} style={{ width: `${relevance}%` }} /></span><span className="tabular text-[10px]">{relevance}</span></span>
         </Tip>
       </div>
-      <h3 className="mt-1 text-[13px] font-medium leading-snug text-foreground">
+      <h3 className="mt-0.5 text-[12.5px] font-medium leading-snug text-foreground">
         {n.url ? <a href={n.url} target="_blank" rel="noreferrer" className="hover:underline underline-offset-2">{n.title}</a> : n.title}
       </h3>
       <p className={cn("mt-0.5 text-[12px] leading-relaxed text-muted-foreground", !expanded && !full && "line-clamp-2")} onClick={() => setExpanded((v) => !v)}>{n.summary}</p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
         {matters.map((m) => <MatterBadge key={m!.id} matterId={m!.id} link />)}
-        {(n.practiceAreas ?? []).slice(0, 2).map((p) => <Badge key={p} variant="muted" className="px-1.5 py-0 text-[10px]">{p}</Badge>)}
+        {(n.practiceAreas ?? []).slice(0, 2).map((p) => <span key={p} className="text-[10.5px] text-muted-foreground">{p}</span>)}
         <div className="ml-auto flex items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
           <Popover>
             <PopoverTrigger asChild><Button variant="ghost" size="xs" className="h-6 px-1.5 text-[11px] text-muted-foreground"><Info className="size-3" /> Why relevant</Button></PopoverTrigger>
@@ -165,7 +166,7 @@ function NewsCard({ item: n, index, full }: { item: NewsItem; index: number; ful
             </PopoverContent>
           </Popover>
           <Tip label="Save to Library (News clippings)"><Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground" onClick={() => void save()} disabled={saving} aria-label="Save to library"><BookmarkPlus className="size-3.5" /></Button></Tip>
-          <Tip label="Ask the assistant about this item"><Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground" onClick={ask} aria-label="Ask about this"><Sparkles className="size-3.5" /></Button></Tip>
+          <Tip label="Ask the assistant about this item"><Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground" onClick={ask} aria-label="Ask about this"><MessageSquareText className="size-3.5" /></Button></Tip>
           {n.url && <Tip label="Open source"><a href={n.url} target="_blank" rel="noreferrer" className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Open source"><ExternalLink className="size-3.5" /></a></Tip>}
         </div>
       </div>

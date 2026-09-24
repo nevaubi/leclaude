@@ -395,6 +395,10 @@ export interface IntelJob {
   fixes: IntelJobFix[];
   escalation?: { reason: string; reviewId?: string; at: ISODate };
   result?: Record<string, unknown>;
+  /** Optional idempotency key: while a job with the same key is queued or running, enqueue returns it instead of adding another. */
+  dedupeKey?: string;
+  /** Worker id that claimed the job (diagnostics). */
+  workerId?: string;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -459,6 +463,7 @@ export const INTEL_COLLECTIONS = {
   insights: "intel_insights",
   jobs: "intel_jobs",
   watches: "intel_watches",
+  httpCache: "intel_http_cache",
 } as const;
 
 /** Vector namespace for intel chunks. */
@@ -484,3 +489,97 @@ export const INTEL_STALE_AFTER_DAYS: Record<IntelDocumentKind, number> = {
   statute: 90,
   expert: 180,
 };
+
+// ---------------- Adapter and provider contracts (additive, client-safe) ----------------
+
+/** A structured error an adapter or provider reported; `fatal: false` errors do not fail the run. */
+export interface AdapterError {
+  code: IntelErrorCode;
+  message: string;
+  retryable: boolean;
+  fatal?: boolean;
+  provider?: string;
+  at?: ISODate;
+  data?: Record<string, unknown>;
+}
+
+/** What one adapter run produced. Stored on the job (`result`) and folded into the source stats. */
+export interface AdapterResult {
+  added: number;
+  updated: number;
+  skipped: number;
+  errors: AdapterError[];
+  nextCursor?: string;
+  /** Human-readable notes ("Tavily key not configured", "fallback list used"). */
+  notes?: string[];
+  /** Ids of documents touched by this run (capped). */
+  docIds?: ID[];
+  chunks?: number;
+  durationMs?: number;
+}
+
+/** Deterministic entity-name stub placed in `IntelDocument.meta.entities` for the analysis layer to resolve. */
+export interface IntelEntityMention {
+  type: IntelEntityType;
+  name: string;
+  role?: string;
+  externalId?: string;
+}
+
+export interface IntelProviderStatus {
+  id: "openai" | "courtlistener" | "govinfo" | "firecrawl" | "tavily" | "openfda" | "ecfr" | "federal-register" | "jpml" | "web";
+  name: string;
+  /** True when the provider can be used (public endpoints count as configured). */
+  configured: boolean;
+  /** True when a key is present (vs. anonymous/DEMO access). */
+  keyed: boolean;
+  envVar?: string;
+  note?: string;
+}
+
+export interface IntelAdapterInfo {
+  id: IntelAdapterId;
+  name: string;
+  description: string;
+  kinds: IntelDocumentKind[];
+  /** Providers the adapter needs; a source is "not configured" when one is missing. */
+  requires: IntelProviderStatus["id"][];
+  configured: boolean;
+  defaults: Record<string, unknown>;
+}
+
+export interface IntelConfigView {
+  background: IntelHealth["background"];
+  corpusDirs: string[];
+  providers: IntelProviderStatus[];
+  adapters: IntelAdapterInfo[];
+  staleAfterDays: Record<IntelDocumentKind, number>;
+  jobs: { concurrency: number; tickMs: number; orphanAfterMs: number };
+  /** Set when the instrumentation loop is running in this process. */
+  loop?: { startedAt: ISODate; lastTickAt?: ISODate; ticks: number; lastError?: string };
+}
+
+export interface IntelSweepReport {
+  at: ISODate;
+  durationMs: number;
+  insightsChecked: number;
+  insightsFlagged: number;
+  staleFlagged: number;
+  contradictions: number;
+  brokenLinks: number;
+  urlsChecked: number;
+  orphanedEntities: number;
+  notes: string[];
+}
+
+export interface IntelRunDueResult {
+  enqueued: number;
+  ran: number;
+  succeeded: number;
+  failed: number;
+  fixed: number;
+  escalated: number;
+  reaped: number;
+  durationMs: number;
+  jobIds: ID[];
+}

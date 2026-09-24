@@ -1,9 +1,8 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, Bot, Flag, Gavel, Maximize2, Minimize2, Scale, Workflow, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Flag, Gavel, Maximize2, MessageSquareText, Minimize2, Scale, Workflow, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Tip } from "@/components/ui/tooltip";
@@ -45,13 +44,13 @@ export function KindDot({ kind, className }: { kind: CalendarEvent["kind"]; clas
 }
 
 export function KindBadge({ kind, className }: { kind: CalendarEvent["kind"]; className?: string }) {
-  return <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", KIND_STYLE[kind].chip, className)}><KindDot kind={kind} className="size-1.5" />{KIND_STYLE[kind].label}</span>;
+  return <span className={cn("inline-flex items-center gap-1 rounded-[var(--radius-chip)] border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", KIND_STYLE[kind].chip, className)}><KindDot kind={kind} className="size-1.5" />{KIND_STYLE[kind].label}</span>;
 }
 
 export function PriorityBadge({ priority, className, compact }: { priority: Task["priority"]; className?: string; compact?: boolean }) {
   const s = PRIORITY_STYLE[priority];
   if (compact) return <Tip label={`${s.label} priority`}><span className={cn("inline-block size-2 rounded-full", s.dot, className)} /></Tip>;
-  return <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", s.className, className)}><Flag className="size-2.5" />{s.label}</span>;
+  return <span className={cn("inline-flex items-center gap-1 rounded-[var(--radius-chip)] border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", s.className, className)}><Flag className="size-2.5" />{s.label}</span>;
 }
 
 /** Countdown chip, e.g. "in 3 wk", "overdue 2d", "today". */
@@ -60,7 +59,7 @@ export function CountdownChip({ date, deadline, className, prefix }: { date?: st
   if (!date) return null;
   const c = countdown(date, now, { deadline });
   return (
-    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium leading-4 tabular", URGENCY_STYLE[c.urgency], className)} title={new Date(date).toLocaleString()}>
+    <span className={cn("inline-flex h-[18px] items-center gap-1 whitespace-nowrap rounded-[var(--radius-chip)] border px-1.5 text-[10.5px] font-medium leading-none tabular", URGENCY_STYLE[c.urgency], className)} title={new Date(date).toLocaleString()}>
       {c.urgency === "overdue" && <AlertTriangle className="size-2.5" />}
       {prefix}{c.label}
     </span>
@@ -71,13 +70,13 @@ export function MatterBadge({ matterId, className, link }: { matterId?: string |
   const { matterById } = useHome();
   const m = matterById(matterId);
   if (!m) return null;
-  const inner = <Badge variant="outline" className={cn("max-w-[160px] gap-1 truncate font-medium text-[10.5px] text-foreground/80 hover:bg-accent", className)} title={m.name}><Scale className="size-2.5 shrink-0 text-muted-foreground" /><span className="truncate">{m.shortName}</span></Badge>;
+  const inner = <span className={cn("inline-flex max-w-[160px] items-center gap-1 truncate text-[11px] text-muted-foreground", link && "hover:text-primary", className)} title={m.name}><Scale className="size-2.5 shrink-0" /><span className="truncate">{m.shortName}</span></span>;
   return link ? <Link href={`/ediscovery?matter=${m.id}`} onClick={(e) => e.stopPropagation()}>{inner}</Link> : inner;
 }
 
 export function SourceIcon({ source, className }: { source?: Task["source"]; className?: string }) {
   if (!source || source === "manual") return null;
-  const map: Record<Exclude<Task["source"], "manual" | undefined>, { icon: LucideIcon; label: string }> = { workflow: { icon: Workflow, label: "Created by a workflow" }, agent: { icon: Bot, label: "Created by an agent" }, docket: { icon: Gavel, label: "From the docket monitor" } };
+  const map: Record<Exclude<Task["source"], "manual" | undefined>, { icon: LucideIcon; label: string }> = { workflow: { icon: Workflow, label: "Created by a workflow" }, agent: { icon: MessageSquareText, label: "Created by an agent" }, docket: { icon: Gavel, label: "From the docket monitor" } };
   const it = map[source];
   const Icon = it.icon;
   return <Tip label={it.label}><span className={cn("inline-flex items-center text-muted-foreground", className)}><Icon className="size-3" /></span></Tip>;
@@ -108,8 +107,8 @@ export function PersonChip({ id, className, size = "xs" }: { id?: string | null;
 /** Section wrapper with a dense header and optional expand/collapse toggle. */
 export function Section({ id, title, icon: Icon, count, actions, children, className, bodyClassName, onExpand, expanded, description }: { id?: string; title: React.ReactNode; icon?: LucideIcon; count?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string; bodyClassName?: string; onExpand?: () => void; expanded?: boolean; description?: React.ReactNode }) {
   return (
-    <section id={id} className={cn("@container flex min-w-0 flex-col rounded-xl border bg-card shadow-xs", expanded && "h-full", className)}>
-      <header className="section-header h-10">
+    <section id={id} className={cn("@container flex min-w-0 flex-col rounded-md border bg-card", expanded && "h-full", className)}>
+      <header className="section-header h-9">
         {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
         <h2 className="section-title">{title}</h2>
         {count != null && <span className="section-count">{count}</span>}
@@ -129,10 +128,10 @@ export function Section({ id, title, icon: Icon, count, actions, children, class
 
 export function EmptyRow({ icon: Icon, title, hint, action, className }: { icon?: LucideIcon; title: string; hint?: string; action?: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center gap-1.5 px-4 py-8 text-center", className)}>
-      {Icon && <Icon className="size-5 text-muted-foreground/70" />}
-      <div className="text-sm font-medium">{title}</div>
-      {hint && <div className="max-w-xs text-xs text-muted-foreground">{hint}</div>}
+    <div className={cn("flex flex-col items-center justify-center gap-1 px-4 py-6 text-center", className)}>
+      {Icon && <Icon className="size-4 text-muted-foreground/70" />}
+      <div className="text-[12.5px] font-medium">{title}</div>
+      {hint && <div className="max-w-xs text-[11.5px] text-muted-foreground">{hint}</div>}
       {action && <div className="mt-1.5">{action}</div>}
     </div>
   );
@@ -144,11 +143,11 @@ export function ExternalLink({ href, children, className }: { href: string; chil
 
 /** Native date/time inputs styled like our Input. */
 export function DateInput({ value, onChange, className, ...rest }: { value: string; onChange: (v: string) => void; className?: string } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type">) {
-  return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none tabular", className)} {...rest} />;
+  return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-8 w-full rounded-md border border-input bg-background px-2.5 text-[12.5px] shadow-xs focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none tabular", className)} {...rest} />;
 }
 
 export function TimeInput({ value, onChange, className, ...rest }: { value: string; onChange: (v: string) => void; className?: string } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type">) {
-  return <input type="time" value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none tabular", className)} {...rest} />;
+  return <input type="time" value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-8 w-full rounded-md border border-input bg-background px-2.5 text-[12.5px] shadow-xs focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none tabular", className)} {...rest} />;
 }
 
 export function FieldLabel({ children, className }: { children: React.ReactNode; className?: string }) {

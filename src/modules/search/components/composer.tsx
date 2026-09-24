@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ArrowUp, Briefcase, Check, ChevronDown, Globe, Layers, Mic, MicOff, PencilLine, Scale, Square, Zap } from "lucide-react";
+import { ArrowUp, Briefcase, Check, ChevronDown, Globe, Layers, Mic, MicOff, PencilLine, Scale, Square } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ export function Chip({ active, children, className, onClick, icon: Icon, ...rest
     <button
       type="button"
       onClick={onClick}
-      className={cn("inline-flex h-7 max-w-[240px] items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium transition-colors cursor-pointer", active ? "border-primary/40 bg-primary/10 text-primary" : "bg-background text-muted-foreground hover:border-foreground/25 hover:text-foreground", className)}
+      className={cn("inline-flex h-7 max-w-[240px] items-center gap-1.5 rounded-[var(--radius-chip)] border px-2 text-[11.5px] font-medium transition-colors cursor-pointer", active ? "border-primary/40 bg-primary/10 text-primary" : "bg-background text-muted-foreground hover:border-foreground/25 hover:text-foreground", className)}
       {...rest}
     >
       {Icon && <Icon className="size-3.5 shrink-0" />}
@@ -114,7 +114,7 @@ export function ResearchComposer(p: ComposerProps) {
   };
 
   return (
-    <div className="rounded-2xl border bg-card shadow-xs transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25">
+    <div className="rounded-lg border bg-card transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25">
       <textarea
         ref={ref}
         value={p.value}
@@ -206,7 +206,7 @@ export function ResearchComposer(p: ComposerProps) {
           <PopoverContent align="end" className="w-80 p-3">
             <div className="flex items-center justify-between">
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Research lanes</div>
-              <label className="flex items-center gap-1.5 text-[11.5px] cursor-pointer"><Zap className="size-3 text-warning" /> Fast answer <Switch checked={s.fast} onCheckedChange={(v) => p.setSettings({ fast: v })} aria-label="Fast answer" /></label>
+              <label className="flex items-center gap-1.5 text-[11.5px] cursor-pointer">Fast answer <Switch size="sm" checked={s.fast} onCheckedChange={(v) => p.setSettings({ fast: v })} aria-label="Fast answer" /></label>
             </div>
             <ul className="mt-2 space-y-1">
               {preview.map((l) => (
@@ -220,7 +220,7 @@ export function ResearchComposer(p: ComposerProps) {
             <Button variant="outline" size="xs" className="mt-2 w-full" onClick={() => { p.onToggleLanes(); setLanesPreviewOpen(false); }}>{p.lanesOpen ? "Hide the live panel" : "Show the live panel"}</Button>
           </PopoverContent>
         </Popover>
-        <Button size="icon-sm" onClick={submit} disabled={!p.streaming && !p.value.trim()} className="rounded-full" aria-label={p.streaming ? "Stop" : "Ask"}>
+        <Button size="icon-sm" onClick={submit} disabled={!p.streaming && !p.value.trim()} className="rounded-md" aria-label={p.streaming ? "Stop" : "Ask"}>
           {p.streaming ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4" />}
         </Button>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, ClipboardCopy, FilePlus2, GitCompareArrows, Loader2, KeyRound, Sparkles, Wand2 } from "lucide-react";
+import { Check, ClipboardCopy, FilePlus2, GitCompareArrows, Loader2, KeyRound, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -78,7 +78,7 @@ export function ClausePanel({ item, standard }: { item: LibraryItemView; standar
       <div className="grid gap-4 lg:grid-cols-2">
       <section className="rounded-lg border">
         <header className="flex h-9 items-center gap-2 border-b px-3">
-          <Wand2 className="size-4 text-primary" />
+          <PenLine className="size-4 text-muted-foreground" />
           <div className="text-[12.5px] font-semibold">Fill variables</div>
           <span className="text-[11px] text-muted-foreground">{nFilled}/{specs.length}</span>
           <div className="flex-1" />
@@ -152,8 +152,8 @@ function CompareSection({ item, standard, aiConfigured }: { item: LibraryItemVie
   return (
     <section className="rounded-lg border">
       <header className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
-        <GitCompareArrows className="size-4 text-primary" />
-        <div className="text-sm font-medium">Compare</div>
+        <GitCompareArrows className="size-4 text-muted-foreground" />
+        <div className="text-[12.5px] font-medium">Compare</div>
         <div className="flex-1" />
         <div className="flex rounded-md border p-0.5 text-[11px]">
           <button disabled={!standard} onClick={() => setMode("standard")} className={cn("rounded px-2 py-0.5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40", mode === "standard" && "bg-accent font-medium")}>To firm standard</button>
@@ -167,13 +167,13 @@ function CompareSection({ item, standard, aiConfigured }: { item: LibraryItemVie
           <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the counterparty's clause here…" className="min-h-[96px] text-xs" />
         )}
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={run} disabled={busy || (mode === "paste" && !text.trim()) || (mode === "standard" && !standard)}>{busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} {aiConfigured ? "Compare with AI" : "Compare (heuristic)"}</Button>
+          <Button size="sm" variant="secondary" onClick={run} disabled={busy || (mode === "paste" && !text.trim()) || (mode === "standard" && !standard)}>{busy ? <Loader2 className="size-3.5 animate-spin" /> : <GitCompareArrows className="size-3.5" />} {aiConfigured ? "Compare" : "Compare (heuristic)"}</Button>
           {!aiConfigured && <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><KeyRound className="size-3" /> Add an OpenAI key for a substantive analysis</span>}
         </div>
         {noKey && <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">OpenAI key required. Add <code className="font-mono">OPENAI_API_KEY</code> to <code className="font-mono">.env.local</code> and restart to enable AI comparison.</div>}
         {result && (
           <div className="rounded-md border bg-card p-3">
-            <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground"><Badge variant={result.mode === "ai" ? "success" : "muted"}>{result.mode === "ai" ? "AI analysis" : "Heuristic"}</Badge>{result.standardName && <span>vs. {result.standardName}</span>}{result.mode === "ai" && <TrustBadge provenance={result.provenance && Array.isArray(result.provenance.sources) ? result.provenance : undefined} compact={!result.provenance} />}</div>
+            <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground"><span>{result.mode === "ai" ? "Model comparison" : "Heuristic comparison"}</span>{result.standardName && <span>vs. {result.standardName}</span>}{result.mode === "ai" && <TrustBadge provenance={result.provenance && Array.isArray(result.provenance.sources) ? result.provenance : undefined} compact={!result.provenance} />}</div>
             <Markdown compact>{result.analysis}</Markdown>
           </div>
         )}

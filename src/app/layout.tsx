@@ -4,13 +4,14 @@ import { AppShell } from "@/components/shell/app-shell";
 import { ThemeProvider } from "@/components/shell/theme-provider";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { currentUser, DEFAULT_USER } from "@/lib/current-user";
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "LeClaude";
 const firmName = process.env.NEXT_PUBLIC_FIRM_NAME ?? "Seeger Weiss LLP";
 
 export const metadata: Metadata = {
   title: { default: appName, template: `%s · ${appName}` },
-  description: `${firmName} internal legal AI platform: research, e-discovery, workflows and an AI-native office suite.`,
+  description: `${firmName} internal legal AI platform: research, intelligence, e-discovery, workflows and an AI-native office suite.`,
   applicationName: appName,
 };
 
@@ -24,6 +25,8 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const me = currentUser();
+  const user = me.id === DEFAULT_USER.id ? { ...me, role: "Partner", email: "jwhitfield@seegerweiss.com" } : me;
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -37,8 +40,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="h-full overflow-hidden">
         <ThemeProvider>
           <TooltipProvider delayDuration={250}>
-            <AppShell appName={appName} firmName={firmName}>{children}</AppShell>
-            <Toaster position="bottom-right" richColors closeButton toastOptions={{ className: "font-sans" }} />
+            <AppShell appName={appName} firmName={firmName} user={user}>{children}</AppShell>
+            <Toaster position="bottom-right" closeButton toastOptions={{ className: "font-sans text-[12.5px]" }} />
           </TooltipProvider>
         </ThemeProvider>
       </body>

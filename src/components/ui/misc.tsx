@@ -7,7 +7,7 @@ export function Spinner({ className, size = 16 }: { className?: string; size?: n
 }
 
 export function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <kbd className={cn(className)}>{children}</kbd>;
+  return <kbd className={cn("inline-flex h-[18px] min-w-[18px] items-center justify-center", className)}>{children}</kbd>;
 }
 
 /**
@@ -16,10 +16,10 @@ export function Kbd({ children, className }: { children: React.ReactNode; classN
  */
 export function EmptyState({ icon: Icon, title, description, action, className, compact }: { icon?: LucideIcon; title: string; description?: React.ReactNode; action?: React.ReactNode; className?: string; compact?: boolean }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-center", compact ? "p-6" : "p-10", className)} role="status">
-      {Icon && <div className={cn("mb-1 flex items-center justify-center rounded-full bg-muted text-muted-foreground", compact ? "size-8" : "size-10")}><Icon className={compact ? "size-4" : "size-5"} /></div>}
-      <div className={cn("font-medium", compact ? "text-[13px]" : "text-sm")}>{title}</div>
-      {description && <div className="max-w-sm text-xs text-muted-foreground">{description}</div>}
+    <div className={cn("flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed text-center", compact ? "p-5" : "p-8", className)} role="status">
+      {Icon && <Icon className={cn("mb-0.5 text-muted-foreground", compact ? "size-4" : "size-5")} aria-hidden />}
+      <div className={cn("font-medium", compact ? "text-[12.5px]" : "text-[13px]")}>{title}</div>
+      {description && <div className="max-w-sm text-[11.5px] leading-snug text-muted-foreground">{description}</div>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );
@@ -30,20 +30,25 @@ export function PageHeader({ title, description, actions, className, eyebrow }: 
     <div className={cn("flex flex-wrap items-end justify-between gap-3", className)}>
       <div className="min-w-0">
         {eyebrow && <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{eyebrow}</div>}
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        <h1 className="text-[17px] font-semibold tracking-tight">{title}</h1>
+        {description && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
   );
 }
 
-export function Stat({ label, value, hint, className }: { label: string; value: React.ReactNode; hint?: React.ReactNode; className?: string }) {
+/**
+ * One quiet number: a small label, a tabular value and an optional hint. No
+ * card; stats sit in a row separated by hairlines (`hairline-x`) or in a grid.
+ */
+export function Stat({ label, value, hint, className, tone, size = "md" }: { label: React.ReactNode; value: React.ReactNode; hint?: React.ReactNode; className?: string; tone?: "destructive" | "warning" | "success" | "primary"; size?: "sm" | "md" }) {
+  const toneCls = tone === "destructive" ? "text-destructive" : tone === "warning" ? "text-warning-foreground dark:text-warning" : tone === "success" ? "text-success" : tone === "primary" ? "text-primary" : "";
   return (
-    <div className={cn("rounded-lg border bg-card p-3", className)}>
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular">{value}</div>
-      {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
+    <div className={cn("min-w-0 px-3 py-2 leading-tight", className)}>
+      <div className="truncate text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={cn("mt-0.5 font-semibold tabular", size === "sm" ? "text-[15px]" : "text-[18px]", toneCls)}>{value}</div>
+      {hint && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</div>}
     </div>
   );
 }
@@ -63,7 +68,7 @@ export function Dot({ className }: { className?: string }) {
  */
 export function SectionHeader({ icon: Icon, title, count, description, actions, className, as: Tag = "h2", size = "md" }: { icon?: LucideIcon; title: React.ReactNode; count?: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode; className?: string; as?: "h1" | "h2" | "h3" | "div"; size?: "sm" | "md" }) {
   return (
-    <header className={cn("flex shrink-0 items-center gap-2 border-b", size === "sm" ? "h-9 px-3" : "h-10 px-3.5", className)}>
+    <header className={cn("flex shrink-0 items-center gap-2 border-b", size === "sm" ? "h-8 px-2.5" : "h-9 px-3", className)}>
       {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
       <Tag className={cn("min-w-0 truncate font-semibold tracking-tight", size === "sm" ? "text-[12.5px]" : "text-[13px]")}>{title}</Tag>
       {count != null && count !== "" && <CountChip>{count}</CountChip>}
@@ -74,10 +79,10 @@ export function SectionHeader({ icon: Icon, title, count, description, actions, 
   );
 }
 
-/** Small tabular count, e.g. next to a section title. */
+/** Small tabular count next to a title. Plain text, never a pill; a tone colours it for decision states. */
 export function CountChip({ children, className, tone }: { children: React.ReactNode; className?: string; tone?: "muted" | "primary" | "destructive" | "warning" | "success" }) {
-  const tones = { muted: "bg-muted text-muted-foreground", primary: "bg-primary/10 text-primary", destructive: "bg-destructive/10 text-destructive", warning: "bg-warning/18 text-warning-foreground dark:text-warning", success: "bg-success/12 text-success" } as const;
-  return <span className={cn("inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10.5px] font-medium tabular", tones[tone ?? "muted"], className)}>{children}</span>;
+  const tones = { muted: "text-muted-foreground", primary: "text-primary", destructive: "text-destructive", warning: "text-warning-foreground dark:text-warning", success: "text-success" } as const;
+  return <span className={cn("inline-flex h-[18px] min-w-[14px] items-center justify-center px-0.5 text-[11px] font-medium tabular", tones[tone ?? "muted"], className)}>{children}</span>;
 }
 
 /**

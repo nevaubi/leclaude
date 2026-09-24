@@ -23,7 +23,7 @@ import { EVENT_KINDS, EVENT_KIND_LABEL, type CalendarEntry, type EventInput } fr
 import { useHomeUI, type CalendarView } from "../store";
 import { eventFormFor, type EventForm } from "../forms";
 import { useHome } from "./home-provider";
-import { CountdownChip, DateInput, EmptyRow, FieldLabel, KIND_STYLE, KindBadge, KindDot, MatterBadge, NONE, Section, TimeInput } from "./shared";
+import { CountdownChip, DateInput, EmptyRow, FieldLabel, KIND_STYLE, KindDot, MatterBadge, NONE, Section, TimeInput } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Data helpers
@@ -132,14 +132,14 @@ export function EventRow({ event: e, onClick, now, dayLabel, showCountdown, dens
   const past = toDate(e.endsAt ?? e.startsAt).getTime() < now.getTime() && dateKey(e.startsAt) === dateKey(now) && !e.allDay;
   return (
     <li>
-      <button onClick={onClick} className={cn("group flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer", past && "opacity-60")}>
+      <button onClick={onClick} className={cn("group flex w-full items-start gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer", past && "opacity-60")}>
         <div className={cn("mt-0.5 w-[52px] shrink-0 text-[11px] tabular text-muted-foreground", dense && "w-[46px]")}>
           {dayLabel ? <span className="font-medium text-foreground/80">{dayLabel}</span> : e.allDay || DATE_ONLY_RE.test(e.startsAt) ? "All day" : fmtTime(e.startsAt)}
         </div>
         <div className={cn("mt-1.5 w-0.5 self-stretch rounded-full", KIND_STYLE[e.kind].dot)} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-[13px] font-medium leading-snug">{e.title}</span>
+            <span className="truncate text-[12.5px] font-medium leading-snug">{e.title}</span>
             {showCountdown && <CountdownChip date={e.startsAt} deadline={e.kind === "deadline" || e.kind === "filing"} className="ml-auto" />}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -367,7 +367,7 @@ function WeekView({ anchor }: { anchor: Date }) {
           return (
             <div key={k} className="min-h-[30px] space-y-0.5 border-l p-0.5">
               {evs.map((e) => (
-                <button key={e.id} onClick={() => openEvent(e.id)} className={cn("block w-full truncate rounded border px-1.5 py-0.5 text-left text-[11px] leading-tight hover:brightness-95 cursor-pointer", KIND_STYLE[e.kind].chip)} title={e.title}>{e.title}</button>
+                <button key={e.id} onClick={() => openEvent(e.id)} className={cn("block w-full truncate rounded border-l-2 bg-background/80 px-1.5 py-0.5 text-left text-[11px] leading-tight hover:bg-accent cursor-pointer", KIND_STYLE[e.kind].bar)} title={e.title}>{e.title}</button>
               ))}
             </div>
           );
@@ -393,7 +393,7 @@ function WeekView({ anchor }: { anchor: Date }) {
                 const height = Math.max(22, ((en.getTime() - s.getTime()) / 3600_000) * ROW_H - 2);
                 const overlap = evs.slice(0, idx).filter((o) => { const os = toDate(o.startsAt).getTime(); const oe = (o.endsAt ? toDate(o.endsAt) : new Date(os + 3600_000)).getTime(); return os < en.getTime() && oe > s.getTime(); }).length;
                 return (
-                  <button key={e.id} onClick={() => openEvent(e.id)} className={cn("absolute flex flex-col items-stretch justify-start overflow-hidden rounded-md border border-l-[3px] bg-card px-1.5 py-1 text-left shadow-xs hover:z-20 hover:shadow-md cursor-pointer", KIND_STYLE[e.kind].bar)} style={{ top, height, left: `${4 + overlap * 14}%`, right: 2, zIndex: 1 + overlap }} title={`${e.title} · ${fmtRange(e.startsAt, e.endsAt)}`}>
+                  <button key={e.id} onClick={() => openEvent(e.id)} className={cn("absolute flex flex-col items-stretch justify-start overflow-hidden rounded border border-l-2 bg-card px-1.5 py-1 text-left hover:z-20 hover:bg-accent/60 cursor-pointer", KIND_STYLE[e.kind].bar)} style={{ top, height, left: `${4 + overlap * 14}%`, right: 2, zIndex: 1 + overlap }} title={`${e.title} · ${fmtRange(e.startsAt, e.endsAt)}`}>
                     <div className="truncate text-[11px] font-medium leading-tight">{height < 34 ? `${fmtTime(e.startsAt).replace(":00", "")} ${e.title}` : e.title}</div>
                     {height >= 34 && <div className="truncate text-[10px] tabular text-muted-foreground">{fmtRange(e.startsAt, e.endsAt)}{e.location ? ` · ${e.location}` : ""}</div>}
                   </button>
@@ -463,7 +463,7 @@ export function EventSheet() {
         {e && (
           <>
             <SheetHeader className="pr-10">
-              <div className="flex flex-wrap items-center gap-1.5"><KindBadge kind={e.kind} />{e.derived && <Badge variant="muted">Matter key date</Badge>}<CountdownChip date={e.startsAt} deadline={e.kind === "deadline" || e.kind === "filing"} /></div>
+              <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground"><span className="inline-flex items-center gap-1"><KindDot kind={e.kind} className="size-1.5" />{EVENT_KIND_LABEL[e.kind]}</span>{e.derived && <span>· Matter key date</span>}<CountdownChip date={e.startsAt} deadline={e.kind === "deadline" || e.kind === "filing"} /></div>
               <SheetTitle className="text-base leading-snug">{e.title}</SheetTitle>
               <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                 <span className="inline-flex items-center gap-1"><Clock className="size-3" />{fmtDateLong(e.startsAt)} · {fmtRange(e.startsAt, e.endsAt, e.allDay)}</span>
@@ -710,7 +710,7 @@ export function DeadlineCalculator({ initialTrigger, matterId, compact, onCreate
           <>
             <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Due date</div>
             <div className="mt-0.5 font-serif text-2xl leading-tight">{fmtDate(result.dueDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5"><CountdownChip date={result.dueDate} deadline /><Badge variant="outline" className="font-mono text-[10px]">{result.countedCourtDaysOnly ? "court days" : "calendar days"}</Badge>{result.mailDaysAdded > 0 && <Badge variant="outline" className="font-mono text-[10px]">+{result.mailDaysAdded} mail days</Badge>}</div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10.5px] text-muted-foreground"><CountdownChip date={result.dueDate} deadline /><span className="font-mono">{result.countedCourtDaysOnly ? "court days" : "calendar days"}</span>{result.mailDaysAdded > 0 && <span className="font-mono">+{result.mailDaysAdded} mail days</span>}</div>
             <ul className="mt-3 space-y-1 text-[12px] text-foreground/90">
               <li>Period ends <span className="tabular font-medium">{fmtDate(result.rawDate, { weekday: "short", month: "short", day: "numeric" })}</span>{result.rolled ? <span className="text-muted-foreground"> — {result.rolledReason}; rolled {direction === "forward" ? "forward" : "back"} to the next court day.</span> : <span className="text-muted-foreground"> — a court day, no rollover.</span>}</li>
               {result.skipped.length > 0 && <li className="text-muted-foreground">Skipped {result.skipped.length} non-court day{result.skipped.length === 1 ? "" : "s"}: {result.skipped.slice(0, 6).map((s) => `${fmtDate(s.date)} (${s.reason})`).join(", ")}{result.skipped.length > 6 ? "…" : ""}</li>}

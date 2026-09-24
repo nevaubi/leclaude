@@ -76,7 +76,7 @@ export function Composer({ placeholder = "Ask anything…", disabled, streaming,
 
   return (
     <div
-      className={cn("rounded-xl border bg-background shadow-xs focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 transition-shadow", disabled && "opacity-60", className)}
+      className={cn("rounded-md border bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 transition-shadow", disabled && "opacity-60", className)}
       onDragOver={(e) => { e.preventDefault(); }}
       onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.length) void onFiles(e.dataTransfer.files); }}
       onPaste={(e) => { const files = Array.from(e.clipboardData.files ?? []); if (files.length) { e.preventDefault(); void onFiles(files); } }}
@@ -102,15 +102,15 @@ export function Composer({ placeholder = "Ask anything…", disabled, streaming,
         disabled={disabled}
         autoFocus={autoFocus}
         rows={minRows}
-        className="block w-full resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground scrollbar-thin"
+        className="block w-full resize-none bg-transparent px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground scrollbar-thin"
       />
-      <div className="flex items-center gap-1 px-2 pb-2">
+      <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) void onFiles(e.target.files); e.target.value = ""; }} />
-        <Tip label="Attach image or screenshot (transcribed with vision)"><Button variant="ghost" size="icon-sm" onClick={() => fileRef.current?.click()} disabled={disabled} aria-label="Attach image"><ImagePlus className="size-4" /></Button></Tip>
-        <Tip label={listening ? "Stop dictation" : "Dictate"}><Button variant="ghost" size="icon-sm" onClick={toggleMic} disabled={disabled} className={cn(listening && "text-destructive")} aria-label={listening ? "Stop dictation" : "Dictate"} aria-pressed={listening}>{listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}</Button></Tip>
+        <Tip label="Attach image or screenshot (transcribed with vision)"><Button variant="ghost" size="icon-xs" onClick={() => fileRef.current?.click()} disabled={disabled} aria-label="Attach image"><ImagePlus className="size-4" /></Button></Tip>
+        <Tip label={listening ? "Stop dictation" : "Dictate"}><Button variant="ghost" size="icon-xs" onClick={toggleMic} disabled={disabled} className={cn(listening && "text-destructive")} aria-label={listening ? "Stop dictation" : "Dictate"} aria-pressed={listening}>{listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}</Button></Tip>
         {trailing}
         <div className="flex-1" />
-        <Button size="icon-sm" onClick={submit} disabled={disabled || (!streaming && !text.trim() && !attachments.length)} className="rounded-lg" aria-label={streaming ? "Stop" : "Send"}>
+        <Button size="icon-xs" onClick={submit} disabled={disabled || (!streaming && !text.trim() && !attachments.length)} className="rounded-md" aria-label={streaming ? "Stop" : "Send"}>
           {streaming ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4" />}
         </Button>
       </div>

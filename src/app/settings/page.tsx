@@ -1,119 +1,108 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import { Settings as SettingsIcon } from "lucide-react";
-import { TopbarSlot } from "@/components/shell/app-shell";
-import { PageHeader } from "@/components/ui/misc";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { PageTopbar } from "@/components/shell/page-topbar";
+import { KeyValueList } from "@/components/ui/form";
 import { aiConfig } from "@/lib/ai/config";
 import { db } from "@/lib/db";
+import { currentUser } from "@/lib/current-user";
 import { IntegrityPanel } from "@/modules/settings/integrity-panel";
 import { ReviewQueueSummary } from "@/modules/settings/review-queue-summary";
 import { SettingsNav } from "@/modules/settings/settings-nav";
+import { SettingsSection, SettingsBlock } from "@/modules/settings/settings-section";
+import { ProviderTable } from "@/modules/settings/provider-table";
+import { DataAutomationSection } from "@/modules/settings/data-automation";
+import { providersPayload } from "@/modules/settings/providers";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings" };
 
-function Group({ id, title, description, children }: { id: string; title: string; description?: string; children: React.ReactNode }) {
-  return (
-    <section id={`group-${id}`} className="scroll-mt-4 space-y-3">
-      <div id={id} className="scroll-mt-4">
-        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
+/**
+ * Settings: one dense page, left navigation, five sections. Configuration is
+ * environment-only; the page reports presence, never secret values.
+ */
 export default function SettingsPage() {
   const cfg = aiConfig();
   const d = db();
-  const rows: [string, string][] = [
-    ["Primary model", cfg.model],
-    ["Fast model", cfg.fastModel],
-    ["Embedding model", cfg.embeddingModel],
-    ["Image model", cfg.imageModel],
-    ["Reasoning effort", cfg.reasoningEffort],
-    ["Base URL", cfg.baseURL ?? "https://api.openai.com/v1"],
-  ];
+  const me = currentUser((id) => d.people.get(id)?.name);
+  const providers = providersPayload();
   const matters = d.matters.all().map((m) => ({ id: m.id, shortName: m.shortName }));
-  const courtListener = !!process.env.COURTLISTENER_API_TOKEN;
-  const govInfo = !!process.env.GOVINFO_API_KEY && process.env.GOVINFO_API_KEY !== "DEMO_KEY";
-  const counts: [string, number][] = [["Matters", d.matters.count()], ["People", d.people.count()], ["E-discovery docs", d.edocs.count()], ["Depositions", d.depositions.count()], ["Workflows", d.workflows.count()], ["Office documents", d.officeDocs.count()], ["Library items", d.library.count()], ["Tasks", d.tasks.count()], ["Events", d.events.count()]];
+  const counts: { label: string; value: number }[] = [
+    { label: "Matters", value: d.matters.count() }, { label: "People", value: d.people.count() }, { label: "E-discovery docs", value: d.edocs.count() },
+    { label: "Depositions", value: d.depositions.count() }, { label: "Workflows", value: d.workflows.count() }, { label: "Office documents", value: d.officeDocs.count() },
+    { label: "Library items", value: d.library.count() }, { label: "Tasks", value: d.tasks.count() }, { label: "Events", value: d.events.count() },
+  ];
 
   return (
-    <div className="h-full overflow-auto scrollbar-thin">
-      <TopbarSlot>
-        <SettingsIcon className="size-4 text-muted-foreground" />
-        <span className="text-sm font-semibold">Settings</span>
-        <span className="hidden text-xs text-muted-foreground md:inline">{cfg.hasKey ? `OpenAI · ${cfg.model}` : "AI features need an OpenAI key"}</span>
-      </TopbarSlot>
-      <div className="mx-auto max-w-5xl p-4 md:p-6">
-        <PageHeader title="Settings" description="Configuration is read from environment variables; edit .env.local and restart to change it." />
-        <div className="mt-5 grid gap-6 md:grid-cols-[200px_minmax(0,1fr)]">
-          <SettingsNav className="md:sticky md:top-2 md:self-start" />
-          <div className="space-y-10">
-            <Group id="ai" title="AI" description="Every assistant, agent, research synthesis, e-discovery analysis and workflow AI step calls the OpenAI Responses API with these settings. Outputs carry provenance and are verified against their sources before they are trusted.">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">Model configuration {cfg.hasKey ? <Badge variant="success">key detected</Badge> : <Badge variant="warning">OPENAI_API_KEY missing</Badge>}</CardTitle>
-                  <CardDescription>{cfg.hasKey ? "AI features are live." : "AI features degrade gracefully: computed fallbacks are shown and marked as such until a key is added."}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <dl className="grid grid-cols-[180px_1fr] gap-y-2 text-sm">
-                    {rows.map(([k, v]) => (<React.Fragment key={k}><dt className="text-muted-foreground">{k}</dt><dd className="font-mono text-xs">{v}</dd></React.Fragment>))}
-                  </dl>
-                  {!cfg.hasKey && (
-                    <pre className="mt-4 rounded-md border bg-muted p-3 text-xs">{`# .env.local\nOPENAI_API_KEY=sk-...\nOPENAI_MODEL=gpt-5.4\nOPENAI_FAST_MODEL=gpt-5.4-mini`}</pre>
+    <div className="flex h-full min-h-0 flex-col">
+      <PageTopbar icon={SettingsIcon} title="Settings" context={cfg.hasKey ? `OpenAI · ${cfg.model}` : "AI features need an OpenAI key"} />
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+        <div className="mx-auto grid max-w-6xl gap-x-6 gap-y-3 p-3 md:grid-cols-[176px_minmax(0,1fr)] md:p-4">
+          <div className="md:sticky md:top-0 md:self-start">
+            <div className="mb-2 hidden text-[11px] text-muted-foreground md:block">Read from the environment. Edit <code className="font-mono">.env.local</code> and restart to change.</div>
+            <SettingsNav />
+          </div>
+          <div className="min-w-0 space-y-6">
+            <SettingsSection id="ai" title="AI" description="Assistants, research synthesis, e-discovery analysis and workflow steps call the OpenAI Responses API; outputs carry provenance and are verified before they are trusted.">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+                <SettingsBlock title="Model configuration" description={cfg.hasKey ? "AI features are live." : "AI features degrade gracefully: computed fallbacks are shown and marked as such until a key is added."}>
+                  <KeyValueList dense labelWidth={150} items={[
+                    { label: "API key", value: cfg.hasKey ? <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-success" aria-hidden />OPENAI_API_KEY set</span> : <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-warning" aria-hidden />OPENAI_API_KEY missing</span> },
+                    { label: "Primary model", value: cfg.model, mono: true },
+                    { label: "Fast model", value: cfg.fastModel, mono: true },
+                    { label: "Embedding model", value: cfg.embeddingModel, mono: true },
+                    { label: "Image model", value: cfg.imageModel, mono: true },
+                    { label: "Reasoning effort", value: cfg.reasoningEffort, mono: true },
+                    { label: "Base URL", value: cfg.baseURL ?? "https://api.openai.com/v1", mono: true },
+                  ]} />
+                </SettingsBlock>
+                <SettingsBlock title={cfg.hasKey ? "Where AI appears" : "Add a key"}>
+                  {cfg.hasKey ? (
+                    <ul className="space-y-1 text-[12px] text-muted-foreground">
+                      <li>Home assistant and daily brief</li><li>Research synthesis and verification</li><li>E-discovery coding suggestions and digests</li><li>Office Draft / Review / Ask</li><li>Workflow AI steps and the job steward</li>
+                    </ul>
+                  ) : (
+                    <pre className="rounded-md border bg-muted/50 p-2 font-mono text-[11px] leading-relaxed">{`# .env.local\nOPENAI_API_KEY=sk-...\nOPENAI_MODEL=${cfg.model}\nOPENAI_FAST_MODEL=${cfg.fastModel}`}</pre>
                   )}
-                </CardContent>
-              </Card>
-            </Group>
+                </SettingsBlock>
+              </div>
+            </SettingsSection>
 
-            <Group id="research" title="Research providers" description="Public endpoints work without keys; tokens raise rate limits.">
-              <Card>
-                <CardContent className="space-y-1.5 pt-4 text-sm">
-                  <ProviderRow label="CourtListener (case law, dockets, citation lookup)" ok={courtListener} okLabel="token set" fallback="anonymous" />
-                  <ProviderRow label="eCFR (regulations)" ok okLabel="public" />
-                  <ProviderRow label="Federal Register" ok okLabel="public" />
-                  <ProviderRow label="GovInfo (U.S. Code, Public Laws)" ok={govInfo} okLabel="key set" fallback="DEMO_KEY" />
-                  <ProviderRow label="OpenAI web search" ok={cfg.hasKey} okLabel="enabled" fallback="needs key" />
-                </CardContent>
-              </Card>
-            </Group>
+            <SettingsSection id="research" title="Research providers" description="Public endpoints work without keys; tokens raise rate limits and unlock crawling and web search.">
+              <ProviderTable initial={providers} />
+            </SettingsSection>
 
-            <Group id="integrity" title="Data & integrity" description={`SQLite database in ${process.env.LECLAUDE_DATA_DIR || "./data"}. Scans, the hash-chained audit log and the AI review queue live here.`}>
-              <Card>
-                <CardHeader><CardTitle>Records</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
-                  {counts.map(([k, v]) => (
-                    <div key={k} className="flex justify-between border-b py-1"><span className="text-muted-foreground">{k}</span><span className="tabular">{v.toLocaleString()}</span></div>
-                  ))}
-                </CardContent>
-              </Card>
-              <ReviewQueueSummary matters={matters} />
-              <IntegrityPanel />
-            </Group>
+            <SettingsSection id="data" title="Data & automation" description="Background ingestion, scheduled sources, jobs and the local document corpus.">
+              <DataAutomationSection background={providers.background} dataDir={providers.dataDir} corpusFolders={providers.providers.find((p) => p.id === "local-corpus")?.facts?.folders as number ?? 0} />
+            </SettingsSection>
 
-            <Group id="about" title="About">
-              <Card>
-                <CardContent className="grid gap-x-6 gap-y-1 pt-4 text-sm sm:grid-cols-2">
-                  <div className="flex justify-between border-b py-1"><span className="text-muted-foreground">Application</span><span>{process.env.NEXT_PUBLIC_APP_NAME ?? "LeClaude"}</span></div>
-                  <div className="flex justify-between border-b py-1"><span className="text-muted-foreground">Firm</span><span>{process.env.NEXT_PUBLIC_FIRM_NAME ?? "Seeger Weiss LLP"}</span></div>
-                  <div className="flex justify-between border-b py-1"><span className="text-muted-foreground">Runtime</span><span className="font-mono text-xs">Next.js 15 · React 19 · Node {process.versions.node}</span></div>
-                  <div className="flex justify-between border-b py-1"><span className="text-muted-foreground">Environment</span><span className="font-mono text-xs">{process.env.NODE_ENV}</span></div>
-                  <div className="flex justify-between border-b py-1"><span className="text-muted-foreground">Keyboard</span><span className="text-xs">⌘K palette · G H/S/E/W/O/L/, navigation · [ toggles the rail</span></div>
-                </CardContent>
-              </Card>
-            </Group>
+            <SettingsSection id="integrity" title="Integrity" description={`SQLite database in ${providers.dataDir}. Records, the AI review queue, scans and the hash-chained audit log.`}>
+              <div className="space-y-3">
+                <SettingsBlock title="Records">
+                  <div className="grid grid-cols-2 gap-x-6 sm:grid-cols-3">
+                    {counts.map((c) => (
+                      <div key={c.label} className="flex h-6 items-center justify-between border-b border-line-quiet text-[12px]"><span className="text-muted-foreground">{c.label}</span><span className="tabular">{c.value.toLocaleString()}</span></div>
+                    ))}
+                  </div>
+                </SettingsBlock>
+                <ReviewQueueSummary matters={matters} />
+                <IntegrityPanel />
+              </div>
+            </SettingsSection>
+
+            <SettingsSection id="about" title="About">
+              <KeyValueList dense columns={2} labelWidth={120} items={[
+                { label: "Application", value: process.env.NEXT_PUBLIC_APP_NAME ?? "LeClaude" },
+                { label: "Firm", value: process.env.NEXT_PUBLIC_FIRM_NAME ?? "Seeger Weiss LLP" },
+                { label: "Signed in as", value: `${me.name} (${me.id})` },
+                { label: "Runtime", value: `Next.js 15 · React 19 · Node ${process.versions.node}`, mono: true },
+                { label: "Environment", value: process.env.NODE_ENV, mono: true },
+                { label: "Keyboard", value: "⌘K palette · ? shortcuts · G H/S/I/E/W/O/L/, navigation · [ rail" },
+              ]} />
+            </SettingsSection>
           </div>
         </div>
       </div>
     </div>
   );
-}
-
-function ProviderRow({ label, ok, okLabel, fallback }: { label: string; ok: boolean; okLabel: string; fallback?: string }) {
-  return <div className="flex items-center justify-between gap-3"><span>{label}</span><Badge variant={ok ? "success" : "muted"}>{ok ? okLabel : fallback}</Badge></div>;
 }

@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Bookmark, Check, Copy, FileDown, FileText, Loader2, Pin, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Bookmark, Check, Copy, FileDown, FileText, Loader2, Pin, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tip } from "@/components/ui/tooltip";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { NotSourceBackedBanner, TrustBadge as TrustChip } from "@/components/ai/trust-badge";
+import { AssistantMark } from "@/components/ai/chat";
 import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
 import { formatBluebook } from "../normalize";
 import { memoTitle } from "../memo";
@@ -72,7 +73,7 @@ function QuestionBubble({ text, userName }: { text: string; userName: string }) 
   return (
     <div className="mb-5 flex justify-end">
       <div className="flex max-w-[85%] items-start gap-2.5">
-        <div className="rounded-2xl rounded-tr-sm bg-accent/70 px-4 py-2.5 text-[14px] leading-relaxed text-foreground whitespace-pre-wrap">{text}</div>
+        <div className="rounded-md bg-accent/70 px-3.5 py-2 text-[13.5px] leading-relaxed text-foreground whitespace-pre-wrap">{text}</div>
         <PersonAvatar name={userName} size="sm" className="mt-1" />
       </div>
     </div>
@@ -148,7 +149,7 @@ function Turn({ question, message, sources, userName, matter, aiConfigured, onSa
     <section className="mb-10" data-run={message.runId}>
       <QuestionBubble text={question} userName={userName} />
       <div className="flex items-start gap-3">
-        <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="size-3.5" /></span>
+        <AssistantMark size="md" className="mt-1" />
         <div className="min-w-0 flex-1">
           {message.banner === "no-api-key" && <NoKeyCard className="mb-3" />}
           {message.banner === "not-source-backed" && <NotSourceBackedBanner className="mb-3" />}
@@ -189,7 +190,7 @@ function Turn({ question, message, sources, userName, matter, aiConfigured, onSa
               <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Suggested follow-ups</div>
               <div className="flex flex-wrap gap-1.5">
                 {message.followUps.map((q) => (
-                  <button key={q} onClick={() => a.askFollowUp(q)} className="group inline-flex max-w-full items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-left text-[12px] text-foreground/90 transition-colors hover:border-primary/40 hover:bg-accent cursor-pointer">
+                  <button key={q} onClick={() => a.askFollowUp(q)} className="group inline-flex max-w-full items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-left text-[12px] text-foreground/90 transition-colors hover:border-primary/40 hover:bg-accent cursor-pointer">
                     <span className="truncate">{q}</span><ArrowRight className="size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                   </button>
                 ))}
@@ -244,7 +245,7 @@ function PendingTurn({ pending, lanes, sources, userName, error, aiConfigured }:
     <section className="mb-10" aria-live="polite">
       <QuestionBubble text={pending.question} userName={userName} />
       <div className="flex items-start gap-3">
-        <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className={cn("size-3.5", pending.stage !== "done" && pending.stage !== "error" && "animate-pulse-soft")} /></span>
+        <AssistantMark size="md" className="mt-1" />
         <div className="min-w-0 flex-1">
           {!aiConfigured && <NoKeyCard className="mb-3" compact />}
           <div className="mb-3 rounded-lg border bg-card px-3 py-2 font-sans text-xs">

@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, ChevronRight, Copy, Download, ExternalLink, Eye, FolderInput, History, KeyRound, Loader2, Pencil, Save, Sparkles, Star, Tag, Trash2, X, Plus, LayoutTemplate, FolderOpen, MessageSquare, FileText } from "lucide-react";
+import { Activity, ChevronRight, Copy, Download, ExternalLink, Eye, FolderInput, History, KeyRound, ListChecks, Loader2, Pencil, PenLine, Save, Star, Tag, Trash2, X, Plus, LayoutTemplate, FolderOpen, MessageSquare, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatBytes, formatDateTime } from "@/lib/utils";
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -262,12 +262,12 @@ function AiSummary({ id, aiConfigured }: { id: string; aiConfigured: boolean }) 
     finally { setBusy(false); }
   };
   return (
-    <section className="rounded-lg border">
-      <header className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
-        <Sparkles className="size-4 text-primary" /><div className="text-sm font-medium">AI summary</div>
+    <section className="rounded-md border">
+      <header className="flex h-8 items-center gap-2 border-b px-3">
+        <ListChecks className="size-4 text-muted-foreground" /><div className="text-[12.5px] font-medium">Summary</div>
         {summary && <TrustBadge provenance={provenance} compact={!provenance} />}
         <div className="flex-1" />
-        <Button size="xs" variant="secondary" onClick={run} disabled={busy}>{busy ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />} {summary ? "Regenerate" : "Summarize this item"}</Button>
+        <Button size="xs" variant="outline" onClick={run} disabled={busy}>{busy ? <Loader2 className="size-3 animate-spin" /> : <PenLine className="size-3" />} {summary ? "Summarize again" : "Summarize"}</Button>
       </header>
       <div className="px-3 py-2 text-sm">
         {summary ? (

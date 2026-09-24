@@ -18,16 +18,17 @@ import { useHome } from "./home-provider";
 import { EmptyRow, MatterBadge, NONE, Section } from "./shared";
 
 const KIND: Record<TeamUpdate["kind"], { label: string; icon: LucideIcon; className: string }> = {
-  update: { label: "Update", icon: MessageSquare, className: "bg-muted text-muted-foreground border-transparent" },
-  win: { label: "Win", icon: Trophy, className: "bg-success/12 text-success border-success/25" },
-  announcement: { label: "Announcement", icon: Megaphone, className: "bg-primary/10 text-primary border-primary/20" },
-  question: { label: "Question", icon: HelpCircle, className: "bg-chart-3/15 text-warning-foreground dark:text-chart-3 border-chart-3/30" },
+  update: { label: "Update", icon: MessageSquare, className: "text-muted-foreground" },
+  win: { label: "Win", icon: Trophy, className: "text-success" },
+  announcement: { label: "Announcement", icon: Megaphone, className: "text-primary" },
+  question: { label: "Question", icon: HelpCircle, className: "text-warning-foreground dark:text-warning" },
 };
 
+/** Kind as icon + text (no chip); the only chip on an update is "Unanswered", a decision state. */
 function KindBadge({ kind }: { kind: TeamUpdate["kind"] }) {
   const k = KIND[kind];
   const Icon = k.icon;
-  return <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", k.className)}><Icon className="size-2.5" />{k.label}</span>;
+  return <span className={cn("inline-flex items-center gap-1 text-[10.5px] font-medium", k.className)}><Icon className="size-3" />{k.label}</span>;
 }
 
 export function useVisibleUpdates() {
@@ -41,7 +42,7 @@ export function UpdatesOverview() {
   const shown = list.slice(0, 6);
   return (
     <Section id="updates" title="Team updates" icon={Users} count={list.length} onExpand={() => setFocus("updates")}>
-      <div className="border-b p-3"><UpdateComposer /></div>
+      <div className="border-b p-2"><UpdateComposer /></div>
       {shown.length === 0 ? <EmptyRow icon={Users} title="No updates yet" hint="Share a win, an update or a question with the team." /> : (
         <ul className="divide-y">{shown.map((u, i) => <UpdateCard key={u.id} update={u} index={i} />)}</ul>
       )}
@@ -85,7 +86,7 @@ export function UpdateComposer() {
   };
 
   return (
-    <div className="rounded-lg border bg-background shadow-xs focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 transition-shadow">
+    <div className="rounded-md border bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 transition-shadow">
       <div className="flex items-start gap-2 px-2.5 pt-2.5">
         <PersonAvatar name={userName} size="sm" className="mt-0.5" />
         <textarea ref={ref} value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void submit(); } }} placeholder="Share an update, a win or a question with the team…" rows={1} className="block w-full resize-none bg-transparent py-1 text-[13px] outline-none placeholder:text-muted-foreground" aria-label="New team update" />
@@ -97,7 +98,7 @@ export function UpdateComposer() {
           ); })}
         </div>
         <Select value={matterId || NONE} onValueChange={(v) => setMatterId(v === NONE ? "" : v)}>
-          <SelectTrigger size="sm" className="h-7 w-auto min-w-[120px] max-w-[180px] text-[11px]"><SelectValue placeholder="Matter" /></SelectTrigger>
+          <SelectTrigger size="xs" className="w-auto min-w-[120px] max-w-[180px] text-[11px]"><SelectValue placeholder="Matter" /></SelectTrigger>
           <SelectContent><SelectItem value={NONE}>Firm-wide</SelectItem>{matters.map((m) => <SelectItem key={m.id} value={m.id}>{m.shortName}</SelectItem>)}</SelectContent>
         </Select>
         <div className="flex-1" />
@@ -126,7 +127,7 @@ function UpdateCard({ update: u, index, full }: { update: TeamUpdateView; index:
   };
 
   return (
-    <li className={cn("px-3 py-2.5", recent && "animate-slide-up bg-primary/5")} style={{ animationDelay: `${Math.min(index, 6) * 30}ms` }}>
+    <li className={cn("px-3 py-2", recent && "bg-primary/5")} data-index={index}>
       <div className="flex gap-2.5">
         <PersonAvatar name={author?.name ?? "Unknown"} size="sm" className="mt-0.5" />
         <div className="min-w-0 flex-1">
@@ -179,7 +180,7 @@ function UpdateCard({ update: u, index, full }: { update: TeamUpdateView; index:
               <Button size="xs" onClick={() => void sendReply()} disabled={!replyText.trim() || busy}>Reply</Button>
             </div>
           )}
-          {u.kind === "question" && !u.replies.length && !replying && <Badge variant="warning" className="mt-1.5">Unanswered</Badge>}
+          {u.kind === "question" && !u.replies.length && !replying && <Badge variant="warning" size="sm" className="mt-1.5">Unanswered</Badge>}
         </div>
       </div>
     </li>

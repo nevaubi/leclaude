@@ -1,4 +1,4 @@
-import { Home, Search, FileSearch, Workflow, LayoutGrid, Library, Settings, FileText, FileSpreadsheet, Presentation, FileType, type LucideIcon } from "lucide-react";
+import { Home, Search, Radar, FileSearch, Workflow, LayoutGrid, Library, Settings, FileText, FileSpreadsheet, Presentation, FileType, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   label: string;
@@ -12,6 +12,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { label: "Home", href: "/", icon: Home, shortcut: "G H", description: "Today, matters, tasks, calendar and the team's updates" },
   { label: "Search", href: "/search", icon: Search, shortcut: "G S", description: "Case law, statutes, regulations, dockets and internal knowledge" },
+  { label: "Intelligence", href: "/intel", icon: Radar, shortcut: "G I", description: "Authorities, dockets, judges, regulations, recalls and trends, watched and cross-analyzed" },
   { label: "E-Discovery", href: "/ediscovery", icon: FileSearch, shortcut: "G E", description: "Review, depositions, chronologies, people graph, privilege" },
   { label: "Workflows", href: "/workflows", icon: Workflow, shortcut: "G W", description: "Automations and multi-step agent playbooks" },
   {
@@ -30,7 +31,7 @@ export const NAV: NavItem[] = [
   { label: "Library", href: "/library", icon: Library, shortcut: "G L", description: "Shared folders, templates, clause bank and knowledge" },
 ];
 
-export const SECONDARY_NAV: NavItem[] = [{ label: "Settings", href: "/settings", icon: Settings, shortcut: "G ,", description: "AI, research providers, data integrity and the review queue" }];
+export const SECONDARY_NAV: NavItem[] = [{ label: "Settings", href: "/settings", icon: Settings, shortcut: "G ,", description: "AI, research providers, data & automation, integrity and the review queue" }];
 
 /** "G" chord targets: key → href (shared by the shell and the palette so both stay in sync). */
-export const GO_CHORD: Record<string, string> = { h: "/", s: "/search", e: "/ediscovery", w: "/workflows", o: "/office", l: "/library", ",": "/settings" };
+export const GO_CHORD: Record<string, string> = { h: "/", s: "/search", i: "/intel", e: "/ediscovery", w: "/workflows", o: "/office", l: "/library", ",": "/settings" };

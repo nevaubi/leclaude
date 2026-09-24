@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Bot, Calculator, CalendarClock, CheckSquare, ExternalLink, Gavel, KeyRound, ListChecks, MoreHorizontal, Newspaper, RefreshCw, Scale, Sparkles, StickyNote, Users, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Calculator, CalendarClock, CheckSquare, ExternalLink, Gavel, KeyRound, ListChecks, MoreHorizontal, Newspaper, PenLine, RefreshCw, Scale, StickyNote, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,9 +66,9 @@ export function DailyBriefCard({ className }: { className?: string }) {
   };
 
   return (
-    <section className={cn("flex min-w-0 flex-col rounded-xl border bg-card shadow-xs", className)} aria-label="Daily brief">
-      <header className="section-header h-10">
-        <Sparkles className="size-4 shrink-0 text-primary" />
+    <section className={cn("flex min-w-0 flex-col rounded-md border bg-card", className)} aria-label="Daily brief">
+      <header className="section-header h-9">
+        <ListChecks className="size-4 shrink-0 text-muted-foreground" />
         <h2 className="section-title">Daily brief</h2>
         {brief.source === "ai" ? (
           <TrustBadge provenance={provenance} compact={!provenance} />
@@ -81,15 +81,15 @@ export function DailyBriefCard({ className }: { className?: string }) {
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" aria-label="Brief options" disabled={briefLoading}>{briefLoading ? <RefreshCw className="size-3.5 animate-spin" /> : <MoreHorizontal className="size-4" />}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-60">
             <DropdownMenuLabel>Daily brief</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => void regenerateBrief("ai")}><Bot /> Regenerate with AI<span className="ml-auto text-[10px] text-muted-foreground">fast model</span></DropdownMenuItem>
-            <DropdownMenuItem onClick={() => void regenerateBrief("computed")}><Calculator /> Recompute without AI</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void regenerateBrief("ai")}><PenLine /> Draft with AI<span className="ml-auto text-[10px] text-muted-foreground">fast model</span></DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void regenerateBrief("computed")}><Calculator /> Recompute from data</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild><Link href="/settings#ai"><KeyRound /> AI configuration</Link></DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 p-3.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
         {briefLoading ? (
           <div className="space-y-2.5">
             <Skeleton className="h-4 w-3/4" />
@@ -97,23 +97,23 @@ export function DailyBriefCard({ className }: { className?: string }) {
           </div>
         ) : (
           <>
-            <p className="font-serif text-[15px] leading-snug text-foreground text-balance">{brief.headline}</p>
+            <p className="font-serif text-[14px] leading-snug text-foreground text-balance">{brief.headline}</p>
             {!aiConfigured && (
               <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-[11.5px] text-warning-foreground dark:text-warning">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <span>OpenAI key required for an AI-written brief; this one is computed from deadlines, tasks and updates. <Link href="/settings#ai" className="font-medium underline underline-offset-2">Add key</Link></span>
               </div>
             )}
-            <ol className="space-y-1">
+            <ol className="space-y-0.5">
               {items.map((it, i) => {
                 const Icon = KIND_ICON[it.kind] ?? StickyNote;
                 const external = it.href && /^https?:/.test(it.href);
                 const body = (
-                  <li key={i} className="group -mx-1.5 flex items-start gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-accent/50">
+                  <li key={i} className="group -mx-1.5 flex items-start gap-2 rounded px-1.5 py-0.5 transition-colors hover:bg-accent/50">
                     <Icon className={cn("mt-0.5 size-3.5 shrink-0", KIND_TONE[it.kind] ?? "text-muted-foreground")} />
                     <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-foreground/90">
                       {inline(it.text)}
-                      {it.matterId && <MatterBadge matterId={it.matterId} className="ml-1.5 align-middle" />}
+                      {it.matterId && <MatterBadge matterId={it.matterId} className="ml-1.5 inline-flex align-middle" />}
                       {external && <ExternalLink className="ml-1 inline size-3 align-middle text-muted-foreground opacity-0 group-hover:opacity-100" />}
                     </span>
                   </li>

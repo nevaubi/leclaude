@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarPlus, CheckSquare, ChevronDown, Home as HomeIcon, MessageSquarePlus, Plus, RefreshCw, Scale, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { CalendarPlus, CheckSquare, ChevronDown, Home as HomeIcon, Keyboard, MessageSquarePlus, MessageSquareText, Plus, RefreshCw, Scale, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import { useShortcutHelp, type ShortcutGroup } from "@/components/ui/shortcut-help";
 import type { HomeInitialData } from "../types";
 import { useHomeUI, type HomeSection } from "../store";
 import { HomeProvider, useHome } from "./home-provider";
@@ -22,6 +23,26 @@ import { UpdatesFocus, UpdatesOverview } from "./team-updates";
 import { MattersFocus, MattersOverview } from "./matters-overview";
 import { AssistantDock } from "./assistant-dock";
 import { TodaySpine } from "./today-spine";
+import { ForYouSection } from "./for-you";
+
+/** Home page shortcuts, listed in the `?` help dialog. */
+export const HOME_SHORTCUTS: ShortcutGroup[] = [
+  { id: "home", title: "Home", items: [
+    { keys: ["n", "t"], label: "New task" },
+    { keys: ["n", "e"], label: "New event" },
+    { keys: ["n", "u"], label: "New team update" },
+    { keys: ["a"], label: "Toggle the assistant" },
+    { keys: ["c"], label: "Open the calendar" },
+    { keys: ["k"], label: "Open the task board" },
+    { keys: ["esc"], label: "Back to the overview" },
+  ] },
+  { id: "home-calendar", title: "Calendar", items: [
+    { keys: ["["], label: "Previous period" }, { keys: ["]"], label: "Next period" }, { keys: ["t"], label: "Today" }, { keys: ["m"], label: "Month" }, { keys: ["w"], label: "Week" }, { keys: ["d"], label: "Agenda" },
+  ] },
+  { id: "home-tasks", title: "Task rows", items: [
+    { keys: ["enter"], label: "Rename" }, { keys: ["space"], label: "Complete" }, { keys: ["s"], label: "Next status" }, { keys: ["e"], label: "Details" }, { keys: ["backspace"], label: "Delete" },
+  ] },
+];
 
 export function HomePage({ initial }: { initial: HomeInitialData }) {
   return (
@@ -71,6 +92,7 @@ function HomeLayout() {
   const setFocus = useHomeUI((s) => s.setFocus);
   const mainRef = React.useRef<HTMLDivElement>(null);
   useHomeShortcuts();
+  useShortcutHelp(HOME_SHORTCUTS, "home");
 
   // Reset scroll when switching between overview and a focused section.
   React.useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [focus]);
@@ -80,7 +102,7 @@ function HomeLayout() {
       <Topbar />
       <div ref={mainRef} className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto scrollbar-thin", focus && "overflow-hidden")}>
         {focus ? (
-          <div className="flex h-full min-h-0 flex-col p-3">
+          <div className="flex h-full min-h-0 flex-col p-2">
             <FocusedSection section={focus} onClose={() => setFocus(null)} />
           </div>
         ) : (
@@ -98,13 +120,14 @@ function HomeLayout() {
  */
 function Overview() {
   return (
-    <div className="@container mx-auto w-full max-w-[1440px] space-y-4 p-4 pb-8">
+    <div className="@container mx-auto w-full max-w-[1480px] space-y-3 p-3 pb-6">
       <TodaySpine />
-      <div className="grid gap-4 @4xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+      <ForYouSection />
+      <div className="grid gap-3 @5xl:grid-cols-[minmax(0,8fr)_minmax(0,4fr)]">
         <MattersOverview />
         <DailyBriefCard />
       </div>
-      <div className="grid gap-4 @3xl:grid-cols-2">
+      <div className="grid gap-3 @3xl:grid-cols-2">
         <NewsOverview />
         <UpdatesOverview />
       </div>
@@ -136,25 +159,26 @@ function Topbar() {
   const focusComposer = useHomeUI((s) => s.focusComposer);
   const dockOpen = useHomeUI((s) => s.dockOpen);
   const setDockOpen = useHomeUI((s) => s.setDockOpen);
+  const help = useShortcutHelp(undefined);
   const sectionLabel: Record<HomeSection, string> = { calendar: "Calendar", tasks: "Tasks", news: "News", updates: "Team updates", matters: "Matters" };
   const active = matterById(matterFilter);
   return (
     <TopbarSlot>
       <HomeIcon className="size-4 text-muted-foreground" />
-      <button onClick={() => setFocus(null)} className="shrink-0 text-sm font-semibold hover:text-primary cursor-pointer">Home</button>
-      {focus && <><span className="text-muted-foreground">/</span><span className="text-sm text-muted-foreground">{sectionLabel[focus]}</span><Button variant="ghost" size="icon-xs" onClick={() => setFocus(null)} aria-label="Back to overview"><X className="size-3.5" /></Button></>}
+      <button onClick={() => setFocus(null)} className="shrink-0 text-[13px] font-semibold hover:text-primary cursor-pointer">Home</button>
+      {focus && <><span className="text-muted-foreground">/</span><span className="text-[13px] text-muted-foreground">{sectionLabel[focus]}</span><Button variant="ghost" size="icon-xs" onClick={() => setFocus(null)} aria-label="Back to overview"><X className="size-3.5" /></Button></>}
       {active && (
         <button onClick={() => setMatterFilter(null)} className="chip chip-accent ml-1 hidden md:inline-flex cursor-pointer" title="Clear matter filter"><Scale className="size-3" /> {active.shortName} <X className="size-3 opacity-70" /></button>
       )}
       <div className="flex-1" />
       {/* Filters and shortcuts live in one quiet popover instead of a row of controls. */}
       <Popover>
-        <Tip label="Filters and shortcuts"><PopoverTrigger asChild><Button variant={matterFilter ? "secondary" : "ghost"} size="icon-sm" aria-label="Filters and shortcuts"><SlidersHorizontal className="size-4" /></Button></PopoverTrigger></Tip>
-        <PopoverContent align="end" className="w-80 space-y-3 p-3">
+        <Tip label="Filters"><PopoverTrigger asChild><Button variant={matterFilter ? "secondary" : "ghost"} size="icon-xs" aria-label="Filters"><SlidersHorizontal className="size-4" /></Button></PopoverTrigger></Tip>
+        <PopoverContent align="end" className="w-72 space-y-3 p-3">
           <div>
             <Label className="text-[11px] text-muted-foreground">Matter</Label>
             <Select value={matterFilter ?? ALL} onValueChange={(v) => setMatterFilter(v === ALL ? null : v)}>
-              <SelectTrigger size="sm" className="mt-1 w-full" aria-label="Matter filter"><SelectValue placeholder="All matters" /></SelectTrigger>
+              <SelectTrigger size="xs" className="mt-1 w-full" aria-label="Matter filter"><SelectValue placeholder="All matters" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All matters</SelectItem>
                 {matters.map((m) => <SelectItem key={m.id} value={m.id}>{m.shortName} <span className="text-muted-foreground">· {m.caption ?? m.practiceArea}</span></SelectItem>)}
@@ -166,14 +190,14 @@ function Topbar() {
             <span className="text-[11px] text-muted-foreground">Data</span>
             <Button variant="outline" size="xs" onClick={() => void refresh()} disabled={refreshing}><RefreshCw className={cn("size-3", refreshing && "animate-spin")} /> Refresh</Button>
           </div>
-          <ShortcutsList />
         </PopoverContent>
       </Popover>
-      <Tip label={dockOpen ? "Hide assistant" : "Show assistant"} shortcut="A"><Button variant={dockOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setDockOpen(!dockOpen)} aria-label="Toggle assistant"><Sparkles className="size-4" /></Button></Tip>
+      <Tip label="Keyboard shortcuts" shortcut="?"><Button variant="ghost" size="icon-xs" onClick={() => help.open()} aria-label="Keyboard shortcuts"><Keyboard className="size-4" /></Button></Tip>
+      <Tip label={dockOpen ? "Hide assistant" : "Show assistant"} shortcut="A"><Button variant={dockOpen ? "secondary" : "ghost"} size="icon-xs" onClick={() => setDockOpen(!dockOpen)} aria-label="Toggle assistant"><MessageSquareText className="size-4" /></Button></Tip>
       <div className="ml-1 flex items-center">
-        <Button size="sm" className="rounded-r-none" onClick={() => openTaskDialog({})}><Plus className="size-4" /> New</Button>
+        <Button size="xs" className="rounded-r-none" onClick={() => openTaskDialog({})}><Plus className="size-3.5" /> New</Button>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" aria-label="More new items"><ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild><Button size="xs" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" aria-label="More new items"><ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuLabel>Create</DropdownMenuLabel>
             <DropdownMenuItem onClick={() => openTaskDialog({})}><CheckSquare /> Task<DropdownMenuShortcut>N T</DropdownMenuShortcut></DropdownMenuItem>
@@ -189,17 +213,6 @@ function Topbar() {
   );
 }
 
-function ShortcutsList() {
-  const rows: [string, string][] = [["N T / N E / N U", "New task / event / update"], ["A", "Toggle assistant"], ["C", "Open calendar"], ["K", "Open task board"], ["Esc", "Back to overview"], ["[ ]  T  M W D", "Calendar: prev/next, today, month/week/agenda"], ["↵ Space S E ⌫", "Task row: rename, complete, next status, details, delete"], ["⌘K", "Command palette"], ["G H / G S / G E", "Go to Home / Search / E-Discovery"]];
-  return (
-    <div className="border-t pt-2">
-      <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Keyboard shortcuts</div>
-      <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11.5px]">
-        {rows.map(([k, v]) => <React.Fragment key={k}><dt><kbd className="whitespace-nowrap">{k}</kbd></dt><dd className="text-muted-foreground">{v}</dd></React.Fragment>)}
-      </dl>
-    </div>
-  );
-}
 
 /** Page-level chords and single-key shortcuts (ignored while typing or when a dialog is open). */
 function useHomeShortcuts() {

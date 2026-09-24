@@ -5,18 +5,21 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { NAV, SECONDARY_NAV } from "./nav";
 import { useShellStore } from "./shell-store";
 import { useTheme } from "./theme-provider";
-import { FilePlus2, FileSpreadsheet, Presentation, Sparkles, Briefcase, FileText, Users, Calendar, ListTodo, Workflow, Sun, Moon, Monitor, ShieldCheck, ShieldAlert, PanelLeft } from "lucide-react";
+import { useShortcutHelp } from "@/components/ui/shortcut-help";
+import { FilePlus2, FileSpreadsheet, Presentation, FileType, Briefcase, FileText, Users, Calendar, ListTodo, Workflow, Sun, Moon, Monitor, ShieldCheck, ShieldAlert, PanelLeft, Search, Radar, Keyboard, Settings, Database, type LucideIcon } from "lucide-react";
 import { debounce } from "@/lib/utils";
-import { groupHits, type QuickSearchHit } from "./palette-groups";
+import { groupHits, paletteSections, type PaletteCommand, type PaletteIcon, type QuickSearchHit } from "./palette-groups";
 
-export { groupHits, type QuickSearchHit };
+export { groupHits, paletteSections, type QuickSearchHit };
 
 const KIND_ICON = { matter: Briefcase, document: FileText, person: Users, task: ListTodo, event: Calendar, workflow: Workflow, library: FileText, office: FileText } as const;
+const ICONS: Record<PaletteIcon, LucideIcon> = { doc: FilePlus2, sheet: FileSpreadsheet, deck: Presentation, pdf: FileType, search: Search, radar: Radar, shield: ShieldCheck, "shield-alert": ShieldAlert, sun: Sun, moon: Moon, monitor: Monitor, panel: PanelLeft, keyboard: Keyboard, settings: Settings, database: Database };
 
 export function CommandPalette() {
   const router = useRouter();
   const { paletteOpen, setPaletteOpen, toggleSidebar } = useShellStore();
   const { setTheme } = useTheme();
+  const help = useShortcutHelp(undefined);
   const [query, setQuery] = React.useState("");
   const [hits, setHits] = React.useState<QuickSearchHit[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -38,7 +41,22 @@ export function CommandPalette() {
   React.useEffect(() => { if (!paletteOpen) { setQuery(""); setHits([]); } }, [paletteOpen]);
 
   const go = (href: string) => { setPaletteOpen(false); router.push(href); };
+  const run = (c: PaletteCommand) => {
+    if (c.href) { go(c.href); return; }
+    setPaletteOpen(false);
+    switch (c.action) {
+      case "theme:light": setTheme("light"); break;
+      case "theme:dark": setTheme("dark"); break;
+      case "theme:system": setTheme("system"); break;
+      case "toggle-sidebar": toggleSidebar(); break;
+      case "shortcuts": setTimeout(() => help.open(), 50); break;
+      default: break;
+    }
+  };
   const groups = groupHits(hits);
+  const nav = [...NAV, ...SECONDARY_NAV];
+  const sections = paletteSections({ query, nav });
+  const navIcon = (href: string) => nav.find((n) => n.href === href)?.icon;
 
   return (
     <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen}>
@@ -51,35 +69,28 @@ export function CommandPalette() {
               <CommandItem key={`${h.kind}:${h.id}`} value={`${h.title} ${h.subtitle ?? ""} ${h.kind}`} onSelect={() => go(h.href)}>
                 <Icon className="text-muted-foreground" />
                 <span className="truncate">{h.title}</span>
-                {h.subtitle && <span className="ml-2 truncate text-xs text-muted-foreground">{h.subtitle}</span>}
+                {h.subtitle && <span className="ml-2 truncate text-[11px] text-muted-foreground">{h.subtitle}</span>}
               </CommandItem>
             ); })}
           </CommandGroup>
         ))}
-        <CommandGroup heading="Create">
-          <CommandItem onSelect={() => go("/office/word/new")}><FilePlus2 /> New document<CommandShortcut>Word</CommandShortcut></CommandItem>
-          <CommandItem onSelect={() => go("/office/sheet/new")}><FileSpreadsheet /> New workbook<CommandShortcut>Excel</CommandShortcut></CommandItem>
-          <CommandItem onSelect={() => go("/office/slides/new")}><Presentation /> New deck<CommandShortcut>PowerPoint</CommandShortcut></CommandItem>
-          <CommandItem onSelect={() => go(`/search?q=${encodeURIComponent(query)}`)}><Sparkles /> Ask the research agent{query ? `: “${query}”` : ""}</CommandItem>
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading="Go to">
-          {[...NAV, ...SECONDARY_NAV].map((n) => (
-            <CommandItem key={n.href} onSelect={() => go(n.href)}><n.icon /> {n.label}{n.shortcut && <CommandShortcut>{n.shortcut}</CommandShortcut>}</CommandItem>
-          ))}
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading="Integrity">
-          <CommandItem onSelect={() => go("/settings#review")}><ShieldAlert /> Open the AI review queue</CommandItem>
-          <CommandItem onSelect={() => go("/settings#integrity")}><ShieldCheck /> Data integrity scans and audit log</CommandItem>
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading="Preferences">
-          <CommandItem onSelect={() => { setTheme("light"); setPaletteOpen(false); }}><Sun /> Light theme</CommandItem>
-          <CommandItem onSelect={() => { setTheme("dark"); setPaletteOpen(false); }}><Moon /> Dark theme</CommandItem>
-          <CommandItem onSelect={() => { setTheme("system"); setPaletteOpen(false); }}><Monitor /> System theme</CommandItem>
-          <CommandItem onSelect={() => { toggleSidebar(); setPaletteOpen(false); }}><PanelLeft /> Toggle navigation labels<CommandShortcut>[</CommandShortcut></CommandItem>
-        </CommandGroup>
+        {sections.map((s, i) => (
+          <React.Fragment key={s.id}>
+            {(i > 0 || groups.length > 0) && <CommandSeparator />}
+            <CommandGroup heading={s.heading}>
+              {s.commands.map((c) => {
+                const Icon = (s.id === "go" && c.href ? navIcon(c.href) : undefined) ?? ICONS[c.icon];
+                return (
+                  <CommandItem key={c.id} value={`${c.label} ${c.keywords ?? ""} ${s.heading}`} onSelect={() => run(c)}>
+                    <Icon className="text-muted-foreground" />
+                    <span className="truncate">{c.label}</span>
+                    {c.shortcut && <CommandShortcut>{c.shortcut}</CommandShortcut>}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </React.Fragment>
+        ))}
       </CommandList>
     </CommandDialog>
   );

@@ -72,7 +72,7 @@ export function CitationList({ citations, className }: { citations: Citation[]; 
     <div className={cn("flex flex-wrap gap-1.5", className)}>
       {citations.map((c, i) => {
         const inner = (
-          <span className="inline-flex max-w-full items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-[var(--radius-chip)] border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors">
             <span className="tabular text-[10px] font-medium text-primary">{i + 1}</span>
             <span className="truncate max-w-[220px]">{c.title}</span>
             {c.source && <span className="hidden sm:inline text-[10px] opacity-70">· {c.source}</span>}

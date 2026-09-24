@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Sparkles, AlertCircle, RotateCcw, Copy, Check } from "lucide-react";
+import { AlertCircle, RotateCcw, Copy, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
 import { ToolActivityList, CitationList } from "./tool-activity";
@@ -20,12 +20,12 @@ export function MessageList({ messages, statusLine, className, emptyState, userN
       onScroll={(e) => { const el = e.currentTarget; setStick(el.scrollHeight - el.scrollTop - el.clientHeight < 80); }}
     >
       {messages.length === 0 && emptyState}
-      <div className="space-y-4 p-3">
+      <div className="space-y-3 p-3">
         {messages.map((m, i) => (
           <MessageBubble key={m.id} message={m} userName={userName} onRetry={onRetry && m.role === "assistant" && m.status === "error" ? () => onRetry(messages[i - 1] ?? m) : undefined} />
         ))}
         {statusLine && (
-          <div className="flex items-center gap-2 pl-8 text-xs text-muted-foreground animate-pulse-soft"><Sparkles className="size-3.5" />{statusLine}</div>
+          <div className="flex items-center gap-2 pl-8 text-[11.5px] text-muted-foreground" role="status"><Loader2 className="size-3 animate-spin" aria-hidden />{statusLine}</div>
         )}
         <div ref={endRef} />
       </div>
@@ -46,17 +46,17 @@ export function MessageBubble({ message: m, userName, onRetry }: { message: Agen
               <img key={i} src={a.dataUrl} alt={a.name} className="h-16 rounded-md border object-cover" />
             ))}</div>
           ) : null}
-          <div className="rounded-lg bg-accent/60 px-3 py-2 text-sm whitespace-pre-wrap">{m.content}</div>
+          <div className="rounded-md bg-accent/60 px-3 py-1.5 text-[13px] whitespace-pre-wrap">{m.content}</div>
         </div>
       </div>
     );
   }
   return (
     <div className="flex gap-2.5 group">
-      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="size-3.5" /></span>
+      <AssistantMark />
       <div className="min-w-0 flex-1 space-y-2">
         {m.tools && m.tools.length > 0 && <ToolActivityList tools={m.tools} />}
-        {m.content ? <Markdown>{m.content}</Markdown> : m.status === "streaming" ? <div className="h-4 w-24 animate-pulse-soft rounded bg-muted" /> : null}
+        {m.content ? <Markdown>{m.content}</Markdown> : m.status === "streaming" ? <div className="h-3.5 w-24 rounded bg-muted" aria-hidden /> : null}
         {m.status === "error" && (
           <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
             <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
@@ -78,11 +78,18 @@ export function MessageBubble({ message: m, userName, onRetry }: { message: Agen
   );
 }
 
+/** Monochrome assistant mark: a single initial in a quiet circle (no glyph, no colour wash). */
+export function AssistantMark({ className, size = "sm" }: { className?: string; size?: "sm" | "md" }) {
+  return (
+    <span className={cn("mt-0.5 flex shrink-0 items-center justify-center rounded-full border bg-muted font-serif font-semibold text-muted-foreground", size === "sm" ? "size-6 text-[11px]" : "size-7 text-[12px]", className)} aria-label="Assistant" role="img">A</span>
+  );
+}
+
 export function SuggestionChips({ suggestions, onPick, className }: { suggestions: string[]; onPick: (s: string) => void; className?: string }) {
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
+    <div className={cn("flex flex-col gap-1", className)}>
       {suggestions.map((s) => (
-        <button key={s} onClick={() => onPick(s)} className="rounded-lg border bg-card px-3 py-2 text-left text-xs text-foreground/90 hover:bg-accent hover:border-foreground/20 transition-colors cursor-pointer">{s}</button>
+        <button key={s} onClick={() => onPick(s)} className="rounded-md border px-2.5 py-1.5 text-left text-[12px] text-foreground/90 hover:bg-accent hover:border-foreground/20 transition-colors cursor-pointer">{s}</button>
       ))}
     </div>
   );

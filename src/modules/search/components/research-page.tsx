@@ -1,13 +1,15 @@
 "use client";
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, Loader2, PanelLeftOpen, PanelRightOpen, Scale, Search as SearchIcon, ShieldCheck, Sparkles } from "lucide-react";
+import { ChevronRight, Loader2, PanelLeftOpen, PanelRightOpen, Scale, Search as SearchIcon, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
+import { SegmentedControl } from "@/components/ui/form";
+import { useShortcutHelp, type ShortcutGroup } from "@/components/ui/shortcut-help";
 import type { Matter } from "@/lib/types/domain";
 import { jurisdictionByKey } from "../jurisdictions";
 import { formatBluebook } from "../normalize";
@@ -47,6 +49,12 @@ const EXAMPLES = [
 
 type Tool = "research" | "citecheck";
 
+const SEARCH_SHORTCUTS: ShortcutGroup[] = [
+  { id: "search", title: "Research", items: [
+    { keys: ["/"], label: "Focus the question" }, { keys: ["enter"], label: "Ask" }, { keys: ["shift+enter"], label: "New line" }, { keys: ["["], label: "Toggle threads" }, { keys: ["]"], label: "Toggle the research panel" }, { keys: ["esc"], label: "Stop the run" },
+  ] },
+];
+
 export function ResearchPage(props: ResearchPageProps) {
   const router = useRouter();
   const params = useSearchParams();
@@ -75,6 +83,7 @@ export function ResearchPage(props: ResearchPageProps) {
   const [hoverN, setHoverN] = React.useState<number | null>(null);
   const [hoverSourceId, setHoverSourceId] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  useShortcutHelp(SEARCH_SHORTCUTS, "search");
 
   const refresh = React.useCallback(async () => {
     try {
@@ -235,31 +244,28 @@ export function ResearchPage(props: ResearchPageProps) {
   const topbar = (
     <TopbarSlot>
       <SearchIcon className="size-4 text-muted-foreground" />
-      <button onClick={newThread} className="shrink-0 text-sm font-semibold hover:text-primary cursor-pointer">Research</button>
+      <button onClick={newThread} className="shrink-0 text-[13px] font-semibold hover:text-primary cursor-pointer">Research</button>
       {tool === "citecheck" ? (
-        <><ChevronRight className="size-3.5 text-muted-foreground" /><span className="text-sm text-muted-foreground">Citation checker</span></>
+        <><ChevronRight className="size-3.5 text-muted-foreground" /><span className="text-[12.5px] text-muted-foreground">Citation checker</span></>
       ) : state.threadTitle ? (
-        <><ChevronRight className="size-3.5 text-muted-foreground" /><span className="max-w-[28vw] truncate text-sm text-muted-foreground" title={state.threadTitle}>{state.threadTitle}</span>{streaming && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}</>
+        <><ChevronRight className="size-3.5 text-muted-foreground" /><span className="max-w-[28vw] truncate text-[12.5px] text-muted-foreground" title={state.threadTitle}>{state.threadTitle}</span>{streaming && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}</>
       ) : null}
-      <div className="ml-2 hidden shrink-0 items-center rounded-md border p-0.5 md:flex">
-        <button onClick={() => switchTool("research")} className={cn("flex h-6 items-center gap-1 rounded px-2 text-[11px] cursor-pointer", tool === "research" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground")}><Scale className="size-3" /> Research</button>
-        <button onClick={() => switchTool("citecheck")} className={cn("flex h-6 items-center gap-1 rounded px-2 text-[11px] cursor-pointer", tool === "citecheck" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground")}><ShieldCheck className="size-3" /> Citation checker</button>
-      </div>
+      <SegmentedControl size="xs" className="ml-2 hidden md:inline-flex" ariaLabel="Tool" value={tool} onChange={(t) => switchTool(t)} options={[{ value: "research", label: "Research", icon: Scale }, { value: "citecheck", label: "Citation checker", icon: ShieldCheck }]} />
       <div className="flex-1" />
-      {currentMatter && <Tip label={currentMatter.caption ?? currentMatter.name}><Badge variant="outline" className="hidden shrink-0 xl:inline-flex">{currentMatter.shortName}</Badge></Tip>}
-      {!railOpen && <Tip label="Show threads" shortcut="["><Button variant="ghost" size="icon-sm" onClick={() => setRailOpen(true)} aria-label="Show threads"><PanelLeftOpen className="size-4" /></Button></Tip>}
-      {!panelOpen && tool === "research" && <Tip label="Show research panel" shortcut="]"><Button variant="ghost" size="icon-sm" onClick={() => setPanelOpen(true)} aria-label="Show research panel"><PanelRightOpen className="size-4" /></Button></Tip>}
+      {currentMatter && <Tip label={currentMatter.caption ?? currentMatter.name}><Badge variant="outline" size="sm" className="hidden shrink-0 xl:inline-flex">{currentMatter.shortName}</Badge></Tip>}
+      {!railOpen && <Tip label="Show threads" shortcut="["><Button variant="ghost" size="icon-xs" onClick={() => setRailOpen(true)} aria-label="Show threads"><PanelLeftOpen className="size-4" /></Button></Tip>}
+      {!panelOpen && tool === "research" && <Tip label="Show research panel" shortcut="]"><Button variant="ghost" size="icon-xs" onClick={() => setPanelOpen(true)} aria-label="Show research panel"><PanelRightOpen className="size-4" /></Button></Tip>}
     </TopbarSlot>
   );
 
   const emptyState = (
     <div className="mx-auto flex h-full w-full max-w-[760px] flex-col justify-center px-6 py-10">
-      <div className="mb-1 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><Sparkles className="size-3.5 text-primary" /> Agentic legal research</div>
-      <h1 className="text-[22px] font-semibold tracking-tight">What do you need to know?</h1>
-      <p className="mt-1 max-w-xl text-sm text-muted-foreground">Parallel research lanes search and read case law, statutes, regulations, dockets, the matter record and the firm library, then the answer is written from what was read, verified claim by claim, and cited by number.</p>
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Research</div>
+      <h1 className="text-[20px] font-semibold tracking-tight">What do you need to know?</h1>
+      <p className="mt-1 max-w-xl text-[12.5px] text-muted-foreground">Parallel research lanes search and read case law, statutes, regulations, dockets, the matter record and the firm library, then the answer is written from what was read, verified claim by claim, and cited by number.</p>
       <div className="mt-6 flex flex-wrap gap-1.5">
         {(recentQueries.length ? recentQueries.slice(0, 2) : []).concat(EXAMPLES).slice(0, 6).map((ex) => (
-          <button key={ex} onClick={() => ask(ex, undefined, { newThread: true })} className="max-w-full truncate rounded-full border bg-card px-3 py-1 text-[12px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground cursor-pointer" title={ex}>{ex}</button>
+          <button key={ex} onClick={() => ask(ex, undefined, { newThread: true })} className="max-w-full truncate rounded-md border bg-card px-2.5 py-1 text-[12px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground cursor-pointer" title={ex}>{ex}</button>
         ))}
       </div>
     </div>
@@ -267,7 +273,7 @@ export function ResearchPage(props: ResearchPageProps) {
 
   return (
     <ResearchProvider value={actions}>
-      <div className="flex h-full min-h-0 bg-background">
+      <div className="flex h-full min-h-0 bg-background" data-owns-bracket-left>
         {topbar}
         {hydrated && railOpen && (
           <div className="hidden w-[248px] shrink-0 lg:block">

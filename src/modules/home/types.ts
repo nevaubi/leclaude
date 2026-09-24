@@ -1,7 +1,9 @@
 /** Client-safe types shared by the home module's server services, API routes and UI. */
 import type { CalendarEvent, Matter, NewsItem, Person, PracticeArea, Task, TeamUpdate } from "@/lib/types/domain";
+import { CURRENT_USER } from "@/lib/current-user";
 
-export const CURRENT_USER_ID = "p_jwhitfield";
+/** Static id of the demo persona; services resolve the live identity with `currentUser()` (honours LECLAUDE_USER_ID). */
+export const CURRENT_USER_ID = CURRENT_USER.id;
 
 export type BriefItemKind = "deadline" | "hearing" | "task" | "news" | "update" | "matter" | "note";
 

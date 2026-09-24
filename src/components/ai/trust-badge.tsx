@@ -28,7 +28,7 @@ export function TrustBadge({ provenance, className, compact }: { provenance?: Pr
   ) : "This item was not produced with recorded provenance.";
   return (
     <Tip label={tip}>
-      <Badge variant={tone} className={cn("gap-1 cursor-help", compact && "px-1.5 py-0", className)}>
+      <Badge variant={tone} size="sm" className={cn("gap-1 cursor-help", compact && "px-1", className)}>
         <Icon className="size-3" />
         {!compact && label}
       </Badge>

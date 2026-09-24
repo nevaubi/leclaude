@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import type { CalendarEvent, LibraryItem, NewsItem, PracticeArea, Task, TeamUpdate } from "@/lib/types/domain";
 import { fetchJSON } from "@/lib/ai/toolkit/http";
 import { HOME_COLLECTIONS } from "./seed";
-import { CURRENT_USER_ID, type CalendarEntry, type DailyBrief, type EventInput, type EventPatch, type HomeInitialData, type MatterLite, type MatterOverview, type PersonLite, type TaskInput, type TaskPatch, type TeamUpdateView, type UpdateReply } from "./types";
+import { currentUser } from "@/lib/current-user";
+import { type CalendarEntry, type DailyBrief, type EventInput, type EventPatch, type HomeInitialData, type MatterLite, type MatterOverview, type PersonLite, type TaskInput, type TaskPatch, type TeamUpdateView, type UpdateReply } from "./types";
 import { addDays, dateKey, daysBetween, toDate } from "./time";
 import { computeFallbackBrief, type BriefContext } from "./brief-fallback";
 
@@ -54,7 +55,7 @@ export function getTask(id: string): Task | null {
   return db().tasks.get(id);
 }
 
-export function createTask(input: TaskInput, userId = CURRENT_USER_ID): Task {
+export function createTask(input: TaskInput, userId = currentUser().id): Task {
   const ts = nowIso();
   const task: Task = {
     id: `t_${nanoid(10)}`,
@@ -159,7 +160,7 @@ const repliesCol = () => db().collection<UpdateReply>(HOME_COLLECTIONS.replies);
 const reactionsCol = () => db().collection<ReactionDoc>(HOME_COLLECTIONS.reactions);
 
 export function listUpdates(opts: { matterId?: string | null; limit?: number; userId?: string } = {}): TeamUpdateView[] {
-  const userId = opts.userId ?? CURRENT_USER_ID;
+  const userId = opts.userId ?? currentUser().id;
   const replies = repliesCol().all();
   const mine = reactionsCol().find((r) => r.userId === userId);
   return db().updates
@@ -167,13 +168,13 @@ export function listUpdates(opts: { matterId?: string | null; limit?: number; us
     .map((u) => ({ ...u, replies: replies.filter((r) => r.updateId === u.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)), myReactions: mine.filter((r) => r.updateId === u.id).map((r) => r.emoji) }));
 }
 
-export function createUpdate(input: { body: string; kind?: TeamUpdate["kind"]; matterId?: string | null; attachments?: TeamUpdate["attachments"] }, userId = CURRENT_USER_ID): TeamUpdateView {
+export function createUpdate(input: { body: string; kind?: TeamUpdate["kind"]; matterId?: string | null; attachments?: TeamUpdate["attachments"] }, userId = currentUser().id): TeamUpdateView {
   const u: TeamUpdate = { id: `u_${nanoid(10)}`, authorId: userId, body: input.body.trim(), kind: input.kind ?? "update", matterId: input.matterId ?? undefined, createdAt: nowIso(), reactions: {}, attachments: input.attachments };
   db().updates.put(stripUndefined(u));
   return { ...u, replies: [], myReactions: [] };
 }
 
-export function toggleReaction(updateId: string, emoji: string, userId = CURRENT_USER_ID): TeamUpdateView | null {
+export function toggleReaction(updateId: string, emoji: string, userId = currentUser().id): TeamUpdateView | null {
   const u = db().updates.get(updateId);
   if (!u) return null;
   const id = `${updateId}:${userId}:${emoji}`;
@@ -190,7 +191,7 @@ export function toggleReaction(updateId: string, emoji: string, userId = CURRENT
   return listUpdates({ userId }).find((x) => x.id === updateId) ?? null;
 }
 
-export function addReply(updateId: string, body: string, userId = CURRENT_USER_ID): UpdateReply | null {
+export function addReply(updateId: string, body: string, userId = currentUser().id): UpdateReply | null {
   if (!db().updates.has(updateId)) return null;
   const r: UpdateReply = { id: `r_${nanoid(10)}`, updateId, authorId: userId, body: body.trim(), createdAt: nowIso() };
   return repliesCol().put(r);
@@ -290,7 +291,7 @@ export async function refreshNewsFromFederalRegister(opts: { now?: Date; timeout
 export const NEWS_CLIPPINGS_FOLDER_ID = "lib_folder_news_clippings";
 
 /** Save a news item to the Library as a link (idempotent). */
-export function saveNewsToLibrary(newsId: string, userId = CURRENT_USER_ID): LibraryItem | null {
+export function saveNewsToLibrary(newsId: string, userId = currentUser().id): LibraryItem | null {
   const d = db();
   const n = d.news.get(newsId);
   if (!n) return null;
@@ -324,7 +325,7 @@ export function saveNewsToLibrary(newsId: string, userId = CURRENT_USER_ID): Lib
 // Matters overview
 // ---------------------------------------------------------------------------
 
-export function matterOverview(now = new Date(), userId = CURRENT_USER_ID): MatterOverview[] {
+export function matterOverview(now = new Date(), userId = currentUser().id): MatterOverview[] {
   const d = db();
   const todayKey = dateKey(now);
   return d.matters
@@ -369,13 +370,13 @@ export function briefKey(date: string) {
   return `home:brief:${date}`;
 }
 
-export function buildBriefContext(now = new Date(), userId = CURRENT_USER_ID): BriefContext {
+export function buildBriefContext(now = new Date(), userId = currentUser().id): BriefContext {
   const d = db();
   const me = d.people.get(userId);
   return {
     now,
     userId,
-    userName: me?.name ?? "Jordan Whitfield",
+    userName: me?.name ?? currentUser().name,
     events: listEvents({ from: dateKey(addDays(now, -1)), to: dateKey(addDays(now, 45)) }),
     tasks: d.tasks.all(),
     news: d.news.all(),
@@ -394,7 +395,7 @@ export function cacheBrief(brief: DailyBrief) {
 }
 
 /** Cached brief for today, or a freshly computed (non-AI) one. Computed briefs are cached too so the card is stable across reloads. */
-export function getOrComputeBrief(now = new Date(), userId = CURRENT_USER_ID): DailyBrief {
+export function getOrComputeBrief(now = new Date(), userId = currentUser().id): DailyBrief {
   const date = dateKey(now);
   const cached = getCachedBrief(date);
   if (cached) return cached;
@@ -409,14 +410,14 @@ export function getOrComputeBrief(now = new Date(), userId = CURRENT_USER_ID): D
 
 export function loadHomeInitialData(opts: { now?: Date; userId?: string; aiConfigured: boolean }): HomeInitialData {
   const now = opts.now ?? new Date();
-  const userId = opts.userId ?? CURRENT_USER_ID;
+  const userId = opts.userId ?? currentUser().id;
   const d = db();
   const me = d.people.get(userId);
   return {
     now: now.toISOString(),
     aiConfigured: opts.aiConfigured,
     userId,
-    userName: me?.name ?? "Jordan Whitfield",
+    userName: me?.name ?? currentUser().name,
     people: listPeopleLite(),
     matters: listMattersLite(),
     tasks: listTasks({ now }),

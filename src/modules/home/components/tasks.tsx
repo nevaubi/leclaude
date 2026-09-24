@@ -91,7 +91,7 @@ export function TasksOverview() {
         {groups.length === 0 && (!filter.showDone || !done.length) ? (
           <EmptyRow icon={CheckSquare} title={filter.mine || filter.overdue ? "Nothing matches these filters" : "All clear"} hint={filter.overdue ? "No overdue tasks. Nice." : "Add a task above, or let a workflow create them for you."} className="py-6" />
         ) : (
-          <div className="mt-1.5 space-y-2">
+          <div className="mt-1.5 space-y-1.5">
             {groups.map((g) => <TaskGroup key={g.key} label={GROUP_LABEL[g.key]} tasks={g.tasks} tone={g.key === "overdue" ? "text-destructive" : g.key === "today" ? "text-primary" : undefined} />)}
             {filter.showDone && done.length > 0 && <TaskGroup label="Done" tasks={done.slice(0, 8)} tone="text-muted-foreground" muted />}
           </div>
@@ -145,7 +145,7 @@ function QuickAdd({ status, className, autoFocusNonce }: { status?: Task["status
   return (
     <div className={cn("relative", className)}>
       <Plus className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-      <Input ref={ref} value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } if (e.key === "Escape") setValue(""); }} placeholder={status ? `Add to ${TASK_STATUS_LABEL[status]}…` : "Add a task…  try  !urgent  @fri  (Enter)"} className="h-8 pl-8 text-xs" aria-label="Quick add task" />
+      <Input ref={ref} size="xs" value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } if (e.key === "Escape") setValue(""); }} placeholder={status ? `Add to ${TASK_STATUS_LABEL[status]}…` : "Add a task…  try  !urgent  @fri  (Enter)"} className="pl-8" aria-label="Quick add task" />
     </div>
   );
 }
@@ -154,7 +154,7 @@ function TaskGroup({ label, tasks, tone, muted }: { label: string; tasks: Task[]
   return (
     <div>
       <div className={cn("flex items-center gap-1.5 px-1.5 pb-0.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground", tone)}>{label}<span className="tabular opacity-70">{tasks.length}</span></div>
-      <ul className={cn("space-y-px", muted && "opacity-70")}>{tasks.map((t) => <TaskRow key={t.id} task={t} />)}</ul>
+      <ul className={cn("divide-y divide-line-quiet", muted && "opacity-70")}>{tasks.map((t) => <TaskRow key={t.id} task={t} />)}</ul>
     </div>
   );
 }
@@ -164,11 +164,10 @@ function TaskGroup({ label, tasks, tone, muted }: { label: string; tasks: Task[]
 // ---------------------------------------------------------------------------
 
 export function TaskRow({ task: t, dense }: { task: Task; dense?: boolean }) {
-  const { updateTask, deleteTask, personById } = useHome();
+  const { updateTask, deleteTask, personById, matterById } = useHome();
   const openTaskDialog = useHomeUI((s) => s.openTaskDialog);
   const [editing, setEditing] = React.useState(false);
   const [title, setTitle] = React.useState(t.title);
-  const [justDone, setJustDone] = React.useState(false);
   const rowRef = React.useRef<HTMLLIElement>(null);
   React.useEffect(() => setTitle(t.title), [t.title]);
   const done = t.status === "done";
@@ -176,7 +175,6 @@ export function TaskRow({ task: t, dense }: { task: Task; dense?: boolean }) {
 
   const toggleDone = async () => {
     const next = done ? "todo" : "done";
-    if (next === "done") { setJustDone(true); setTimeout(() => setJustDone(false), 600); }
     await updateTask(t.id, { status: next });
   };
   const commit = async () => {
@@ -198,35 +196,34 @@ export function TaskRow({ task: t, dense }: { task: Task; dense?: boolean }) {
     else if (e.key === "ArrowUp") { e.preventDefault(); (rowRef.current?.previousElementSibling as HTMLElement | null)?.focus(); }
   };
 
+  const matter = matterById(t.matterId);
   return (
     <li
       ref={rowRef}
       tabIndex={0}
       onKeyDown={onKey}
       onDoubleClick={() => setEditing(true)}
-      className={cn("group flex items-start gap-2 rounded-md px-1.5 py-1.5 outline-none transition-colors hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50", justDone && "animate-fade-in", dense && "py-1")}
+      className={cn("group flex items-center gap-2 rounded px-1.5 outline-none transition-colors hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50", dense ? "h-[24px]" : "h-[28px]")}
     >
-      <button onClick={() => void toggleDone()} aria-label={done ? "Mark as not done" : "Mark as done"} className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-colors cursor-pointer", done ? "border-success bg-success text-success-foreground" : "border-muted-foreground/40 hover:border-primary")}>{done && <Check className="size-3" />}</button>
-      <div className="min-w-0 flex-1">
+      <button onClick={() => void toggleDone()} aria-label={done ? "Mark as not done" : "Mark as done"} className={cn("flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors cursor-pointer", done ? "border-success bg-success text-success-foreground" : "border-muted-foreground/40 hover:border-primary")}>{done && <Check className="size-2.5" />}</button>
+      <PriorityBadge priority={t.priority} compact />
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
         {editing ? (
-          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => void commit()} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void commit(); } if (e.key === "Escape") { setTitle(t.title); setEditing(false); } }} className="w-full rounded border border-ring bg-background px-1.5 py-0.5 text-[13px] outline-none" />
+          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => void commit()} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void commit(); } if (e.key === "Escape") { setTitle(t.title); setEditing(false); } }} className="w-full rounded border border-ring bg-background px-1.5 py-0 text-[12.5px] leading-5 outline-none" />
         ) : (
-          <div className="flex items-center gap-1.5">
-            <PriorityBadge priority={t.priority} compact />
-            <span className={cn("truncate text-[13px] leading-snug", done && "text-muted-foreground line-through")}>{t.title}</span>
+          <>
+            <span className={cn("truncate text-[12.5px] leading-snug", done && "text-muted-foreground line-through")}>{t.title}</span>
             <SourceIcon source={t.source} />
             {t.links?.[0] && <Tip label={t.links[0].label}><Link href={t.links[0].href} className="text-muted-foreground hover:text-primary" onClick={(e) => e.stopPropagation()}><Link2 className="size-3" /></Link></Tip>}
-          </div>
+          </>
         )}
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-          {t.status !== "todo" && !done && <Badge variant="muted" className="px-1 py-0 text-[10px]">{TASK_STATUS_LABEL[t.status]}</Badge>}
-          <MatterBadge matterId={t.matterId} />
-          {!done && <CountdownChip date={t.dueAt} deadline />}
-          {done && t.dueAt && <span className="text-[10.5px] text-muted-foreground">done · was due {fmtDate(t.dueAt)}</span>}
-          {assignee && <Tip label={assignee.name}><span className="ml-auto"><PersonAvatar name={assignee.name} size="xs" /></span></Tip>}
-        </div>
       </div>
-      <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      {t.status !== "todo" && !done && <span className="hidden shrink-0 text-[10.5px] text-muted-foreground sm:inline">{TASK_STATUS_LABEL[t.status]}</span>}
+      {matter && <span className="hidden max-w-[120px] shrink-0 truncate text-[11px] text-muted-foreground md:inline" title={matter.name}>{matter.shortName}</span>}
+      {!done && <CountdownChip date={t.dueAt} deadline className="shrink-0" />}
+      {done && t.dueAt && <span className="shrink-0 text-[10.5px] text-muted-foreground">was due {fmtDate(t.dueAt)}</span>}
+      {assignee && <Tip label={assignee.name}><span className="shrink-0"><PersonAvatar name={assignee.name} size="xs" /></span></Tip>}
+      <div className="flex w-5 shrink-0 items-center justify-end opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         <TaskMenu task={t} onEdit={() => openTaskDialog({ taskId: t.id })} onDelete={remove} />
       </div>
     </li>
@@ -373,7 +370,7 @@ function BoardCard({ task: t, handleProps, overlay }: { task: Task; handleProps?
   const assignee = personById(t.assigneeId);
   const matter = matterById(t.matterId);
   return (
-    <div className={cn("group rounded-md border bg-card p-2 text-left shadow-xs transition-shadow hover:shadow-md", overlay && "rotate-1 shadow-lg ring-2 ring-primary/30")} onDoubleClick={() => openTaskDialog({ taskId: t.id })}>
+    <div className={cn("group rounded-md border bg-card p-2 text-left transition-colors hover:border-foreground/25", overlay && "shadow-lg ring-2 ring-primary/30")} onDoubleClick={() => openTaskDialog({ taskId: t.id })}>
       <div className="flex items-start gap-1.5">
         <button {...handleProps} className="mt-0.5 shrink-0 cursor-grab touch-none rounded text-muted-foreground/60 hover:text-foreground active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50" aria-label="Drag task"><GripVertical className="size-3.5" /></button>
         <div className="min-w-0 flex-1">
@@ -383,7 +380,7 @@ function BoardCard({ task: t, handleProps, overlay }: { task: Task; handleProps?
         {!overlay && <div className="opacity-0 group-hover:opacity-100"><TaskMenu task={t} onEdit={() => openTaskDialog({ taskId: t.id })} onDelete={() => void deleteTask(t.id)} /></div>}
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        <PriorityBadge priority={t.priority} />
+        <PriorityBadge priority={t.priority} compact />
         {matter && <MatterBadge matterId={t.matterId} />}
         {t.status !== "done" && <CountdownChip date={t.dueAt} deadline />}
         <SourceIcon source={t.source} />

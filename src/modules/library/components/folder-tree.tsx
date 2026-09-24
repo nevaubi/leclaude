@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronRight, Clock, Database, Plus, RefreshCw, Star, Users, Sparkles, Library as LibraryIcon } from "lucide-react";
+import { ChevronRight, Clock, Database, KeyRound, Plus, RefreshCw, Star, Users, Library as LibraryIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
@@ -55,9 +55,9 @@ export function FolderTree({ className }: { className?: string }) {
 
   return (
     <aside className={cn("flex h-full min-h-0 flex-col border-r bg-sidebar/40", className)}>
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b px-3">
         <LibraryIcon className="size-4 text-muted-foreground" />
-        <button onClick={() => openFolder(null)} className="text-sm font-semibold hover:text-primary cursor-pointer">Library</button>
+        <button onClick={() => openFolder(null)} className="text-[12.5px] font-semibold hover:text-primary cursor-pointer">Library</button>
         <div className="flex-1" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" aria-label="New"><Plus className="size-4" /></Button></DropdownMenuTrigger>
@@ -80,7 +80,7 @@ export function FolderTree({ className }: { className?: string }) {
           {VIEWS.map((v) => {
             const active = view === v.id;
             return (
-              <button key={v.id} onClick={() => openView(v.id)} className={cn("flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent")}>
+              <button key={v.id} onClick={() => openView(v.id)} className={cn("flex h-7 w-full items-center gap-2 rounded-md px-2 text-[12.5px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent")}>
                 <v.icon className={cn("size-4", active ? "text-sidebar-primary" : "text-muted-foreground")} />
                 <span className="flex-1 truncate text-left">{v.label}</span>
                 <span className="tabular text-[11px] text-muted-foreground">{tree?.views[v.countKey] ?? ""}</span>
@@ -132,7 +132,7 @@ function TreeNode({ node, depth, expanded, toggle, activeId, onOpen, onDrop, dra
         onClick={() => onOpen(node.id)}
         onKeyDown={(e) => { if (e.key === "Enter") onOpen(node.id); if (e.key === "ArrowRight" && hasChildren && !isOpen) toggle(node.id); if (e.key === "ArrowLeft" && isOpen) toggle(node.id); }}
         tabIndex={0}
-        className={cn("group flex h-8 cursor-pointer items-center gap-1 rounded-md pr-1.5 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent", over && "ring-2 ring-primary/60 bg-primary/5")}
+        className={cn("group flex h-7 cursor-pointer items-center gap-1 rounded-md pr-1.5 text-[12.5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent", over && "ring-2 ring-primary/60 bg-primary/5")}
         style={{ paddingLeft: 6 + depth * 14 }}
       >
         <button
@@ -174,7 +174,7 @@ function IndexFooter() {
           <Button variant="ghost" size="icon-xs" disabled={busy} onClick={async () => { setBusy(true); try { await actions.rebuildIndex(); } finally { setBusy(false); } }} aria-label="Rebuild index"><RefreshCw className={cn("size-3.5", busy && "animate-spin")} /></Button>
         </Tip>
       </div>
-      {!aiConfigured && <div className="mt-1 flex items-center gap-1 text-warning-foreground/80 dark:text-warning"><Sparkles className="size-3" /> Semantic search and AI need an OpenAI key</div>}
+      {!aiConfigured && <div className="mt-1 flex items-center gap-1 text-warning-foreground/80 dark:text-warning"><KeyRound className="size-3" /> Semantic search and AI need an OpenAI key</div>}
     </div>
   );
 }

@@ -123,7 +123,8 @@ export interface ProvenanceRecord {
 export type ProvenanceKind =
   | "edoc.analysis" | "edoc.prediction" | "privilege.entry"
   | "timeline.event" | "conflict" | "fact-matrix" | "knowledge-map" | "deposition.digest" | "deposition.outline"
-  | "home.brief" | "workflow.step" | "office.proposal" | "library.summary" | "library.autotag" | "library.compare" | "research";
+  | "home.brief" | "workflow.step" | "office.proposal" | "library.summary" | "library.autotag" | "library.compare" | "research"
+  | "intel.job";
 
 /** Row of the review queue (GET /api/integrity/review). */
 export interface ReviewQueueItem {

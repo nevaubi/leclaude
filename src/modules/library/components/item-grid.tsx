@@ -1,11 +1,11 @@
 "use client";
 import * as React from "react";
-import { ArrowDown, ArrowUp, Copy, Download, ExternalLink, FolderInput, FolderOpen, Info, MoreHorizontal, Pencil, Star, Trash2, Upload, ChevronRight, SearchX, Inbox } from "lucide-react";
+import { Copy, Download, ExternalLink, FolderInput, FolderOpen, Info, MoreHorizontal, Pencil, Star, Trash2, Upload, ChevronRight, SearchX, Inbox } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/misc";
@@ -42,15 +42,15 @@ export function ItemGrid() {
   return (
     <div
       ref={containerRef}
-      className={cn("relative min-h-0 flex-1 overflow-y-auto scrollbar-thin", fileOver && "bg-primary/5")}
+      className={cn("relative flex min-h-0 flex-1 flex-col", viewMode === "list" && !isSearching && items.length > 0 && !loading ? "overflow-hidden" : "overflow-y-auto scrollbar-thin", fileOver && "bg-primary/5")}
       onDragOver={(e) => { e.preventDefault(); if (isFileDrag(e)) { e.dataTransfer.dropEffect = "copy"; setFileOver(true); } }}
       onDragLeave={(e) => { if (!containerRef.current?.contains(e.relatedTarget as Node)) setFileOver(false); }}
       onDrop={onDrop}
       onClick={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.surface === "1") clearSelection(); }}
     >
       {fileOver && (
-        <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/60 bg-background/70 backdrop-blur-[1px]">
-          <div className="flex items-center gap-2 rounded-lg bg-background px-4 py-2 text-sm shadow-lg"><Upload className="size-4 text-primary" /> Drop to upload into <strong>{list?.folder?.name ?? "Library"}</strong></div>
+        <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-md border-2 border-dashed border-primary/60 bg-background/80">
+          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-[12.5px]"><Upload className="size-4 text-primary" /> Drop to upload into <strong>{list?.folder?.name ?? "Library"}</strong></div>
         </div>
       )}
       {dragging && !fileOver && (isSearching || view !== "folder") && (
@@ -81,9 +81,9 @@ export function ItemGrid() {
 
 function GridSkeleton({ mode }: { mode: "grid" | "list" }) {
   return mode === "grid" ? (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[144px] rounded-lg" />)}</div>
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(224px,1fr))] gap-3 p-3">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[132px] rounded-md" />)}</div>
   ) : (
-    <div className="space-y-1 p-3">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>
+    <div className="space-y-1 p-3">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-6" />)}</div>
   );
 }
 
@@ -120,13 +120,20 @@ function useItemHandlers(item: LibraryItemView) {
 }
 
 function ItemContextMenu({ item, children }: { item: LibraryItemView; children: React.ReactNode }) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ItemContextMenuContent item={item} />
+    </ContextMenu>
+  );
+}
+
+function ItemContextMenuContent({ item }: { item: LibraryItemView }) {
   const { selected, openItem, openPreview, setRenamingId, openDialog, actions } = useLibrary();
   const ids = selected.has(item.id) && selected.size > 1 ? Array.from(selected) : [item.id];
   const many = ids.length > 1;
   const system = item.type === "folder" && isSystemFolder(item.id);
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-52">
         <ContextMenuItem onClick={() => openItem(item)}><FolderOpen /> Open{item.officeDocId ? " in editor" : item.type === "link" ? " link" : ""}</ContextMenuItem>
         {item.officeDocId && <ContextMenuItem onClick={() => openItem(item, { newTab: true })}><ExternalLink /> Open in new tab</ContextMenuItem>}
@@ -140,7 +147,6 @@ function ItemContextMenu({ item, children }: { item: LibraryItemView; children: 
         <ContextMenuSeparator />
         <ContextMenuItem destructive disabled={system} onClick={() => openDialog({ kind: "delete", ids })}><Trash2 /> Delete{many ? ` ${ids.length} items` : ""} <span className="ml-auto text-[10px] opacity-70">⌫</span></ContextMenuItem>
       </ContextMenuContent>
-    </ContextMenu>
   );
 }
 
@@ -176,7 +182,7 @@ function ItemName({ item, className, query }: { item: LibraryItemView; className
 // ---------------------------------------------------------------------------
 function CardGrid({ items, selected, dragOverId }: { items: LibraryItemView[]; selected: Set<string>; dragOverId: string | null }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4" data-surface="1" role="grid" aria-label="Items">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(224px,1fr))] gap-3 p-3" data-surface="1" role="grid" aria-label="Items">
       {items.map((item) => <ItemCard key={item.id} item={item} selected={selected.has(item.id)} over={dragOverId === item.id} />)}
     </div>
   );
@@ -203,7 +209,7 @@ function ItemCard({ item, selected, over }: { item: LibraryItemView; selected: b
         onDragLeave={h.onDragLeave}
         onDrop={h.onDrop}
         className={cn(
-          "group relative flex h-[144px] cursor-default select-none flex-col rounded-lg border bg-card p-3 text-left outline-none transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/60",
+          "group relative flex h-[132px] cursor-default select-none flex-col rounded-md border bg-card p-2.5 text-left outline-none transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/60",
           selected && "border-primary/60 bg-accent/50 ring-2 ring-primary/30",
           over && "border-primary ring-2 ring-primary/50 bg-primary/5",
           isFolder && "bg-muted/30",
@@ -231,7 +237,7 @@ function ItemCard({ item, selected, over }: { item: LibraryItemView; selected: b
         </div>
         <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           {item.matterShortName && <span className="max-w-[120px] truncate text-[11px] text-muted-foreground" title={item.matterShortName}>{item.matterShortName}</span>}
-          {item.status === "draft" && <Badge variant="warning" className="px-1.5 py-0 text-[10px]">Draft</Badge>}
+          {item.status === "draft" && <Badge variant="warning" size="xs">Draft</Badge>}
           <span className="flex-1" />
           {item.ownerName && <PersonAvatar name={item.ownerName} size="xs" />}
           <RelativeTime value={item.updatedAt} className="tabular" />
@@ -243,98 +249,113 @@ function ItemCard({ item, selected, over }: { item: LibraryItemView; selected: b
 }
 
 // ---------------------------------------------------------------------------
-// List
+// List (DataTable)
 // ---------------------------------------------------------------------------
-const COLUMNS: { key: LibrarySort | "matter" | "owner" | "tags"; label: string; className: string; sortable?: boolean }[] = [
-  { key: "name", label: "Name", className: "min-w-[260px] flex-1", sortable: true },
-  { key: "type", label: "Type", className: "w-[120px]", sortable: true },
-  { key: "matter", label: "Matter", className: "w-[140px]" },
-  { key: "owner", label: "Owner", className: "w-[150px]" },
-  { key: "updated", label: "Updated", className: "w-[120px]", sortable: true },
-  { key: "size", label: "Size", className: "w-[80px] text-right", sortable: true },
-  { key: "tags", label: "Tags", className: "w-[220px]" },
-];
+const LIST_SORTABLE = new Set<string>(["name", "type", "updated", "size", "created"]);
 
 function ListTable({ items, selected, dragOverId }: { items: LibraryItemView[]; selected: Set<string>; dragOverId: string | null }) {
-  const { selectAll, clearSelection } = useLibrary();
+  const lib = useLibrary();
+  const { setSelected, openItem, openPreview, setRenamingId, openDialog, actions, setDragging, setDragOverId } = lib;
   const sort = useLibraryUI((s) => s.sort);
   const dir = useLibraryUI((s) => s.dir);
   const setSort = useLibraryUI((s) => s.setSort);
-  const all = items.length > 0 && items.every((i) => selected.has(i.id));
-  const some = !all && items.some((i) => selected.has(i.id));
-  return (
-    <div className="min-w-[900px] text-sm" role="table" aria-label="Items">
-      <div className="sticky top-0 z-[1] flex items-center gap-3 border-b bg-background/95 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground backdrop-blur" role="row">
-        <Checkbox checked={all ? true : some ? "indeterminate" : false} onCheckedChange={(v) => (v ? selectAll() : clearSelection())} aria-label="Select all" />
-        {COLUMNS.map((c) => (
-          <button key={c.key} disabled={!c.sortable} onClick={() => c.sortable && setSort(c.key as LibrarySort)} className={cn("flex items-center gap-1 text-left", c.className, c.sortable && "hover:text-foreground cursor-pointer", c.key === "size" && "justify-end")}>
-            {c.label}
-            {c.sortable && sort === c.key && (dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
-          </button>
-        ))}
-        <span className="w-8" />
-      </div>
-      <div data-surface="1">
-        {items.map((item) => <ListRow key={item.id} item={item} selected={selected.has(item.id)} over={dragOverId === item.id} />)}
-      </div>
-    </div>
-  );
-}
+  const [ctxItem, setCtxItem] = React.useState<LibraryItemView | null>(null);
+  const selectedIds = React.useMemo(() => Array.from(selected), [selected]);
 
-function ListRow({ item, selected, over }: { item: LibraryItemView; selected: boolean; over: boolean }) {
-  const h = useItemHandlers(item);
-  const { toggleSelected, actions, openDialog, openPreview, setRenamingId, openItem } = useLibrary();
-  const isFolder = item.type === "folder";
+  const columns = React.useMemo<DataTableColumn<LibraryItemView>[]>(() => [
+    {
+      id: "name", header: "Name", width: 320, minWidth: 180, sortable: true, locked: true, accessor: (i) => i.name,
+      render: (i) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <TypeIcon type={i.type} />
+          <ItemName item={i} className="truncate font-medium" />
+          {i.starred && <Star className="size-3 shrink-0 fill-current text-warning" />}
+          {i.status === "draft" && <Badge variant="warning" size="xs">Draft</Badge>}
+        </span>
+      ),
+    },
+    { id: "type", header: "Type", width: 130, minWidth: 80, sortable: true, accessor: (i) => i.officeKind ? OFFICE_KIND_LABEL[i.officeKind] : i.type === "clause" ? i.clause?.category ?? "Clause" : TYPE_LABEL[i.type], render: (i) => <span className="truncate text-muted-foreground">{i.officeKind ? OFFICE_KIND_LABEL[i.officeKind] : i.type === "clause" ? i.clause?.category ?? "Clause" : TYPE_LABEL[i.type]}</span> },
+    { id: "matter", header: "Matter", width: 140, minWidth: 80, accessor: (i) => i.matterShortName ?? "", render: (i) => i.matterShortName ? <span className="truncate">{i.matterShortName}</span> : <span className="text-muted-foreground">—</span> },
+    { id: "owner", header: "Owner", width: 150, minWidth: 90, accessor: (i) => i.ownerName ?? "", render: (i) => i.ownerName ? <span className="flex min-w-0 items-center gap-1.5"><PersonAvatar name={i.ownerName} size="xs" /><span className="truncate">{i.ownerName}</span></span> : <span className="text-muted-foreground">—</span> },
+    { id: "updated", header: "Updated", width: 120, minWidth: 90, sortable: true, accessor: (i) => i.updatedAt, render: (i) => <span className="text-muted-foreground"><RelativeTime value={i.updatedAt} /></span> },
+    { id: "size", header: "Size", width: 90, minWidth: 60, align: "right", sortable: true, accessor: (i) => i.size ?? 0, render: (i) => <span className="tabular text-muted-foreground">{i.type === "folder" ? `${i.childCount ?? 0} items` : i.size ? formatBytes(i.size) : "—"}</span> },
+    { id: "tags", header: "Tags", width: 200, minWidth: 100, accessor: (i) => (i.tags ?? []).join(", "), render: (i) => <span className="truncate text-[11px] text-muted-foreground">{(i.tags ?? []).slice(0, 4).join(" · ")}{(i.tags?.length ?? 0) > 4 ? ` +${i.tags!.length - 4}` : ""}</span> },
+    { id: "created", header: "Created", width: 120, minWidth: 90, sortable: true, defaultHidden: true, accessor: (i) => i.createdAt, render: (i) => <span className="text-muted-foreground"><RelativeTime value={i.createdAt} /></span> },
+  ], []);
+
+  const rowProps = React.useCallback((item: LibraryItemView): React.HTMLAttributes<HTMLDivElement> => {
+    const isFolder = item.type === "folder";
+    const system = isFolder && isSystemFolder(item.id);
+    const over = dragOverId === item.id;
+    return {
+      draggable: !system,
+      "data-item-id": item.id,
+      className: cn(over && "bg-primary/10 ring-2 ring-inset ring-primary/50"),
+      onDragStart: (e) => { const ids = selected.has(item.id) ? Array.from(selected) : [item.id]; e.dataTransfer.setData(ITEM_DRAG_MIME, JSON.stringify(ids)); e.dataTransfer.effectAllowed = "move"; setDragging(true); },
+      onDragEnd: () => { setDragging(false); setDragOverId(null); },
+      ...(isFolder ? {
+        onDragOver: (e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = isFileDrag(e) ? "copy" : "move"; if (dragOverId !== item.id) setDragOverId(item.id); },
+        onDragLeave: () => { if (dragOverId === item.id) setDragOverId(null); },
+        onDrop: (e) => {
+          e.preventDefault(); e.stopPropagation(); setDragOverId(null); setDragging(false);
+          if (isFileDrag(e)) { if (e.dataTransfer.files.length) void actions.upload(e.dataTransfer.files, { folderId: item.id, matterId: item.matterId ?? null }); return; }
+          const ids = readItemDrag(e).filter((id) => id !== item.id);
+          if (ids.length) void actions.move(ids, item.id);
+        },
+      } : {}),
+    } as React.HTMLAttributes<HTMLDivElement>;
+  }, [selected, dragOverId, setDragging, setDragOverId, actions]);
+
   return (
-    <ItemContextMenu item={item}>
-      <div
-        role="row"
-        tabIndex={0}
-        data-item-id={item.id}
-        draggable={!(isFolder && isSystemFolder(item.id))}
-        aria-selected={selected}
-        onClick={h.onClick}
-        onDoubleClick={h.onDoubleClick}
-        onKeyDown={h.onKeyDown}
-        onDragStart={h.onDragStart}
-        onDragEnd={h.onDragEnd}
-        onDragOver={h.onDragOver}
-        onDragLeave={h.onDragLeave}
-        onDrop={h.onDrop}
-        className={cn("group flex h-10 cursor-default select-none items-center gap-3 border-b px-3 outline-none transition-colors hover:bg-accent/40 focus-visible:bg-accent/40", selected && "bg-accent/60", over && "bg-primary/10 ring-2 ring-inset ring-primary/50")}
-      >
-        <Checkbox checked={selected} onClick={(e) => e.stopPropagation()} onCheckedChange={() => toggleSelected(item.id, { additive: true })} aria-label={`Select ${item.name}`} />
-        <div className="flex min-w-[260px] flex-1 items-center gap-2 overflow-hidden">
-          <TypeIcon type={item.type} />
-          <ItemName item={item} className="truncate font-medium" />
-          {item.starred && <Star className="size-3 shrink-0 fill-current text-warning" />}
-          {item.status === "draft" && <Badge variant="warning" className="px-1.5 py-0 text-[10px]">Draft</Badge>}
+    <ContextMenu onOpenChange={(o) => { if (!o) setCtxItem(null); }}>
+      <ContextMenuTrigger asChild>
+        <div
+          className="flex h-full min-h-0 flex-col"
+          data-surface="1"
+          onContextMenuCapture={(e) => {
+            const el = (e.target as HTMLElement).closest<HTMLElement>("[data-row-id]");
+            const item = el ? items.find((i) => i.id === el.dataset.rowId) ?? null : null;
+            if (!item) { e.stopPropagation(); return; }
+            setCtxItem(item);
+            if (!selected.has(item.id)) setSelected(new Set([item.id]));
+          }}
+        >
+          <DataTable
+            rows={items}
+            columns={columns}
+            rowId={(i) => i.id}
+            noun="item"
+            ariaLabel="Items"
+            selectionMode="multi"
+            selected={selectedIds}
+            onSelectedChange={(ids) => setSelected(new Set(ids))}
+            sort={{ columnId: sort, dir }}
+            onSortChange={(s) => { if (s && LIST_SORTABLE.has(s.columnId)) setSort(s.columnId as LibrarySort, s.dir); }}
+            serverSort
+            onRowActivate={(i) => openItem(i)}
+            rowProps={rowProps}
+            rowActions={(item) => (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" className="size-6" data-row-action onClick={(e) => e.stopPropagation()} aria-label="Actions"><MoreHorizontal className="size-3.5" /></Button></DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onClick={() => openItem(item)}><FolderOpen /> Open</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openPreview(item.id)}><Info /> Details</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={item.type === "folder" && isSystemFolder(item.id)} onClick={() => setRenamingId(item.id)}><Pencil /> Rename</DropdownMenuItem>
+                  <DropdownMenuItem disabled={item.type === "folder" && isSystemFolder(item.id)} onClick={() => openDialog({ kind: "move", ids: [item.id] })}><FolderInput /> Move…</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void actions.duplicate(item.id)}><Copy /> Duplicate</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void actions.star(item.id, !item.starred)}><Star /> {item.starred ? "Unstar" : "Star"}</DropdownMenuItem>
+                  {item.type !== "folder" && <DropdownMenuItem onClick={() => void actions.download(item)}><Download /> Download</DropdownMenuItem>}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem destructive disabled={item.type === "folder" && isSystemFolder(item.id)} onClick={() => openDialog({ kind: "delete", ids: [item.id] })}><Trash2 /> Delete</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          />
         </div>
-        <div className="w-[120px] truncate text-xs text-muted-foreground">{item.officeKind ? OFFICE_KIND_LABEL[item.officeKind] : item.type === "clause" ? item.clause?.category ?? "Clause" : TYPE_LABEL[item.type]}</div>
-        <div className="w-[140px] truncate text-xs">{item.matterShortName ?? <span className="text-muted-foreground">—</span>}</div>
-        <div className="flex w-[150px] items-center gap-1.5 truncate text-xs">{item.ownerName ? <><PersonAvatar name={item.ownerName} size="xs" /><span className="truncate">{item.ownerName}</span></> : <span className="text-muted-foreground">—</span>}</div>
-        <div className="w-[120px] text-xs text-muted-foreground"><RelativeTime value={item.updatedAt} /></div>
-        <div className="w-[80px] text-right text-xs tabular text-muted-foreground">{isFolder ? `${item.childCount ?? 0} items` : item.size ? formatBytes(item.size) : "—"}</div>
-        <div className="flex w-[220px] flex-wrap gap-1 overflow-hidden">{(item.tags ?? []).slice(0, 3).map((t) => <Badge key={t} variant="muted" className="px-1.5 py-0 text-[10px]">{t}</Badge>)}{(item.tags?.length ?? 0) > 3 && <span className="text-[10px] text-muted-foreground">+{item.tags!.length - 3}</span>}</div>
-        <div className="w-8">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100" onClick={(e) => e.stopPropagation()} aria-label="Actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem onClick={() => openItem(item)}><FolderOpen /> Open</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openPreview(item.id)}><Info /> Details</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={isFolder && isSystemFolder(item.id)} onClick={() => setRenamingId(item.id)}><Pencil /> Rename</DropdownMenuItem>
-              <DropdownMenuItem disabled={isFolder && isSystemFolder(item.id)} onClick={() => openDialog({ kind: "move", ids: [item.id] })}><FolderInput /> Move…</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void actions.duplicate(item.id)}><Copy /> Duplicate</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void actions.star(item.id, !item.starred)}><Star /> {item.starred ? "Unstar" : "Star"}</DropdownMenuItem>
-              {!isFolder && <DropdownMenuItem onClick={() => void actions.download(item)}><Download /> Download</DropdownMenuItem>}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem destructive disabled={isFolder && isSystemFolder(item.id)} onClick={() => openDialog({ kind: "delete", ids: [item.id] })}><Trash2 /> Delete</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    </ItemContextMenu>
+      </ContextMenuTrigger>
+      {ctxItem && <ItemContextMenuContent item={ctxItem} />}
+    </ContextMenu>
   );
 }
 
@@ -344,7 +365,7 @@ function ListRow({ item, selected, over }: { item: LibraryItemView; selected: bo
 function SearchResults({ hits, query }: { hits: LibrarySearchHit[]; query: string }) {
   const { selected, openFolder } = useLibrary();
   return (
-    <div className="mx-auto max-w-5xl space-y-2 p-4" data-surface="1">
+    <div className="mx-auto max-w-5xl space-y-1.5 p-3" data-surface="1">
       {hits.map((h) => <SearchHitRow key={h.item.id} hit={h} query={query} selected={selected.has(h.item.id)} openFolder={openFolder} />)}
     </div>
   );
@@ -366,13 +387,13 @@ function SearchHitRow({ hit, query, selected, openFolder }: { hit: LibrarySearch
         onKeyDown={h.onKeyDown}
         onDragStart={h.onDragStart}
         onDragEnd={h.onDragEnd}
-        className={cn("group flex cursor-default select-none gap-3 rounded-lg border bg-card p-3 outline-none transition-colors hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring/60", selected && "border-primary/60 bg-accent/50 ring-2 ring-primary/30")}
+        className={cn("group flex cursor-default select-none gap-3 rounded-md border bg-card p-2.5 outline-none transition-colors hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring/60", selected && "border-primary/60 bg-accent/50 ring-2 ring-primary/30")}
       >
         <TypeGlyph type={item.type} size="sm" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <ItemName item={item} className="truncate text-sm font-medium" query={query} />
-            {item.matterShortName && <Badge variant="outline" className="px-1.5 py-0 text-[10px]">{item.matterShortName}</Badge>}
+            {item.matterShortName && <span className="text-[11px] text-muted-foreground">{item.matterShortName}</span>}
             <span className="ml-auto shrink-0 text-[10px] tabular text-muted-foreground">{Math.round(hit.score * 100)}% · {hit.source === "office" ? "document" : TYPE_LABEL[item.type].toLowerCase()}</span>
           </div>
           <p className="mt-1 line-clamp-3 text-[12px] leading-relaxed text-muted-foreground"><Highlight text={hit.passage} query={query} /></p>
@@ -383,7 +404,7 @@ function SearchHitRow({ hit, query, selected, openFolder }: { hit: LibrarySearch
                 <button onClick={(e) => { e.stopPropagation(); openFolder(p.id); }} className="hover:text-foreground hover:underline cursor-pointer">{p.name}</button>
               </React.Fragment>
             ))}
-            {item.tags?.slice(0, 4).map((t) => <Badge key={t} variant="muted" className="ml-1 px-1.5 py-0 text-[10px]">{t}</Badge>)}
+            {item.tags?.slice(0, 4).map((t) => <span key={t} className="ml-1 text-[10.5px] text-muted-foreground">#{t}</span>)}
             <span className="ml-auto"><RelativeTime value={item.updatedAt} /></span>
           </div>
         </div>

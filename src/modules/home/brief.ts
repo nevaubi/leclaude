@@ -7,7 +7,8 @@ import { attachProvenance, recordGeneration, verifyNarrative } from "@/lib/integ
 import type { Provenance, ProvenanceSource } from "@/lib/integrity/types";
 import { collectBriefFacts, computeFallbackBrief, briefStats, renderFactsForModel } from "./brief-fallback";
 import { buildBriefContext, cacheBrief } from "./service";
-import { CURRENT_USER_ID, type BriefItem, type DailyBrief } from "./types";
+import { currentUser } from "@/lib/current-user";
+import { type BriefItem, type DailyBrief } from "./types";
 import { dateKey } from "./time";
 
 const BRIEF_SCHEMA = strictJsonSchema({
@@ -49,7 +50,7 @@ export type DailyBriefRecord = DailyBrief & { provenance?: Provenance };
  */
 export async function generateDailyBrief(opts: { now?: Date; userId?: string; signal?: AbortSignal; verify?: boolean } = {}): Promise<DailyBriefRecord> {
   const now = opts.now ?? new Date();
-  const userId = opts.userId ?? CURRENT_USER_ID;
+  const userId = opts.userId ?? currentUser().id;
   const ctx = buildBriefContext(now, userId);
   const facts = collectBriefFacts(ctx);
   const cfg = aiConfig();

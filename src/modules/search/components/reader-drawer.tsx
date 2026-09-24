@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { BookmarkPlus, Check, ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, MessageCircleQuestion, Pin, Quote, ScrollText, ShieldCheck, Sparkles, WifiOff, X } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, ChevronUp, Copy, ExternalLink, ListChecks, Loader2, MessageCircleQuestion, PenLine, Pin, Quote, ScrollText, ShieldCheck, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -161,7 +161,7 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
                 {external && <Button asChild variant="outline" size="xs"><a href={external} target={isExternal ? "_blank" : undefined} rel="noreferrer"><ExternalLink className="size-3" /> {isExternal ? "Open external" : "Open in app"}</a></Button>}
                 <div className="flex-1" />
                 <div className="flex items-center rounded-md border p-0.5">
-                  {([["text", "Text", ScrollText], ["headnotes", "Headnotes", Sparkles], ["ask", "Ask", MessageCircleQuestion], ["citations", "Citations", ShieldCheck]] as const).map(([id, label, I]) => (
+                  {([["text", "Text", ScrollText], ["headnotes", "Headnotes", ListChecks], ["ask", "Ask", MessageCircleQuestion], ["citations", "Citations", ShieldCheck]] as const).map(([id, label, I]) => (
                     <button key={id} onClick={() => { setTab(id); if (id === "citations" && !cites && result && !citesLoading) void verify(); }} className={cn("flex h-6 items-center gap-1 rounded px-2 text-[11px] cursor-pointer", tab === id ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground")}><I className="size-3" /> {label}</button>
                   ))}
                 </div>
@@ -240,7 +240,7 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
                         <div className="text-[10.5px] text-muted-foreground">AI-generated from the source text. Verify quotations against the Text tab before relying on them.</div>
                       </div>
                     ) : (
-                      <EmptyState icon={Sparkles} title="Headnote-style summary" description="Syllabus, numbered headnotes, holding, disposition and verbatim key quotations generated from the full text with the fast model." action={<Button size="sm" onClick={generateHeadnotes} disabled={hnState === "loading"}>{hnState === "loading" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Generate headnotes</Button>} />
+                      <EmptyState icon={ListChecks} title="Headnote-style summary" description="Syllabus, numbered headnotes, holding, disposition and verbatim key quotations generated from the full text with the fast model." action={<Button size="sm" onClick={generateHeadnotes} disabled={hnState === "loading"}>{hnState === "loading" ? <Loader2 className="size-3.5 animate-spin" /> : <PenLine className="size-3.5" />} Draft headnotes</Button>} />
                     )}
                     {hnState === "error" && <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{hnError}</div>}
                   </div>

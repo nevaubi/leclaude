@@ -1,11 +1,12 @@
 "use client";
 import * as React from "react";
-import { ChevronRight, FolderInput, Keyboard, KeyRound, Library as LibraryIcon, Loader2, Sparkles, Star, Trash2, X, Download } from "lucide-react";
+import { ChevronRight, FolderInput, KeyRound, Library as LibraryIcon, Loader2, MessageSquareText, Star, Trash2, X, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
+import { useShortcutHelp, type ShortcutGroup } from "@/components/ui/shortcut-help";
 import { LibraryProvider, useLibrary, type LibraryInitialData } from "./library-provider";
 import { useLibraryUI } from "./store";
 import { FolderTree } from "./folder-tree";
@@ -14,6 +15,13 @@ import { ItemGrid } from "./item-grid";
 import { PreviewSheet } from "./preview-sheet";
 import { AskLibraryPanel } from "./ask-library";
 import { LibraryDialogs } from "./dialogs";
+
+const LIBRARY_SHORTCUTS: ShortcutGroup[] = [
+  { id: "library", title: "Library", items: [
+    { keys: ["/"], label: "Search the library" }, { keys: ["enter"], label: "Open the selected item" }, { keys: ["space"], label: "Details" }, { keys: ["f2"], label: "Rename" }, { keys: ["s"], label: "Star / unstar" },
+    { keys: ["n"], label: "New note" }, { keys: ["f"], label: "New folder" }, { keys: ["u"], label: "Upload" }, { keys: ["a"], label: "Ask the library" }, { keys: ["1"], label: "Grid view" }, { keys: ["2"], label: "List view" }, { keys: ["mod+a"], label: "Select all" }, { keys: ["backspace"], label: "Delete selection" },
+  ] },
+];
 
 export function LibraryPage({ initial }: { initial: LibraryInitialData }) {
   return (
@@ -28,12 +36,12 @@ export function LibraryPage({ initial }: { initial: LibraryInitialData }) {
 function Layout() {
   const lib = useLibrary();
   const askOpen = useLibraryUI((s) => s.askOpen);
-  const setAskOpen = useLibraryUI((s) => s.setAskOpen);
   const treeWidth = useLibraryUI((s) => s.treeWidth);
   const setTreeWidth = useLibraryUI((s) => s.setTreeWidth);
   const [hydrated, setHydrated] = React.useState(false);
   React.useEffect(() => setHydrated(true), []);
   useLibraryShortcuts();
+  useShortcutHelp(LIBRARY_SHORTCUTS, "library");
 
   // Tree resize handle (pointer drag).
   const onResizeStart = (e: React.PointerEvent) => {
@@ -48,7 +56,7 @@ function Layout() {
   return (
     <div className="flex h-full min-h-0">
       <Topbar />
-      <div className="hidden h-full md:flex" style={{ width: hydrated ? treeWidth : 252 }}>
+      <div className="hidden h-full md:flex" style={{ width: hydrated ? treeWidth : 236 }}>
         <FolderTree className="min-w-0 flex-1" />
         <div onPointerDown={onResizeStart} className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-ring/40 transition-colors" aria-hidden />
       </div>
@@ -59,20 +67,13 @@ function Layout() {
         <UploadStrip />
       </section>
       {hydrated && askOpen && <AskLibraryPanel className="hidden lg:flex" />}
-      {hydrated && !askOpen && (
-        <Tip label="Ask the library" shortcut="A" side="left">
-          <button onClick={() => setAskOpen(true)} className="fixed bottom-5 right-5 z-20 flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors cursor-pointer lg:bottom-6 lg:right-6" aria-label="Ask the library">
-            <Sparkles className="size-5" />
-          </button>
-        </Tip>
-      )}
       <span className="sr-only" aria-live="polite">{lib.listLoading ? "Loading folder" : ""}</span>
     </div>
   );
 }
 
 function Topbar() {
-  const { list, view, isSearching, search, openFolder, listLoading, currentMatterId, matters, openDialog, aiConfigured } = useLibrary();
+  const { list, view, isSearching, search, openFolder, listLoading, currentMatterId, matters, aiConfigured } = useLibrary();
   const askOpen = useLibraryUI((s) => s.askOpen);
   const setAskOpen = useLibraryUI((s) => s.setAskOpen);
   const matter = matters.find((m) => m.id === currentMatterId);
@@ -80,15 +81,14 @@ function Topbar() {
   return (
     <TopbarSlot>
       <LibraryIcon className="size-4 text-muted-foreground" />
-      <button onClick={() => openFolder(null)} className="shrink-0 text-sm font-semibold hover:text-primary cursor-pointer">Library</button>
+      <button onClick={() => openFolder(null)} className="shrink-0 text-[13px] font-semibold hover:text-primary cursor-pointer">Library</button>
       <ChevronRight className="size-3.5 text-muted-foreground" />
-      <span className="truncate text-sm text-muted-foreground">{title}</span>
+      <span className="truncate text-[12.5px] text-muted-foreground">{title}</span>
       {listLoading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
-      {matter && <Badge variant="outline" className="hidden sm:inline-flex">{matter.shortName}</Badge>}
-      {list?.total != null && !isSearching && <span className="hidden text-xs text-muted-foreground md:inline">{list.total} item{list.total === 1 ? "" : "s"}</span>}
+      {matter && <Badge variant="outline" size="sm" className="hidden sm:inline-flex">{matter.shortName}</Badge>}
+      {list?.total != null && !isSearching && <span className="hidden text-[11.5px] tabular text-muted-foreground md:inline">{list.total} item{list.total === 1 ? "" : "s"}</span>}
       <div className="hidden items-center gap-1 md:flex">
-        <Tip label="Keyboard shortcuts" shortcut="?"><Button variant="ghost" size="icon-sm" onClick={() => openDialog({ kind: "shortcuts" })} aria-label="Keyboard shortcuts"><Keyboard className="size-4" /></Button></Tip>
-        <Tip label={aiConfigured ? "Ask the library (internal research)" : "Ask the library — OpenAI key required for answers"} shortcut="A"><Button variant={askOpen ? "secondary" : "ghost"} size="sm" onClick={() => setAskOpen(!askOpen)} className="gap-1.5"><Sparkles className="size-3.5" /> Ask{!aiConfigured && <KeyRound className="size-3 text-warning" />}</Button></Tip>
+        <Tip label={aiConfigured ? "Ask the library (internal research)" : "Ask the library — OpenAI key required for answers"} shortcut="A"><Button variant={askOpen ? "secondary" : "ghost"} size="xs" onClick={() => setAskOpen(!askOpen)} className="gap-1.5"><MessageSquareText className="size-3.5" /> Ask{!aiConfigured && <KeyRound className="size-3 text-warning" />}</Button></Tip>
       </div>
     </TopbarSlot>
   );
@@ -101,8 +101,8 @@ function SelectionBar() {
   const items = ids.map(itemById).filter(Boolean);
   const allStarred = items.length > 0 && items.every((i) => i!.starred);
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b bg-accent/40 px-3 py-1.5 text-sm animate-fade-in">
-      <Badge variant="default" className="rounded-full">{selected.size}</Badge>
+    <div className="flex h-8 shrink-0 items-center gap-2 border-b bg-accent/40 px-3 text-[12px]">
+      <span className="tabular font-medium">{selected.size}</span>
       <span className="text-muted-foreground">selected</span>
       <div className="flex-1" />
       <Button size="xs" variant="outline" onClick={() => openDialog({ kind: "move", ids })}><FolderInput className="size-3.5" /> Move</Button>
@@ -151,7 +151,6 @@ function useLibraryShortcuts() {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       switch (e.key) {
         case "/": e.preventDefault(); l.searchInputRef.current?.focus(); l.searchInputRef.current?.select(); break;
-        case "?": e.preventDefault(); l.openDialog({ kind: "shortcuts" }); break;
         case "Escape": if (l.previewId) l.openPreview(null); else if (l.selected.size) l.clearSelection(); else if (l.filters.q) l.setFilters({ q: undefined }); break;
         case "Enter": if (first) { e.preventDefault(); l.openItem(first); } break;
         case " ": if (first) { e.preventDefault(); l.openPreview(first.id); } break;

@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Wand2 } from "lucide-react";
+import { PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +32,7 @@ export function QueryBuilder({ query, onApply }: { query: string; onApply: (q: s
 
   return (
     <div className="w-[380px] space-y-3 text-xs">
-      <div className="flex items-center gap-2"><Wand2 className="size-3.5 text-primary" /><span className="text-sm font-semibold">Query builder</span><span className="text-[11px] text-muted-foreground">CourtListener syntax</span></div>
+      <div className="flex items-center gap-2"><PenLine className="size-3.5 text-muted-foreground" /><span className="text-[12.5px] font-semibold">Query builder</span><span className="text-[11px] text-muted-foreground">CourtListener syntax</span></div>
       <div className="grid grid-cols-[110px_1fr] items-center gap-x-2 gap-y-2">
         <Label>All of these</Label><Input value={all} onChange={(e) => setAll(e.target.value)} placeholder="PFAS warning" className="h-7 text-xs" />
         <Label>Any of these</Label><Input value={any} onChange={(e) => setAny(e.target.value)} placeholder="PFOA, PFOS, GenX" className="h-7 text-xs" />
