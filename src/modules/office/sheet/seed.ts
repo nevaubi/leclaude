@@ -1,4 +1,5 @@
 import "server-only";
+import { matterFolderId } from "@/modules/library/ids";
 import type { Database } from "@/lib/db";
 import type { LibraryItem, OfficeComment } from "@/lib/types/domain";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
@@ -211,7 +212,7 @@ export function seedSheet(db: Database) {
     const comments: OfficeComment[] = sd.comments.map((c) => ({ id: c.id, docId: sd.id, anchor: c.anchor, quote: c.quote, body: c.body, authorId: c.agent ? undefined : PEOPLE.jordanWhitfield, authorName: c.author ?? "Jordan Whitfield", createdAt: c.createdAt, resolved: c.resolved, replies: c.replies ?? [], source: c.agent ? "agent" : "user" }));
     db.officeComments.putMany(comments);
     const lastAt = sd.versions.at(-1)?.at ?? sd.createdAt;
-    libraryItems.push({ id: `lib_${sd.id}`, parentId: null, name: sd.title, type: "xlsx", matterId: sd.matterId, officeDocId: sd.id, size: JSON.stringify(content).length, tags: sd.tags, ownerId: PEOPLE.jordanWhitfield, sharedWith: ["matter-team"], createdAt: sd.createdAt, updatedAt: lastAt, description: `Workbook · ${content.sheets.length} sheet${content.sheets.length === 1 ? "" : "s"}`, version: sd.versions.length + 1, status: "draft" });
+    libraryItems.push({ id: `lib_${sd.id}`, parentId: sd.matterId ? matterFolderId(sd.matterId) : null, name: sd.title, type: "xlsx", matterId: sd.matterId, officeDocId: sd.id, size: JSON.stringify(content).length, tags: sd.tags, ownerId: PEOPLE.jordanWhitfield, sharedWith: ["matter-team"], createdAt: sd.createdAt, updatedAt: lastAt, description: `Workbook · ${content.sheets.length} sheet${content.sheets.length === 1 ? "" : "s"}`, version: sd.versions.length + 1, status: "draft" });
   }
   if (libraryItems.length) db.library.putMany(libraryItems);
 }

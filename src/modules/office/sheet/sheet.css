@@ -13,6 +13,8 @@
   background-color: var(--background);
   color: var(--foreground);
 }
+.sheet-cell.has-color { color: var(--cell-color); }
+.dark .sheet-cell.has-color { color: color-mix(in oklab, var(--cell-color) 55%, white); }
 .sheet-cell-error {
   color: var(--destructive);
   font-weight: 500;

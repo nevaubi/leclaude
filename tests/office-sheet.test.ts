@@ -72,7 +72,7 @@ describe("A1 utilities", () => {
     expect(shiftFormula("='Depo Schedule'!D2+LOG10(5)", 1, 0)).toBe("='Depo Schedule'!D3+LOG10(5)");
     expect(shiftFormula("=A1", -1, 0)).toBe("=#REF!");
     expect(shiftFormula("=SUM(A:A)", 0, 1)).toBe("=SUM(B:B)");
-    expect(formulaReferences("=IF(A1>0,SUM(B1:B9),0)").map(rangeToA1)).toEqual(["A1", "B1:B9"]);
+    expect(formulaReferences("=IF(A1>0,SUM(B1:B9),0)").map((r) => rangeToA1(r))).toEqual(["A1", "B1:B9"]);
   });
   it("adjusts formulas for row/column insertion and deletion", () => {
     const opts = { sheetName: "Sheet1", formulaSheet: "Sheet1" };
@@ -233,7 +233,7 @@ describe("agent tools", () => {
     const overview = tool(tools, "get_sheet_overview")({}) as { headers: { col: string; name: string }[]; usedRange: string; columns: { col: string; numbers: number }[] };
     expect(overview.headers.map((h) => h.name)).toEqual(["Witness", "Date", "Hours"]);
     expect(overview.usedRange).toBe("A1:C5");
-    const range = tool(tools, "get_range")({ range: "C2:C5" }) as { rows: Record<string, { C?: { v: unknown; f?: string } }>[] };
+    const range = tool(tools, "get_range")({ range: "C2:C5" }) as { rows: { C?: { v: unknown; f?: string } }[] };
     expect(range.rows[3].C?.f).toBe("=SUM(C2:C4)");
     expect(range.rows[3].C?.v).toBe(20.5);
     const found = tool(tools, "find_cells")({ query: "voss" }) as { count: number; hits: { ref: string }[] };

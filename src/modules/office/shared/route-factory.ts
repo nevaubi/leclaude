@@ -144,7 +144,7 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
 const KIND_NAME: Record<OfficeKind, string> = { word: "Word", sheet: "Excel", slides: "PowerPoint", pdf: "PDF" };
 
 function isEditingTool(t: ToolDef<never, unknown>) {
-  return /^(rewrite|insert|delete|replace|format|set|add|remove|move|apply|style|sort|fill|merge|split|redact|annotate|rotate|reorder|resize|update|clear|append|prepend|convert|create|polish|fix|renumber|generate|build|transcribe|bates|duplicate|condense|restyle)_/i.test(t.name) || t.name === "find_replace";
+  return /^(rewrite|insert|delete|replace|format|set|add|remove|move|apply|style|sort|fill|merge|split|redact|annotate|rotate|reorder|resize|update|clear|append|prepend|convert|create|polish|fix|renumber|generate|build|transcribe|bates|duplicate|condense|restyle|freeze|rename|conditional|autofit|unmerge|hide|show|protect|group)_/i.test(t.name) || t.name === "find_replace";
 }
 
 function reportFindingTool<S>(ctx: OfficeAgentContext<S>): ToolDef<never, unknown> {

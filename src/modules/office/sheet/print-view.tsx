@@ -33,7 +33,7 @@ export function PrintView({ title }: { title: string }) {
       if (merges.covered.has(ref)) continue;
       const span = merges.anchors.get(ref);
       const rc = sheet.cells[ref] ? renderCell(wb, sheet, ref, computed, cf.get(ref)) : null;
-      cells.push(<td key={ref} colSpan={span?.cols} rowSpan={span?.rows} style={{ ...(rc?.css ?? {}), textAlign: rc?.align ?? "left", height: rowHeight(sheet, r), border: ps.gridlines ? "1px solid #d1d5db" : undefined, padding: "1px 4px", verticalAlign: "middle", fontSize: rc?.style.fontSize ?? 11, whiteSpace: rc?.style.wrap ? "pre-wrap" : "nowrap", overflow: "hidden" }}>{rc?.text ?? ""}</td>);
+      cells.push(<td key={ref} colSpan={span?.cols} rowSpan={span?.rows} style={{ ...(rc?.css ?? {}), ...(rc?.style.color ? { color: rc.style.color } : {}), textAlign: rc?.align ?? "left", height: rowHeight(sheet, r), border: ps.gridlines ? "1px solid #d1d5db" : undefined, padding: "1px 4px", verticalAlign: "middle", fontSize: rc?.style.fontSize ?? 11, whiteSpace: rc?.style.wrap ? "pre-wrap" : "nowrap", overflow: "hidden" }}>{rc?.text ?? ""}</td>);
     }
     rows.push(<tr key={r} className={r < area.start.row + (ps.repeatHeaderRows ?? 0) ? "print-repeat" : undefined}>{cells}</tr>);
   }

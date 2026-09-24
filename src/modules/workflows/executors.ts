@@ -14,6 +14,7 @@ import { evaluateBranch, type BranchRule } from "./conditions";
 import { markdownTable, resolveDateRule, resolveDeep, resolveTemplate, stringify, type ResolveReport, type TemplateContext } from "./template-expr";
 import type { RunArtifact, WorkflowRunRecord } from "./types";
 import { WORKFLOW_CURRENT_USER } from "./types";
+import { workbookFromTable } from "@/modules/office/sheet/from-rows";
 
 // ─────────────────────────── Context ───────────────────────────
 
@@ -551,7 +552,14 @@ const actionCreateEvent: Executor = async (x) => {
 };
 
 /** Build a workbook content model from rows (array of objects / arrays), CSV or a Markdown table. */
-export function workbookFromRows(sheetName: string, rowsInput: unknown): { version: number; sheets: { name: string; columns: { key: string; title: string; width: number }[]; rows: unknown[][]; header: string[] }[] } {
+/** Build the Sheet editor's workbook model from rows (array of objects/arrays, JSON, markdown table or CSV text). */
+export function workbookFromRows(sheetName: string, rowsInput: unknown) {
+  const t = tableFromRows(sheetName, rowsInput);
+  const sheet = t.sheets[0];
+  return workbookFromTable(sheet.name, sheet.header, sheet.rows.slice(1));
+}
+
+export function tableFromRows(sheetName: string, rowsInput: unknown): { version: number; sheets: { name: string; columns: { key: string; title: string; width: number }[]; rows: unknown[][]; header: string[] }[] } {
   let rows: unknown[] = [];
   if (Array.isArray(rowsInput)) rows = rowsInput;
   else if (typeof rowsInput === "string") {
@@ -589,10 +597,10 @@ const actionSaveDocument: Executor = async (x) => {
     content = markdownToDoc(md.startsWith("#") ? md : md, md.startsWith("#") ? {} : { title });
   } else {
     const rowsRaw = c.rows ?? c.content;
-    content = workbookFromRows(title, rowsRaw);
-    const sheet = (content as { sheets: { rows: unknown[][] }[] }).sheets[0];
-    if (sheet.rows.length <= 1) throw new StepError("Rows resolved to an empty table.", "empty_content");
-    x.log(`${sheet.rows.length - 1} row(s), ${sheet.rows[0].length} column(s)`);
+    const table = tableFromRows(title, rowsRaw).sheets[0];
+    if (table.rows.length <= 1) throw new StepError("Rows resolved to an empty table.", "empty_content");
+    x.log(`${table.rows.length - 1} row(s), ${table.header.length} column(s)`);
+    content = workbookFromTable(table.name, table.header, table.rows.slice(1));
   }
   const doc = createOfficeDoc({ kind, title, content, matterId: matterId || undefined, tags: Array.isArray(c.tags) ? (c.tags as unknown[]).map(str) : ["workflow"], meta: { source: "workflow", workflowId: x.workflow.id, runId: x.run.id, nodeId: x.node.id } });
   let libraryItemId: string | undefined;
@@ -635,7 +643,7 @@ const actionNotify: Executor = async (x) => {
 function toCsv(v: unknown): string {
   const rows = Array.isArray(v) ? v : typeof v === "string" ? (() => { try { return JSON.parse(v); } catch { return null; } })() : null;
   if (!Array.isArray(rows)) return str(v);
-  const wb = workbookFromRows("export", rows);
+  const wb = tableFromRows("export", rows);
   const esc = (c: unknown) => { const s = c == null ? "" : typeof c === "object" ? JSON.stringify(c) : String(c); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return wb.sheets[0].rows.map((r) => r.map(esc).join(",")).join("\n");
 }

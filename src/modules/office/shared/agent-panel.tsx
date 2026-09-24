@@ -36,6 +36,8 @@ export interface OfficeAgentPanelProps {
   extraContext?: () => Record<string, unknown>;
   /** Called after proposals are applied, with a one-line summary (for version history). */
   onApplied?: (summary: string, proposals: EditProposal[]) => void;
+  /** Hover preview: called with the hovered pending proposal, or null when the pointer leaves. */
+  onPreview?: (proposal: EditProposal | null) => void;
   className?: string;
   defaultMode?: OfficeAgentMode;
   title?: string;
@@ -50,7 +52,7 @@ const MODES: { id: OfficeAgentMode; label: string; icon: React.ComponentType<{ c
 const SEVERITY_VARIANT: Record<ReviewFinding["severity"], "muted" | "info" | "warning" | "destructive"> = { info: "muted", low: "info", medium: "warning", high: "destructive", critical: "destructive" };
 
 export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
-  const { endpoint, docId, docTitle, matterId, getSnapshot, scopes, applyProposals, onUndo, onLocate, suggestions, extraContext, onApplied, className, defaultMode = "draft", title = "Drafting assistant" } = props;
+  const { endpoint, docId, docTitle, matterId, getSnapshot, scopes, applyProposals, onUndo, onLocate, suggestions, extraContext, onApplied, onPreview, className, defaultMode = "draft", title = "Drafting assistant" } = props;
   const [mode, setMode] = React.useState<OfficeAgentMode>(defaultMode);
   const [scopeId, setScopeId] = React.useState<string>(scopes[0]?.id ?? "document");
   const [research, setResearch] = React.useState(false);
@@ -171,7 +173,7 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
                 <button className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer" onClick={() => setSelected(selected.size === pending.length ? new Set() : new Set(pending.map((p) => p.id)))}>{selected.size === pending.length ? "Select none" : "Select all"}</button>
               </div>
               <ul className="space-y-1">
-                {pending.map((p) => <ProposalRow key={p.id} proposal={p} checked={selected.has(p.id)} onCheck={(c) => setSelected((s) => { const n = new Set(s); if (c) n.add(p.id); else n.delete(p.id); return n; })} onLocate={onLocate} />)}
+                {pending.map((p) => <ProposalRow key={p.id} proposal={p} checked={selected.has(p.id)} onCheck={(c) => setSelected((s) => { const n = new Set(s); if (c) n.add(p.id); else n.delete(p.id); return n; })} onLocate={onLocate} onPreview={onPreview} />)}
               </ul>
               <div className="mt-2 flex items-center gap-2 px-1">
                 <Button size="sm" onClick={() => apply(pending.map((p) => p.id))} disabled={applying || agent.isStreaming}>{applying ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Apply all</Button>
@@ -210,10 +212,10 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
   );
 }
 
-function ProposalRow({ proposal: p, checked, onCheck, onLocate }: { proposal: EditProposal; checked: boolean; onCheck: (c: boolean) => void; onLocate?: (t: string) => void }) {
+function ProposalRow({ proposal: p, checked, onCheck, onLocate, onPreview }: { proposal: EditProposal; checked: boolean; onCheck: (c: boolean) => void; onLocate?: (t: string) => void; onPreview?: (proposal: EditProposal | null) => void }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <li className="rounded-md border bg-background">
+    <li className="rounded-md border bg-background" data-proposal-id={p.id} data-proposal-target={p.target} data-proposal-kind={p.kind} onMouseEnter={() => onPreview?.(p)} onMouseLeave={() => onPreview?.(null)}>
       <div className="flex items-start gap-2 px-2 py-1.5">
         <Checkbox checked={checked} onCheckedChange={(c) => onCheck(Boolean(c))} className="mt-0.5" />
         <div className="min-w-0 flex-1">

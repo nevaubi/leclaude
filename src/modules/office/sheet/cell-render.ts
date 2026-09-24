@@ -3,6 +3,7 @@
  * evaluation. Shared by the virtualized grid and the print view.
  */
 import type * as React from "react";
+import { cn } from "@/lib/utils";
 import { iterateRange, normalizeRange, parseRange, toA1 } from "./a1";
 import type { Computed } from "./engine";
 import { formatValue, isoToSerial, todayISO, toNumber, type Formatted } from "./format";
@@ -25,7 +26,8 @@ export function styleToCss(st: CellStyle): React.CSSProperties {
   else if (st.underline) css.textDecoration = "underline";
   else if (st.strike) css.textDecoration = "line-through";
   if (st.fill) css.backgroundColor = st.fill;
-  if (st.color) css.color = st.color;
+  if (st.color && st.fill) css.color = st.color;
+  else if (st.color) (css as Record<string, string>)["--cell-color"] = st.color; // lightened in dark mode by sheet.css
   else if (st.fill) css.color = isDarkColor(st.fill) ? "#F9FAFB" : "#111827"; // keep contrast on document fills in both themes
   if (st.fontSize) css.fontSize = st.fontSize;
   if (st.fontFamily) css.fontFamily = st.fontFamily;
@@ -57,7 +59,7 @@ export function renderCell(wb: Workbook, sheet: Sheet, ref: string, computed: Co
   const raw = cellValueOf(sheet, ref, computed);
   const computedType = cell?.f ? computed[sheet.id]?.[ref]?.t : undefined;
   const f = formatValue(raw, style, computedType === "d" ? "d" : cell?.t);
-  return { ...f, style, css: styleToCss(style), className: f.isError ? "sheet-cell-error" : "", hasFormula: Boolean(cell?.f), raw };
+  return { ...f, style, css: styleToCss(style), className: cn(f.isError && "sheet-cell-error", style.color && !style.fill && "has-color"), hasFormula: Boolean(cell?.f), raw };
 }
 
 /** Evaluate every conditional format on a sheet → ref → merged style patch. */

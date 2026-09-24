@@ -16,7 +16,7 @@ import { cancelRun, createRunRecord, estimateCostUsd, rerun, resumeRun, startRun
 import { cloneWorkflow, createWorkflow, getRun, listRuns, listWorkflows, summarizeRun, updateWorkflow, workflowMeta, workflowStats } from "@/modules/workflows/service";
 import { tick } from "@/modules/workflows/scheduler";
 import { WORKFLOW_SEED_IDS } from "@/modules/workflows/seed";
-import { workbookFromRows } from "@/modules/workflows/executors";
+import { tableFromRows, workbookFromRows } from "@/modules/workflows/executors";
 import { recentRunEvents, subscribeRunEvents } from "@/modules/workflows/events";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
 
@@ -411,13 +411,17 @@ describe("engine", () => {
   it("estimates cost by tier and builds workbooks from rows", () => {
     expect(estimateCostUsd({ input: 1_000_000, output: 0 }, "primary")).toBeCloseTo(2.5);
     expect(estimateCostUsd({ input: 0, output: 1_000_000 }, "fast")).toBeCloseTo(2);
+    const table = tableFromRows("Sheet", [{ clause: "Term", risk: "Low" }, { clause: "Indemnity", risk: "High", note: "cap" }]);
+    expect(table.sheets[0].header).toEqual(["clause", "risk", "note"]);
+    expect(table.sheets[0].rows).toHaveLength(3);
+    expect(table.sheets[0].rows[2]).toEqual(["Indemnity", "High", "cap"]);
     const wb = workbookFromRows("Sheet", [{ clause: "Term", risk: "Low" }, { clause: "Indemnity", risk: "High", note: "cap" }]);
-    expect(wb.sheets[0].header).toEqual(["clause", "risk", "note"]);
-    expect(wb.sheets[0].rows).toHaveLength(3);
-    expect(wb.sheets[0].rows[2]).toEqual(["Indemnity", "High", "cap"]);
-    const csv = workbookFromRows("S", "a,b\n1,2\n3,4");
+    expect(wb.sheets[0].cells["A1"]?.v).toBe("clause");
+    expect(wb.sheets[0].cells["A3"]?.v).toBe("Indemnity");
+    expect(wb.sheets[0].freeze.rows).toBe(1);
+    const csv = tableFromRows("S", "a,b\n1,2\n3,4");
     expect(csv.sheets[0].rows).toEqual([["a", "b"], ["1", "2"], ["3", "4"]]);
-    const md = workbookFromRows("S", "| x | y |\n| --- | --- |\n| 1 | 2 |");
+    const md = tableFromRows("S", "| x | y |\n| --- | --- |\n| 1 | 2 |");
     expect(md.sheets[0].rows).toEqual([["x", "y"], ["1", "2"]]);
   });
 

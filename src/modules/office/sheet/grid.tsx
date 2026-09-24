@@ -504,12 +504,12 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
         >
           <div className="relative" style={{ width: totalW + ROW_HEADER_WIDTH, height: totalH + COL_HEADER_HEIGHT }}>
             {/* column headers */}
-            <div className="sticky top-0 z-40 bg-muted/80 backdrop-blur-sm" style={{ height: COL_HEADER_HEIGHT, width: totalW + ROW_HEADER_WIDTH }}>
+            <div className="sticky top-0 z-40 bg-muted" style={{ height: COL_HEADER_HEIGHT, width: totalW + ROW_HEADER_WIDTH }}>
               <div className="sticky left-0 z-50 border-b border-r bg-muted" style={{ width: ROW_HEADER_WIDTH, height: COL_HEADER_HEIGHT, position: "sticky" }}>
                 <button className="size-full cursor-pointer hover:bg-accent" aria-label="Select all" onMouseDown={(e) => { e.preventDefault(); store.getState().selectAll(); }}><span className="absolute bottom-0.5 right-0.5 size-0 border-b-[9px] border-l-[9px] border-b-muted-foreground/40 border-l-transparent" /></button>
               </div>
               {frozenColIdx.length > 0 && (
-                <div className="sticky z-50" style={{ left: ROW_HEADER_WIDTH, top: 0, marginTop: -COL_HEADER_HEIGHT, width: Wf, height: COL_HEADER_HEIGHT, position: "sticky" }}>
+                <div className="sticky z-50 bg-muted" style={{ left: ROW_HEADER_WIDTH, top: 0, marginTop: -COL_HEADER_HEIGHT, width: Wf, height: COL_HEADER_HEIGHT, position: "sticky" }}>
                   {frozenColIdx.map((c) => <ColHeader key={c} col={c} x={colStarts[c]} w={colSize(c)} selected={selection.ranges.some((r) => c >= r.start.col && c <= r.end.col)} full={selection.ranges.some((r) => c >= r.start.col && c <= r.end.col && r.end.row - r.start.row >= dims.rows - 2)} onMouseDown={onColHeaderMouseDown} onAutofit={() => store.getState().apply({ type: "autofit_columns", sheet: sheet.id, columns: [colToLetter(c)] })} />)}
                 </div>
               )}
@@ -628,7 +628,7 @@ function colToLetterIndex(letters: string): number {
 
 const ColHeader = React.memo(function ColHeader({ col, x, w, selected, full, onMouseDown, onAutofit }: { col: number; x: number; w: number; selected: boolean; full: boolean; onMouseDown: (e: React.MouseEvent, col: number) => void; onAutofit: () => void }) {
   return (
-    <div onMouseDown={(e) => onMouseDown(e, col)} className={cn("absolute top-0 flex items-center justify-center border-b border-r text-[11px] font-medium select-none cursor-pointer", full ? "bg-primary text-primary-foreground" : selected ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/60")} style={{ left: x, width: w, height: COL_HEADER_HEIGHT }}>
+    <div onMouseDown={(e) => onMouseDown(e, col)} className={cn("absolute top-0 flex items-center justify-center border-b border-r text-[11px] font-medium select-none cursor-pointer", full ? "bg-primary text-primary-foreground" : selected ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground hover:bg-accent")} style={{ left: x, width: w, height: COL_HEADER_HEIGHT }}>
       {colToLetter(col)}
       <div data-resize="1" onDoubleClick={(e) => { e.stopPropagation(); onAutofit(); }} className="absolute -right-[3px] top-0 z-10 h-full w-[6px] cursor-col-resize hover:bg-primary/60" />
     </div>
@@ -637,7 +637,7 @@ const ColHeader = React.memo(function ColHeader({ col, x, w, selected, full, onM
 
 const RowHeader = React.memo(function RowHeader({ row, y, h, selected, full, onMouseDown }: { row: number; y: number; h: number; selected: boolean; full: boolean; onMouseDown: (e: React.MouseEvent, row: number) => void }) {
   return (
-    <div onMouseDown={(e) => onMouseDown(e, row)} className={cn("absolute left-0 flex items-center justify-center border-b border-r text-[11px] tabular select-none cursor-pointer", full ? "bg-primary text-primary-foreground" : selected ? "bg-accent text-accent-foreground" : "bg-muted/60 text-muted-foreground hover:bg-accent/60")} style={{ top: y, width: ROW_HEADER_WIDTH, height: h }}>
+    <div onMouseDown={(e) => onMouseDown(e, row)} className={cn("absolute left-0 flex items-center justify-center border-b border-r text-[11px] tabular select-none cursor-pointer", full ? "bg-primary text-primary-foreground" : selected ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground hover:bg-accent")} style={{ top: y, width: ROW_HEADER_WIDTH, height: h }}>
       {row + 1}
       <div data-resize="1" className="absolute -bottom-[3px] left-0 z-10 h-[6px] w-full cursor-row-resize hover:bg-primary/60" />
     </div>
