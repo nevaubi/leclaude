@@ -1,0 +1,5 @@
+---
+description: LeClaude engineering constitution (root CLAUDE.md applies to every task)
+alwaysApply: true
+---
+Read and follow /CLAUDE.md in full: it is the standing engineering constitution for this repository (orchestration waves, verification stack, evidence contract, authorization invariants, AWS-first runtime, frontend quality bar, completion report). Appendix A lists the repository conventions. When a Claude Code tool named there is unavailable in Cursor, use the closest native equivalent (subagents, background agents, worktrees) without weakening the contract.
