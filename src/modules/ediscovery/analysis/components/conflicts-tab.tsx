@@ -143,7 +143,7 @@ function ConflictDetail({ id, depositions, onOpenDocument, onChanged }: { id: st
   };
   const openSide = (s: Side) => {
     if (s.sourceKind === "document") onOpenDocument?.(s.sourceId);
-    else { const dep = depositions.find((d) => d.id === s.sourceId); openTestimony(s.sourceId); if (dep) toast.info(`${dep.witnessName} ${s.cite}`, { description: "Use find-in-transcript for the exact page:line." }); }
+    else openTestimony(s.sourceId, s.cite); // page:line in the cite is resolved by the transcript viewer
   };
   if (detail.loading && !detail.data) return <div className="space-y-3 p-5"><Skeleton className="h-6 w-2/3" /><Skeleton className="h-4 w-1/3" /><div className="grid grid-cols-2 gap-3"><Skeleton className="h-40" /><Skeleton className="h-40" /></div><Skeleton className="h-24" /></div>;
   if (!c) return <div className="p-8"><EmptyState icon={AlertTriangle} title="Conflict not found" /></div>;

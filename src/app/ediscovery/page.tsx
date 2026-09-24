@@ -19,7 +19,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
     .list({ where: (m) => m.status !== "closed" })
     .map((m) => ({ id: m.id, shortName: m.shortName, name: m.name, caption: m.caption, client: m.client, stage: m.stage, docCount: counts.get(m.id) ?? 0 }))
     .sort((a, b) => b.docCount - a.docCount || a.shortName.localeCompare(b.shortName));
-  const matterId = sp.matter && matters.some((m) => m.id === sp.matter) ? sp.matter : matters.find((m) => m.id === MATTERS.afff)?.id ?? matters[0]?.id ?? MATTERS.afff;
+  // A `?doc=` deep link (id or Bates) without `?matter=` opens in the document's own matter, not the default one.
+  // The viewer and the list cursor work on document ids, so a Bates deep link is resolved to its id here.
+  const linkedDoc = sp.doc ? d.edocs.get(sp.doc) ?? d.edocs.findOne((x) => x.bates.toLowerCase() === sp.doc!.toLowerCase()) : null;
+  const requestedMatter = sp.matter ?? linkedDoc?.matterId;
+  const matterId = requestedMatter && matters.some((m) => m.id === requestedMatter) ? requestedMatter : matters.find((m) => m.id === MATTERS.afff)?.id ?? matters[0]?.id ?? MATTERS.afff;
   // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module.
   const requested = sp.tab ?? sp.view;
   const tab = (REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
@@ -32,7 +36,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
         matters={matters}
         initialMatterId={matterId}
         initialTab={tab}
-        initialDocId={sp.doc}
+        initialDocId={linkedDoc?.id ?? sp.doc}
         initialQuery={sp.q}
         initialCustodian={sp.custodian}
         aiConfigured={aiConfig().hasKey}

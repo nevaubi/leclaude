@@ -5,7 +5,7 @@ import { aiConfig } from "@/lib/ai/config";
 import { hybridSearch } from "@/lib/ai/vector-store";
 import { VECTOR_COLLECTIONS } from "@/lib/ai/toolkit/internal";
 import type { Conflict, Deposition, DepositionQA, EDocument, Person, Relationship, TimelineEvent } from "@/lib/types/domain";
-import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, CrossExcerpt, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, PersonDetail, QAFlag, TimelineEventInput, TimelineFilters, TranscriptHit } from "./types";
+import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, CrossExcerpt, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, ObjectionRuling, ObjectionRulingRecord, PersonDetail, QAFlag, TimelineEventInput, TimelineFilters, TranscriptHit } from "./types";
 import { formatPageLine } from "./types";
 import { normalizeRange, searchTranscripts, summarizeObjections } from "./transcript";
 import { dedupeEvents, filterEvents, sortEvents } from "./chronology";
@@ -16,8 +16,10 @@ const DESIGNATIONS = "ediscovery_designations";
 const CONFLICT_NOTES = "ediscovery_conflict_notes";
 const FACT_MATRICES = "ediscovery_fact_matrices";
 const KNOWLEDGE_MAPS = "ediscovery_knowledge_maps";
+const OBJECTION_RULINGS = "ediscovery_objection_rulings";
 
 const designations = () => db().collection<Designation>(DESIGNATIONS);
+const rulings = () => db().collection<ObjectionRulingRecord>(OBJECTION_RULINGS);
 const conflictNotes = () => db().collection<ConflictNote>(CONFLICT_NOTES);
 const factMatrices = () => db().collection<FactMatrix>(FACT_MATRICES);
 const knowledgeMaps = () => db().collection<KnowledgeMap>(KNOWLEDGE_MAPS);
@@ -99,7 +101,29 @@ export function searchAllTranscripts(matterId: string, q: string, opts: { limit?
 
 export function objectionSummary(depositionId: string) {
   const dep = getDeposition(depositionId);
-  return dep ? summarizeObjections(dep.transcript) : null;
+  return dep ? summarizeObjections(dep.transcript, objectionRulings(depositionId)) : null;
+}
+
+// Objection rulings (module-private collection) ---------------------------------
+
+/** Rulings entered for a deposition, keyed by Q/A index. */
+export function objectionRulings(depositionId: string): Record<number, ObjectionRuling> {
+  const out: Record<number, ObjectionRuling> = {};
+  for (const r of rulings().find((x) => x.depositionId === depositionId)) out[r.index] = r.ruling;
+  return out;
+}
+
+export function setObjectionRuling(depositionId: string, index: number, ruling: ObjectionRuling, opts: { note?: string; userId?: string } = {}): ObjectionRulingRecord | null {
+  const dep = getDeposition(depositionId);
+  if (!dep) return null;
+  const qa = dep.transcript[index];
+  if (!qa) throw Object.assign(new Error(`Q/A index ${index} out of range`), { status: 400 });
+  if (!qa.objection) throw Object.assign(new Error(`No objection on the record at ${formatPageLine(qa.page, qa.line)}`), { status: 400 });
+  const id = `${depositionId}:${index}`;
+  if (ruling === "pending" && !opts.note) { rulings().delete(id); return { id, matterId: dep.matterId, depositionId, index, ruling, updatedAt: now(), updatedBy: opts.userId ?? CURRENT_USER_ID }; }
+  const rec: ObjectionRulingRecord = { id, matterId: dep.matterId, depositionId, index, ruling, note: opts.note?.trim() || undefined, updatedAt: now(), updatedBy: opts.userId ?? CURRENT_USER_ID };
+  rulings().put(rec);
+  return rec;
 }
 
 /** Resolve an exhibit reference ("Voss-3") or Bates number to an e-discovery document id. */

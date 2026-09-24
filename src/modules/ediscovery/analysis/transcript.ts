@@ -3,7 +3,7 @@
  * transcripts, page:line arithmetic, designation export, objection summary.
  */
 import type { Deposition, DepositionQA } from "@/lib/types/domain";
-import type { Designation, ObjectionSummary, QAFlag, TranscriptHit } from "./types";
+import type { Designation, ObjectionRuling, ObjectionSummary, QAFlag, TranscriptHit } from "./types";
 import { formatPageLine, formatRange } from "./types";
 
 export const LINES_PER_PAGE = 25;
@@ -24,6 +24,25 @@ export function qaEndLine(qa: DepositionQA): { page: number; line: number } {
   let line = qa.line + lines - 1;
   while (line > LINES_PER_PAGE) { line -= LINES_PER_PAGE; page += 1; }
   return { page, line };
+}
+
+/** Extract a "page:line" locator from a cite such as "Voss 84:12" or "Hale 46:07–46:20". */
+export function pageLineOf(cite: string | undefined): string | null {
+  const m = cite?.match(/(\d{1,4}):(\d{1,2})/);
+  return m ? `${Number(m[1])}:${Number(m[2])}` : null;
+}
+
+/** Resolve a "page:line" locator to the Q/A pair that contains it: exact start, else the last pair starting at or before it, else the first pair on that page. */
+export function resolvePageLine(transcript: DepositionQA[], locator: string): number {
+  const m = locator.match(/^(\d+):(\d+)$/);
+  if (!m) return -1;
+  const page = Number(m[1]), line = Number(m[2]);
+  const exact = transcript.findIndex((qa) => qa.page === page && qa.line === line);
+  if (exact >= 0) return exact;
+  let best = -1;
+  transcript.forEach((qa, i) => { if (qa.page < page || (qa.page === page && qa.line <= line)) best = i; });
+  if (best >= 0 && (transcript[best].page === page || qaEndLine(transcript[best]).page >= page)) return best;
+  return transcript.findIndex((qa) => qa.page === page);
 }
 
 export function normalizeRange(r: Pick<Designation, "startPage" | "startLine" | "endPage" | "endLine">) {
@@ -99,23 +118,28 @@ export function highlightTerms(query: string): RegExp | null {
 // Objections
 // ---------------------------------------------------------------------------
 
-export function summarizeObjections(transcript: DepositionQA[]): ObjectionSummary {
+/** `rulings` maps a Q/A index to the court's ruling on the objection recorded there (entered from the Objections panel). */
+export function summarizeObjections(transcript: DepositionQA[], rulings: Record<number, ObjectionRuling> = {}): ObjectionSummary {
   const byBasis = new Map<string, number>();
   const byAttorney = new Map<string, number>();
   let total = 0;
-  for (const qa of transcript) {
-    if (!qa.objection) continue;
+  let sustained = 0;
+  let overruled = 0;
+  transcript.forEach((qa, i) => {
+    if (!qa.objection) return;
     total++;
     const basis = qa.objection.basis.toLowerCase();
     byBasis.set(basis, (byBasis.get(basis) ?? 0) + 1);
     byAttorney.set(qa.objection.by, (byAttorney.get(qa.objection.by) ?? 0) + 1);
-  }
+    if (rulings[i] === "sustained") sustained++;
+    else if (rulings[i] === "overruled") overruled++;
+  });
   const sort = (m: Map<string, number>) => Array.from(m.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return {
     total,
     byBasis: sort(byBasis).map(([basis, count]) => ({ basis, count })),
     byAttorney: sort(byAttorney).map(([attorney, count]) => ({ attorney, count })),
-    rulings: { sustained: 0, overruled: 0, pending: total },
+    rulings: { sustained, overruled, pending: total - sustained - overruled },
   };
 }
 

@@ -4,24 +4,26 @@ import { CircleCheck, CircleX, ShieldAlert, Flame, Tags, UserRoundPlus, Download
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PRIVILEGE_BASES } from "../types";
+import { PRIVILEGE_BASES, type DocRow } from "../types";
 import type { CodingDecision } from "@/lib/types/domain";
 import { useReviewStore } from "./store";
 import { useReview } from "./review-page";
 import { issueColorClasses } from "./shared";
 import { cn } from "@/lib/utils";
 
-export function BulkBar({ total, onCode }: { total: number; onCode: (patch: Partial<CodingDecision>, extra?: { addIssues?: string[]; removeIssues?: string[]; reviewerId?: string }) => Promise<void> }) {
-  const { issueCodes, reviewers, matterId } = useReview();
+export function BulkBar({ hits, onCode }: { hits: DocRow[]; onCode: (patch: Partial<CodingDecision>, extra?: { addIssues?: string[]; removeIssues?: string[]; reviewerId?: string }) => Promise<void> }) {
+  const { issueCodes, reviewers } = useReview();
   const selected = useReviewStore((s) => s.selected);
   const setSelected = useReviewStore((s) => s.setSelected);
+  const total = hits.length;
   if (!selected.length) return null;
 
-  const exportSelected = async () => {
+  const exportSelected = () => {
     try {
-      const res = await fetch(`/api/ediscovery/search?matter=${encodeURIComponent(matterId)}&limit=500`);
-      const data = (await res.json()) as { hits: { id: string; bates: string; batesEnd?: string; date: string; custodianName: string; type: string; subject: string; from?: string; coding: CodingDecision; aiScore?: number }[] };
-      const rows = data.hits.filter((h) => selected.includes(h.id));
+      // Export straight from the rows in view: the selection always comes from this list, so no second
+      // (unfiltered, first-500-only) fetch is needed and coded values match what the reviewer sees.
+      const sel = new Set(selected);
+      const rows = hits.filter((h) => sel.has(h.id));
       const esc = (v: unknown) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
       const csv = ["BegBates,EndBates,Date,Custodian,Type,Subject,From,Responsive,Privileged,Hot,Issues,AIScore", ...rows.map((h) => [h.bates, h.batesEnd ?? h.bates, h.date, h.custodianName, h.type, h.subject, h.from ?? "", h.coding.responsive == null ? "" : h.coding.responsive ? "Y" : "N", h.coding.privileged ? "Y" : "", h.coding.hot ? "Y" : "", (h.coding.issues ?? []).join("; "), h.aiScore ?? ""].map(esc).join(","))].join("\r\n");
       const blob = new Blob([csv], { type: "text/csv" });

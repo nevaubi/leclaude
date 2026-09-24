@@ -144,7 +144,7 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
             <AiStatusBadge />
             <ThemeToggle />
             <Tip label="Notifications">
-              <Button variant="ghost" size="icon-sm" className="relative"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-destructive" /></Button>
+              <Button variant="ghost" size="icon-sm" className="relative" aria-label="Notifications"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-destructive" /></Button>
             </Tip>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

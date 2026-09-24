@@ -75,8 +75,10 @@ export function useAgent<TExtra = Record<string, unknown>>(opts: UseAgentOptions
 
       const userMsg: AgentMessage = { id: nanoid(8), role: "user", content: text, createdAt: Date.now(), attachments: options.attachments };
       const asstMsg: AgentMessage = { id: nanoid(8), role: "assistant", content: "", createdAt: Date.now(), tools: [], citations: [], status: "streaming" };
-      const history = messages.filter((m) => m.status !== "error").map((m) => ({ role: m.role, content: m.content, attachments: m.attachments }));
-      setMessages((ms) => [...ms, ...(options.hidden ? [] : [userMsg]), asstMsg]);
+      // Retrying a failed turn (same text as the user message right before an errored reply) replaces that pair instead of duplicating it.
+      const base = dropFailedRetry(messages, text);
+      const history = base.filter((m) => m.status !== "error").map((m) => ({ role: m.role, content: m.content, attachments: m.attachments }));
+      setMessages((ms) => [...dropFailedRetry(ms, text), ...(options.hidden ? [] : [userMsg]), asstMsg]);
       setStatus("streaming");
       setStatusLine("Thinking…");
 
@@ -167,6 +169,12 @@ export function useAgent<TExtra = Record<string, unknown>>(opts: UseAgentOptions
   }, [stop]);
 
   return { messages, setMessages, status, statusLine, send, stop, reset, isStreaming: status === "streaming" };
+}
+
+export function dropFailedRetry(ms: AgentMessage[], text: string): AgentMessage[] {
+  const last = ms[ms.length - 1], prev = ms[ms.length - 2];
+  if (last && prev && last.role === "assistant" && last.status === "error" && prev.role === "user" && prev.content === text) return ms.slice(0, -2);
+  return ms;
 }
 
 /** Read files into data-URL attachments (images only). */

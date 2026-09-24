@@ -425,6 +425,9 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
   const editorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const st = store.getState();
     const ed = st.editing; if (!ed) return;
+    // The textarea lives inside the grid container: keys it handles must not bubble to the grid's
+    // handler, which would otherwise see the edit already committed and move the selection a second time.
+    e.stopPropagation();
     const ac = autocomplete;
     if (ac.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); setAcIndex((i) => (i + (e.key === "ArrowDown" ? 1 : -1) + ac.length) % ac.length); return; }
     if (ac.length && (e.key === "Tab" || (e.key === "Enter" && ac.length && acPrefix.length >= 2))) { e.preventDefault(); acceptAutocomplete(ac[acIndex] ?? ac[0]); return; }
@@ -443,7 +446,8 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
   const autocomplete = React.useMemo(() => { if (!acPrefix) return [] as string[]; const all = Array.from(new Set([...FN_NAMES, ...store.getState().engine.functionNames()])); return all.filter((n) => n.startsWith(acPrefix) && n !== acPrefix).sort((a, b) => (FN_NAMES.includes(a) ? 0 : 1) - (FN_NAMES.includes(b) ? 0 : 1) || a.length - b.length).slice(0, 8); }, [acPrefix, store]);
   React.useEffect(() => setAcIndex(0), [acPrefix]);
   const acceptAutocomplete = (name: string) => { const st = store.getState(); const ed = st.editing; if (!ed) return; st.updateEdit(ed.value.slice(0, ed.value.length - acPrefix.length) + name + "("); inputRef.current?.focus(); };
-  React.useEffect(() => { if (editing && inputRef.current) { const el = inputRef.current; el.focus(); if (editing.caretAtEnd) { const n = el.value.length; el.setSelectionRange(n, n); } } }, [editing?.ref, editing?.source]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Layout effect: the textarea must own focus before the next keystroke arrives, otherwise fast typing after the first character is dropped.
+  React.useLayoutEffect(() => { if (editing && inputRef.current) { const el = inputRef.current; el.focus(); if (editing.caretAtEnd) { const n = el.value.length; el.setSelectionRange(n, n); } } }, [editing?.ref, editing?.source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------- render helpers
   const renderCellDiv = (row: number, col: number, x: number, y: number, key?: string) => {

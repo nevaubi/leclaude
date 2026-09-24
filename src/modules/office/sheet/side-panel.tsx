@@ -16,6 +16,7 @@ import { OfficeAgentPanel, type OfficeAgentPanelProps } from "@/modules/office/s
 import { chartData, ChartView } from "./charts";
 import { DEFAULT_PAGE_SETUP, PAPER_SIZES, type PageSetup } from "./model";
 import { useSheetStore } from "./store";
+import { toA1 } from "./a1";
 
 export type SideTab = "assistant" | "comments" | "charts" | "page";
 
@@ -74,7 +75,7 @@ function CommentsTab({ comments, draftAnchor, onDraftAnchor, onAddComment, onUpd
   const selection = useSheetStore((s) => s.selection);
   const wb = useSheetStore((s) => s.workbook);
   const sheet = wb.sheets[wb.activeSheet];
-  const activeAnchor = `${sheet.name}!${String.fromCharCode(65 + (selection.active.col % 26))}${selection.active.row + 1}`;
+  const activeAnchor = `${sheet.name}!${toA1(selection.active.row, selection.active.col)}`;
   const list = comments.filter((c) => showResolved || !c.resolved).sort((a, b) => (a.resolved === b.resolved ? b.createdAt.localeCompare(a.createdAt) : a.resolved ? 1 : -1));
   const anchor = draftAnchor ?? activeAnchor;
   const submit = async () => { if (!draft.trim()) return; setBusy(true); try { await onAddComment(anchor, draft.trim()); setDraft(""); onDraftAnchor(null); } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); } };

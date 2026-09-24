@@ -54,6 +54,8 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
   const future = useBuilderStore((s) => s.future);
   const selectedNodeId = useBuilderStore((s) => s.selectedNodeId);
   const [paletteOpen, setPaletteOpen] = React.useState(true);
+  // Collapse the palette on narrower windows (after mount, so SSR markup matches) so the canvas keeps a usable width next to the config panel.
+  React.useEffect(() => { if (window.innerWidth < 1440) setPaletteOpen(false); }, []);
   const [rightTab, setRightTab] = React.useState<"configure" | "runs">("configure");
   const [runOpen, setRunOpen] = React.useState(false);
   const [activeRunId, setActiveRunId] = React.useState<string | null>(search.get("run") && search.get("run") !== "1" ? search.get("run") : null);
@@ -112,8 +114,10 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
 
   const toggleActive = async (active: boolean) => {
     if (active && errors.length) { toast.error("Fix the validation errors before activating"); return; }
+    const previous = store.getState().meta.status;
     store.getState().setMeta({ status: active ? "active" : "draft" });
-    await save({ status: active ? "active" : "draft", silent: true });
+    const id = await save({ status: active ? "active" : "draft", silent: true });
+    if (!id) { store.getState().setMeta({ status: previous }); return; }
     toast.success(active ? "Workflow activated" : "Workflow set to draft");
   };
 
@@ -259,14 +263,14 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
             <MiniMap pannable zoomable position="bottom-right" className="!m-3 !rounded-lg !border !bg-card [&_svg]:rounded-lg" maskColor="color-mix(in oklch, var(--background) 65%, transparent)" nodeColor={(n) => `var(--${toneFor((n as WfNode).data.wfType).text.includes("primary") ? "primary" : toneFor((n as WfNode).data.wfType).text.includes("success") ? "success" : toneFor((n as WfNode).data.wfType).text.includes("info") ? "info" : toneFor((n as WfNode).data.wfType).text.includes("warning") ? "warning" : "chart-5"})`} nodeStrokeWidth={0} nodeBorderRadius={6} />
             <Panel position="top-left" className="!m-3 flex items-center gap-1 rounded-lg border bg-card p-1 shadow-xs">
-              <Tip label="Undo" shortcut="⌘Z"><Button variant="ghost" size="icon-xs" onClick={() => store.getState().undo()} disabled={!past.length}><Undo2 className="size-3.5" /></Button></Tip>
-              <Tip label="Redo" shortcut="⌘⇧Z"><Button variant="ghost" size="icon-xs" onClick={() => store.getState().redo()} disabled={!future.length}><Redo2 className="size-3.5" /></Button></Tip>
+              <Tip label="Undo" shortcut="⌘Z"><Button variant="ghost" size="icon-xs" onClick={() => store.getState().undo()} disabled={!past.length} aria-label="Undo"><Undo2 className="size-3.5" /></Button></Tip>
+              <Tip label="Redo" shortcut="⌘⇧Z"><Button variant="ghost" size="icon-xs" onClick={() => store.getState().redo()} disabled={!future.length} aria-label="Redo"><Redo2 className="size-3.5" /></Button></Tip>
               <span className="mx-0.5 h-4 w-px bg-border" />
-              <Tip label="Zoom in"><Button variant="ghost" size="icon-xs" onClick={() => rf.zoomIn({ duration: 200 })}><Plus className="size-3.5" /></Button></Tip>
-              <Tip label="Zoom out"><Button variant="ghost" size="icon-xs" onClick={() => rf.zoomOut({ duration: 200 })}><Minus className="size-3.5" /></Button></Tip>
-              <Tip label="Fit view" shortcut="F"><Button variant="ghost" size="icon-xs" onClick={() => rf.fitView({ padding: 0.2, duration: 300 })}><Maximize2 className="size-3.5" /></Button></Tip>
+              <Tip label="Zoom in"><Button variant="ghost" size="icon-xs" onClick={() => rf.zoomIn({ duration: 200 })} aria-label="Zoom in"><Plus className="size-3.5" /></Button></Tip>
+              <Tip label="Zoom out"><Button variant="ghost" size="icon-xs" onClick={() => rf.zoomOut({ duration: 200 })} aria-label="Zoom out"><Minus className="size-3.5" /></Button></Tip>
+              <Tip label="Fit view" shortcut="F"><Button variant="ghost" size="icon-xs" onClick={() => rf.fitView({ padding: 0.2, duration: 300 })} aria-label="Fit view"><Maximize2 className="size-3.5" /></Button></Tip>
               <span className="mx-0.5 h-4 w-px bg-border" />
-              <Tip label="Auto-layout" shortcut="⇧L"><Button variant="ghost" size="icon-xs" onClick={() => { store.getState().layout(); requestAnimationFrame(() => rf.fitView({ padding: 0.2, duration: 300 })); }}><LayoutGrid className="size-3.5" /></Button></Tip>
+              <Tip label="Auto-layout" shortcut="⇧L"><Button variant="ghost" size="icon-xs" onClick={() => { store.getState().layout(); requestAnimationFrame(() => rf.fitView({ padding: 0.2, duration: 300 })); }} aria-label="Auto-layout"><LayoutGrid className="size-3.5" /></Button></Tip>
             </Panel>
             <Panel position="top-right" className="!m-3">
               <button type="button" onClick={() => { store.getState().select(null); setRightTab("configure"); }} className={cn("flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] shadow-xs cursor-pointer", errors.length ? "border-destructive/50 bg-destructive/8 text-destructive" : issues.length ? "border-warning/50 bg-warning/10 text-warning-foreground dark:text-warning" : "border-success/40 bg-success/8 text-success")}>
@@ -287,7 +291,7 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
         </div>
 
         {/* Right panel */}
-        <aside className="flex w-[400px] shrink-0 flex-col border-l bg-card">
+        <aside className="flex w-[360px] shrink-0 flex-col border-l bg-card xl:w-[400px]">
           <div className="flex items-center border-b px-2">
             <Tabs value={rightTab} onValueChange={(v) => setRightTab(v as "configure" | "runs")} className="w-full">
               <TabsList variant="underline" className="h-9 w-full justify-start border-0">

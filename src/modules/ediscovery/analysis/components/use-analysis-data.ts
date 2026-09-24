@@ -5,9 +5,10 @@ import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
 import type { Conflict, Deposition, Relationship, TimelineEvent } from "@/lib/types/domain";
 import { ApiError, api, useFetch } from "../../components/use-review-data";
 import { useReview } from "../../components/review-page";
-import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, ObjectionSummary, PersonDetail, TranscriptHit } from "../types";
+import { pageLineOf } from "../transcript";
+import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, ObjectionRuling, ObjectionSummary, PersonDetail, TranscriptHit } from "../types";
 
-export { ApiError, api, useFetch };
+export { ApiError, api, useFetch, pageLineOf };
 
 const enc = encodeURIComponent;
 
@@ -19,7 +20,7 @@ export function useDepositions(matterId: string) {
   return useFetch<{ depositions: DepositionSummary[] }>(`an:deps:${matterId}`, () => api(`/api/ediscovery/analysis/depositions?matter=${enc(matterId)}`));
 }
 
-export interface DepositionDetail { deposition: Deposition; designations: Designation[]; objections: ObjectionSummary | null; exhibits: { id: string; description: string; bates?: string; docId?: string }[] }
+export interface DepositionDetail { deposition: Deposition; designations: Designation[]; objections: ObjectionSummary | null; rulings?: Record<number, ObjectionRuling>; exhibits: { id: string; description: string; bates?: string; docId?: string }[] }
 
 export function useDeposition(id: string | null) {
   return useFetch<DepositionDetail>(id ? `an:dep:${id}` : null, () => api(`/api/ediscovery/analysis/depositions/${enc(id!)}`));
@@ -100,13 +101,17 @@ export function useOptionalReview() {
   try { return useReview(); } catch { return null; }
 }
 
-/** Navigate to a transcript position: writes ?depo=&qa= and switches to the Depositions tab. */
+/**
+ * Navigate to a transcript position: writes ?depo=&qa= and switches to the Depositions tab.
+ * `at` is a Q/A index, or a "page:line" locator (or a cite containing one) that the transcript resolves.
+ */
 export function useOpenTestimony() {
   const review = useOptionalReview();
-  return React.useCallback((depositionId: string, index?: number) => {
+  return React.useCallback((depositionId: string, at?: number | string) => {
     const url = new URL(window.location.href);
     url.searchParams.set("depo", depositionId);
-    if (index != null) url.searchParams.set("qa", String(index)); else url.searchParams.delete("qa");
+    const qa = typeof at === "number" ? String(at) : pageLineOf(at ?? undefined);
+    if (qa != null) url.searchParams.set("qa", qa); else url.searchParams.delete("qa");
     window.history.replaceState(window.history.state, "", url.toString());
     if (review) review.setTab("depositions");
     else toast.info("Open the Depositions tab to read the transcript");

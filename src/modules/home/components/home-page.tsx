@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { CalendarPlus, CheckSquare, ChevronDown, Home as HomeIcon, Keyboard, MessageSquarePlus, Plus, RefreshCw, Scale, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
@@ -37,17 +38,29 @@ export function HomePage({ initial }: { initial: HomeInitialData }) {
 /** Honors /?task=<id>, /?event=<id> and /?section=<calendar|tasks|news|updates|matters> deep links (command palette, workflow artifacts). */
 function DeepLinkHandler() {
   const params = useSearchParams();
+  const { tasks, events } = useHome();
   const openTaskDialog = useHomeUI((s) => s.openTaskDialog);
   const openEvent = useHomeUI((s) => s.openEvent);
   const setFocus = useHomeUI((s) => s.setFocus);
   const task = params.get("task");
   const event = params.get("event");
   const section = params.get("section") as HomeSection | null;
+  // Only react to the URL once per link (data refreshes must not re-open a dialog the user closed).
+  const handled = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (task) openTaskDialog({ taskId: task });
-    if (event) openEvent(event);
+    const key = `${task ?? ""}|${event ?? ""}|${section ?? ""}`;
+    if (handled.current === key) return;
+    handled.current = key;
+    if (task) {
+      if (tasks.some((t) => t.id === task)) openTaskDialog({ taskId: task });
+      else toast.error("Task not found", { description: "It may have been deleted." });
+    }
+    if (event) {
+      if (events.some((e) => e.id === event)) openEvent(event);
+      else toast.error("Event not found", { description: "It may have been deleted or moved." });
+    }
     if (section && ["calendar", "tasks", "news", "updates", "matters"].includes(section)) setFocus(section);
-  }, [task, event, section, openTaskDialog, openEvent, setFocus]);
+  }, [task, event, section, tasks, events, openTaskDialog, openEvent, setFocus]);
   return null;
 }
 

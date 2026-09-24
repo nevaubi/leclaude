@@ -6,6 +6,8 @@ import { computeFallbackBrief, collectBriefFacts } from "@/modules/home/brief-fa
 import { HOME_SEED_IDS } from "@/modules/home/seed";
 import { addReply, buildBriefContext, createEvent, createTask, createUpdate, deleteEvent, deleteTask, getOrComputeBrief, keyDateEntries, listEvents, listNews, listTasks, listUpdates, matterOverview, saveNewsToLibrary, toggleReaction, updateEvent, updateTask, NEWS_CLIPPINGS_FOLDER_ID, getCachedBrief } from "@/modules/home/service";
 import { taskCreateSchema, eventCreateSchema, deadlineSchema } from "@/modules/home/schemas";
+import { eventFormFor, taskFormFor } from "@/modules/home/forms";
+import { dropFailedRetry, type AgentMessage } from "@/hooks/use-agent";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
 
 const NOW = new Date(2026, 8, 23, 9, 30); // Wed Sept 23, 2026 09:30 local
@@ -283,5 +285,41 @@ describe("daily brief (computed fallback)", () => {
     expect(brief.items.length).toBeGreaterThanOrEqual(1);
     expect(brief.items[0].text).toMatch(/No events/);
     expect(brief.headline).toMatch(/Quiet day/);
+  });
+});
+
+describe("dialog form state (regression: edit dialogs opened empty)", () => {
+  it("initialises the task form from the task being edited, not the defaults", () => {
+    const task = listTasks({ now: NOW })[0];
+    const form = taskFormFor(task, null, { userId: "p_someone", matterFilter: "m_other" });
+    expect(form.title).toBe(task.title);
+    expect(form.matterId).toBe(task.matterId ?? "");
+    expect(form.assigneeId).toBe(task.assigneeId ?? "");
+    expect(form.status).toBe(task.status);
+    expect(form.tags).toBe((task.tags ?? []).join(", "));
+    const fresh = taskFormFor(null, { title: "Prefilled" }, { userId: "p_me", matterFilter: "m_afff_2873" });
+    expect(fresh).toMatchObject({ title: "Prefilled", assigneeId: "p_me", matterId: "m_afff_2873", status: "todo", priority: "medium" });
+  });
+  it("initialises the event form from the event being edited and splits times", () => {
+    const form = eventFormFor({ id: "ev_x", title: "Hearing on MSJ", kind: "hearing", startsAt: "2026-10-09T09:30:00", endsAt: "2026-10-09T11:00:00", matterId: "m_northgate_v_apex", attendeeIds: ["p_jwhitfield"], location: "Courtroom 6" }, null, NOW);
+    expect(form).toMatchObject({ title: "Hearing on MSJ", kind: "hearing", date: "2026-10-09", start: "09:30", end: "11:00", allDay: false, matterId: "m_northgate_v_apex", location: "Courtroom 6", attendeeIds: ["p_jwhitfield"] });
+    const allDay = eventFormFor(null, { title: "Reply due", startsAt: "2026-10-14" }, NOW);
+    expect(allDay).toMatchObject({ title: "Reply due", date: "2026-10-14", allDay: true, kind: "meeting" });
+    const blank = eventFormFor(null, null, NOW);
+    expect(blank.date).toBe(dateKey(NOW));
+    expect(blank.start).toBe("10:00");
+  });
+});
+
+describe("assistant dock retry", () => {
+  it("replaces a failed turn instead of duplicating the user message", () => {
+    const ms: AgentMessage[] = [
+      { id: "u1", role: "user", content: "hello", createdAt: 1 },
+      { id: "a1", role: "assistant", content: "", createdAt: 2, status: "error", error: "OPENAI_API_KEY missing" },
+    ];
+    expect(dropFailedRetry(ms, "hello").map((m) => m.id)).toEqual([]);
+    expect(dropFailedRetry(ms, "something else").map((m) => m.id)).toEqual(["u1", "a1"]);
+    const ok: AgentMessage[] = [ms[0], { ...ms[1], status: "done", content: "hi" }];
+    expect(dropFailedRetry(ok, "hello")).toBe(ok);
   });
 });

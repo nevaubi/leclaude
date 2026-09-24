@@ -92,6 +92,8 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   const [settings, setSettings] = React.useState<DocSettings>(DEFAULT_SETTINGS);
   const [trackChanges, setTrackChangesState] = React.useState(true);
   const [ready, setReady] = React.useState(false);
+  /** Mirrors `ready` for editor callbacks: updates before the document is loaded are never treated as edits. */
+  const readyRef = React.useRef(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [sidebarTab, setSidebarTab] = React.useState<SidebarTab>("outline");
   const [findFocusKey, setFindFocusKey] = React.useState(0);
@@ -155,7 +157,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
         return false;
       },
     },
-    onUpdate: ({ editor: e }) => { scheduleDirty(e); scheduleDerived(e); setLayoutKey((k) => k + 1); },
+    onUpdate: ({ editor: e }) => { if (!readyRef.current) return; scheduleDirty(e); scheduleDerived(e); setLayoutKey((k) => k + 1); },
     onSelectionUpdate: ({ editor: e }) => scheduleCursor(e),
   });
 
@@ -192,6 +194,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     loadContent(editor, (doc.content as PMNode) ?? emptyDoc());
     editor.setEditable(true, false);
     setTitle(doc.title);
+    readyRef.current = true;
     setReady(true);
     scheduleDerived(editor);
     scheduleCursor(editor);
@@ -201,7 +204,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
 
   const docTitle = doc?.title;
   React.useEffect(() => { if (docTitle && document.activeElement?.getAttribute("data-title-input") !== "1") setTitle(docTitle); }, [docTitle]);
-  React.useEffect(() => { editor?.setEditable(view === "edit", false); }, [view, editor]);
+  React.useEffect(() => { if (ready) editor?.setEditable(view === "edit", false); }, [view, editor, ready]);
   // Development hook for browser automation / debugging (never in production builds).
   React.useEffect(() => { if (process.env.NODE_ENV !== "production" && editor) (window as unknown as { __leclaudeWordEditor?: Editor; __leclaudeWordApply?: unknown }).__leclaudeWordEditor = editor; }, [editor]);
 

@@ -111,7 +111,7 @@ export const useSlidesStore = create<SlidesState>((set, get) => {
     guides: { v: [], h: [] },
     changeTick: 0,
 
-    load: (deck) => set({ deck, loaded: true, currentSlideId: deck.slides[0]?.id ?? null, selectedIds: [], editingId: null, past: [], future: [], guides: { v: [], h: [] } }),
+    load: (deck) => set({ deck, loaded: true, currentSlideId: deck.slides[0]?.id ?? null, selectedIds: [], editingId: null, past: [], future: [], changeTick: 0, guides: { v: [], h: [] } }),
     setZoom: (zoom) => set({ zoom }),
     toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
     toggleSnap: () => set((s) => ({ snap: !s.snap })),

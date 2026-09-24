@@ -28,6 +28,9 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
   const contentRef = React.useRef<C | null>(null);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const idRef = React.useRef(opts.id);
+  /** True once the document has been fetched/created. Nothing is saved before that, so a stray editor
+   *  update during loading can never overwrite the stored document with an empty editor state. */
+  const loadedRef = React.useRef(false);
   /** Serial of the latest content handed to markDirty, and the serial the last successful save covered. */
   const dirtySerial = React.useRef(0);
   const savedSerial = React.useRef(0);
@@ -47,6 +50,7 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
           if (cancelled) return;
           idRef.current = doc.id;
           contentRef.current = doc.content as C;
+          loadedRef.current = true;
           setDoc(doc);
           window.history.replaceState(null, "", `/office/${opts.kind}/${doc.id}`);
         } else {
@@ -56,6 +60,7 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
           if (cancelled) return;
           idRef.current = doc.id;
           contentRef.current = doc.content as C;
+          loadedRef.current = true;
           setDoc(doc);
         }
       } catch (e) {
@@ -70,7 +75,7 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
 
   const save = React.useCallback(async (extra: { title?: string; version?: { label?: string; summary?: string; authorName?: string; force?: boolean }; meta?: Record<string, unknown>; matterId?: string | null } = {}) => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
-    if (!idRef.current || idRef.current === "new") return null;
+    if (!loadedRef.current || !idRef.current || idRef.current === "new") return null;
     const serial = dirtySerial.current;
     setSaveState("saving");
     try {
@@ -92,6 +97,8 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
   }, []);
 
   const markDirty = React.useCallback((content: C) => {
+    // Ignore edits reported before the document exists (e.g. an editor's mount-time transaction).
+    if (!loadedRef.current) return;
     contentRef.current = content;
     dirtySerial.current += 1;
     setSaveState("dirty");
@@ -107,7 +114,7 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
   // flush on unload
   React.useEffect(() => {
     const onUnload = () => {
-      if (dirtySerial.current !== savedSerial.current && idRef.current && idRef.current !== "new" && contentRef.current) {
+      if (loadedRef.current && dirtySerial.current !== savedSerial.current && idRef.current && idRef.current !== "new" && contentRef.current) {
         try { navigator.sendBeacon?.(`/api/office/docs/${idRef.current}`, new Blob([JSON.stringify({ content: contentRef.current })], { type: "application/json" })); } catch {}
       }
     };

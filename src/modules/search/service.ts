@@ -121,7 +121,8 @@ export interface RetrievalOutcome {
   durationMs: number;
 }
 
-function providerMessage(e: unknown): string {
+/** Human-readable provider failure (network, rate limit, proxy refusal) shared by retrieval, the reader and cite-check. */
+export function providerMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|fetch failed|network|abort|timeout|ETIMEDOUT|ECONNRESET/i.test(msg)) return "Provider unreachable (network). Retry when online.";
   if (/429/.test(msg)) return "Provider rate limit reached. Retry in a minute or add an API token in Settings.";

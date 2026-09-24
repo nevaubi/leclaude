@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { ArrowUp, ImagePlus, Mic, MicOff, Square, X } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
@@ -52,7 +53,7 @@ export function Composer({ placeholder = "Ask anything…", disabled, streaming,
     if (listening) { recRef.current?.stop(); setListening(false); return; }
     const w = window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike; SpeechRecognition?: new () => SpeechRecognitionLike };
     const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!Ctor) { alert("Voice input is not supported in this browser."); return; }
+    if (!Ctor) { toast.error("Voice input is not supported in this browser."); return; }
     const rec = new Ctor();
     rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
     const base = text ? text + " " : "";
@@ -87,7 +88,7 @@ export function Composer({ placeholder = "Ask anything…", disabled, streaming,
             <div key={i} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={a.dataUrl} alt={a.name} className="h-14 w-14 rounded-md border object-cover" />
-              <button onClick={() => setAttachments((as) => as.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 rounded-full border bg-background p-0.5 shadow cursor-pointer"><X className="size-3" /></button>
+              <button onClick={() => setAttachments((as) => as.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 rounded-full border bg-background p-0.5 shadow cursor-pointer" aria-label={`Remove ${a.name}`}><X className="size-3" /></button>
             </div>
           ))}
         </div>
@@ -105,8 +106,8 @@ export function Composer({ placeholder = "Ask anything…", disabled, streaming,
       />
       <div className="flex items-center gap-1 px-2 pb-2">
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) void onFiles(e.target.files); e.target.value = ""; }} />
-        <Tip label="Attach image or screenshot (transcribed with vision)"><Button variant="ghost" size="icon-sm" onClick={() => fileRef.current?.click()} disabled={disabled}><ImagePlus className="size-4" /></Button></Tip>
-        <Tip label={listening ? "Stop dictation" : "Dictate"}><Button variant="ghost" size="icon-sm" onClick={toggleMic} disabled={disabled} className={cn(listening && "text-destructive")}>{listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}</Button></Tip>
+        <Tip label="Attach image or screenshot (transcribed with vision)"><Button variant="ghost" size="icon-sm" onClick={() => fileRef.current?.click()} disabled={disabled} aria-label="Attach image"><ImagePlus className="size-4" /></Button></Tip>
+        <Tip label={listening ? "Stop dictation" : "Dictate"}><Button variant="ghost" size="icon-sm" onClick={toggleMic} disabled={disabled} className={cn(listening && "text-destructive")} aria-label={listening ? "Stop dictation" : "Dictate"} aria-pressed={listening}>{listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}</Button></Tip>
         {trailing}
         <div className="flex-1" />
         <Button size="icon-sm" onClick={submit} disabled={disabled || (!streaming && !text.trim() && !attachments.length)} className="rounded-lg" aria-label={streaming ? "Stop" : "Send"}>

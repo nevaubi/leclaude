@@ -52,7 +52,8 @@ export function ReviewTab() {
   React.useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
   const listTick = useReviewStore((st) => st.listTick);
   const firstTick = React.useRef(true);
-  React.useEffect(() => { if (firstTick.current) { firstTick.current = false; return; } search.refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [listTick]);
+  const searchRefresh = search.refresh;
+  React.useEffect(() => { if (firstTick.current) { firstTick.current = false; return; } searchRefresh(); }, [listTick, searchRefresh]);
 
   const listApi = React.useMemo<ReviewListApi>(() => ({
     ids,

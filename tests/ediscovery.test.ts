@@ -94,6 +94,20 @@ describe("query parser", () => {
     expect(matchesQuery(doc, parseQuery("bates:MFC-0041890-0041999").ast)).toBe(false);
     expect(matchesQuery(doc, parseQuery("MFC-0041880").ast)).toBe(true);
   });
+  it("accepts a spaced range after the bates: prefix instead of treating 'to' as a term", () => {
+    for (const s of ["bates:MFC-0041877 to 0041880", "bates: MFC-0041877 – MFC-0041880", "bates:MFC-0041877 - 0041880 liver"]) {
+      const q = parseQuery(s);
+      expect(q.bates, s).toHaveLength(1);
+      expect(q.bates[0].end.number, s).toBe(41880);
+      expect(q.terms, s).not.toContain("to");
+      expect(matchesQuery(doc, q.ast), s).toBe(true);
+    }
+    // a bare single Bates after the prefix followed by an exclusion is not a range
+    const q = parseQuery("bates:MFC-0041880 -draft");
+    expect(q.bates).toHaveLength(1);
+    expect(q.bates[0].start.number).toBe(q.bates[0].end.number);
+    expect(q.ast.kind).toBe("and");
+  });
   it("tolerates malformed input", () => {
     const q = parseQuery('liver AND (serum "recovery group');
     expect(q.warnings.length).toBeGreaterThan(0);
@@ -231,6 +245,16 @@ describe("search service", () => {
     expect(score.hits[0].aiScore!).toBeGreaterThanOrEqual(score.hits[1].aiScore!);
     const sorted = sortDocs([{ doc: db().edocs.get("ed_afff_0001")! }, { doc: db().edocs.get("ed_afff_0057")! }], "custodian", "asc");
     expect(sorted[0].doc.custodianName).toBe("Gregory Hale");
+  });
+  it("pages beyond 500 rows and lets a refresh reload everything already loaded", async () => {
+    const all = await searchDocuments({ matterId: AFFF, limit: 5000 });
+    expect(all.hits.length).toBe(all.total);
+    expect(all.limit).toBe(all.total > 5000 ? 5000 : 5000);
+    const page = await searchDocuments({ matterId: AFFF, limit: 10, offset: all.total - 3 });
+    expect(page.hits.map((h) => h.id)).toEqual(all.hits.slice(-3).map((h) => h.id));
+    const past = await searchDocuments({ matterId: AFFF, limit: 10, offset: all.total + 10 });
+    expect(past.hits).toEqual([]);
+    expect(past.total).toBe(all.total);
   });
   it("semantic mode uses the hybrid index and keeps structural filters", async () => {
     const res = await searchDocuments({ matterId: AFFF, q: "groundwater plume municipal wellfield", semantic: true });

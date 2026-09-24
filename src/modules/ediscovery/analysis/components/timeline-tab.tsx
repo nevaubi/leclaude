@@ -58,7 +58,7 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
   };
   const openSource = (s: Src) => {
     if (s.kind === "document" && s.id) onOpenDocument?.(s.id);
-    else if (s.kind === "deposition" && s.id) { const m = s.cite?.match(/(\d+):(\d+)/); openTestimony(s.id, undefined); if (m) toast.info(`Go to ${s.cite}`, { description: "Use find-in-transcript for the exact page:line." }); }
+    else if (s.kind === "deposition" && s.id) openTestimony(s.id, s.cite); // page:line in the cite is resolved by the transcript viewer
   };
   const setCat = (c: TimelineCategory) => setFilters((f) => { const cur = new Set(f.categories ?? []); if (cur.has(c)) cur.delete(c); else cur.add(c); return { ...f, categories: Array.from(cur) }; });
   const hasFilters = !!(filters.categories?.length || filters.personId || filters.minSignificance || filters.from || filters.to || filters.sourceKind || filters.q || filters.disputedOnly || filters.unverifiedOnly);

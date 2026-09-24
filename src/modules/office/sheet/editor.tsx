@@ -42,7 +42,7 @@ const SUGGESTIONS = {
     "Highlight overdue rows and sort by due date",
   ],
   review: ["Check every formula for errors and hardcoded numbers", "Are the totals consistent with the detail rows?", "Find numbers stored as text and inconsistent dates"],
-  ask: ["Explain what's in A1:A1", "What does this workbook model and what are its inputs?", "Which rows are overdue as of today?"],
+  ask: ["What does this workbook model and what are its inputs?", "Which rows are overdue as of today?"],
 };
 
 export interface SheetEditorPageProps { id: string; templateId?: string | null; matterId?: string | null; matters: Matter[] }
@@ -111,6 +111,8 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
     if (r && (r.start.row !== r.end.row || r.start.col !== r.end.col)) out.push({ id: `range:${sheet.name}!${rangeToA1(r)}`, label: rangeToA1(r), kind: "range", ref: `${sheet.name}!${rangeToA1(r)}` });
     return out;
   }, [workbook.sheets.length, sheet.name, selection.ranges]);
+  const selectionLabel = React.useMemo(() => { const r = selection.ranges[selection.ranges.length - 1]; return r ? rangeToA1(r) : "A1"; }, [selection.ranges]);
+  const suggestions = React.useMemo(() => ({ ...SUGGESTIONS, ask: [`Explain what's in ${selectionLabel}`, ...SUGGESTIONS.ask] }), [selectionLabel]);
   const onApplyProposals = React.useCallback(async (ps: EditProposal[]): Promise<ApplyResult> => {
     const r = await applyProposals(ps, { store: () => store.getState(), addComment: async (input) => { await office.comments.add(input); await refreshComments(); } });
     store.getState().setPreview(null);
@@ -229,7 +231,7 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
                 <SidePanel
                   tab={tab}
                   onTab={setTab}
-                  agent={{ endpoint: "/api/office/sheet/agent", docId: doc?.id, docTitle: title || doc?.title || "Untitled workbook", matterId: doc?.matterId ?? matterId ?? null, getSnapshot, scopes, applyProposals: onApplyProposals, onUndo: () => store.getState().undo(), onLocate, suggestions: SUGGESTIONS, onApplied, extraContext: () => ({ activeSheet: sheet.name, selection: store.getState().selectionA1(), showFormulas: store.getState().showFormulas }) }}
+                  agent={{ endpoint: "/api/office/sheet/agent", docId: doc?.id, docTitle: title || doc?.title || "Untitled workbook", matterId: doc?.matterId ?? matterId ?? null, getSnapshot, scopes, applyProposals: onApplyProposals, onUndo: () => store.getState().undo(), onLocate, suggestions, onApplied, extraContext: () => ({ activeSheet: sheet.name, selection: store.getState().selectionA1(), showFormulas: store.getState().showFormulas }) }}
                   comments={comments}
                   draftAnchor={draftAnchor}
                   onDraftAnchor={setDraftAnchor}

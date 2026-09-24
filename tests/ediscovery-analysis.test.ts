@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { db, resetSqlite } from "@/lib/db";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
 import type { Conflict, Person, Relationship, TimelineEvent } from "@/lib/types/domain";
-import { searchTranscripts, designationsCsv, designationsMarkdown, summarizeObjections, qaInRange, normalizeRange, highlightTerms, transcriptText } from "@/modules/ediscovery/analysis/transcript";
+import { searchTranscripts, designationsCsv, designationsMarkdown, summarizeObjections, qaInRange, normalizeRange, highlightTerms, transcriptText, resolvePageLine, pageLineOf } from "@/modules/ediscovery/analysis/transcript";
 import { dedupeEvents, sortEvents, filterEvents, chronologyCsv, chronologyMarkdown, eventKey } from "@/modules/ediscovery/analysis/chronology";
 import { buildGraph, resolvePersonName } from "@/modules/ediscovery/analysis/graph";
 import { VOSS_DEPOSITION } from "@/modules/ediscovery/analysis/seed-depo-voss";
@@ -11,7 +11,7 @@ import { PRYCE_DEPOSITION } from "@/modules/ediscovery/analysis/seed-depo-pryce"
 import { AFFF_TIMELINE } from "@/modules/ediscovery/analysis/seed-timeline";
 import { AFFF_CONFLICTS } from "@/modules/ediscovery/analysis/seed-conflicts";
 import { ANALYSIS_SEED_IDS, EXPLICIT_RELATIONSHIPS, deriveEmailRelationships, seedAnalysis } from "@/modules/ediscovery/analysis/seed";
-import { listDepositions, getDeposition, toggleFlag, updateQA, createDesignation, listDesignations, deleteDesignation, searchAllTranscripts, crossAnalysis, listEvents, createEvent, updateEvent, mergeEvents, eventsFromDocuments, graph, personDetail, createRelationship, listConflicts, createConflict, updateConflict, addConflictNote, getConflict, conflictsCsv, overview, resolveExhibit } from "@/modules/ediscovery/analysis/service";
+import { listDepositions, getDeposition, toggleFlag, updateQA, createDesignation, listDesignations, deleteDesignation, searchAllTranscripts, crossAnalysis, listEvents, createEvent, updateEvent, mergeEvents, eventsFromDocuments, graph, personDetail, createRelationship, listConflicts, createConflict, updateConflict, addConflictNote, getConflict, conflictsCsv, overview, resolveExhibit, objectionSummary, objectionRulings, setObjectionRuling } from "@/modules/ediscovery/analysis/service";
 import { digestDeposition, findContradictions, buildFactMatrix, extractTimelineEvents, knowledgeMap, prepareOutline } from "@/modules/ediscovery/analysis/ai";
 
 const AFFF = MATTERS.afff;
@@ -116,6 +116,19 @@ describe("transcript search", () => {
 
 // ---------------------------------------------------------------------------
 describe("designations and objections", () => {
+  it("resolves page:line locators to the Q/A pair that contains them", () => {
+    const t = VOSS_DEPOSITION.transcript;
+    expect(resolvePageLine(t, `${t[3].page}:${t[3].line}`)).toBe(3);
+    // a line inside a pair (but not its first line) resolves to that pair
+    const i = t.findIndex((qa, k) => k < t.length - 1 && (t[k + 1].page > qa.page || t[k + 1].line > qa.line + 1));
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(resolvePageLine(t, `${t[i].page}:${t[i].line + 1}`)).toBe(i);
+    // a page far beyond the excerpt is not found; garbage is rejected
+    expect(resolvePageLine(t, "9999:1")).toBe(-1);
+    expect(resolvePageLine(t, "abc")).toBe(-1);
+    expect(pageLineOf("Hale 46:07–46:20")).toBe("46:7");
+    expect(pageLineOf("MFC-0041877")).toBeNull();
+  });
   it("normalises reversed ranges and selects the Q/A pairs inside", () => {
     expect(normalizeRange({ startPage: 24, startLine: 5, endPage: 19, endLine: 15 })).toEqual({ startPage: 19, startLine: 15, endPage: 24, endLine: 5 });
     const inside = qaInRange(VOSS_DEPOSITION.transcript, { startPage: 19, startLine: 15, endPage: 22, endLine: 19 });
@@ -149,6 +162,27 @@ describe("designations and objections", () => {
     expect(s.byBasis.find((b) => b.basis === "privilege")!.count).toBeGreaterThanOrEqual(3);
     expect(s.rulings.pending).toBe(s.total);
     expect(s.byBasis.reduce((n, b) => n + b.count, 0)).toBe(s.total);
+    const idx = VOSS_DEPOSITION.transcript.findIndex((qa) => qa.objection);
+    const ruled = summarizeObjections(VOSS_DEPOSITION.transcript, { [idx]: "sustained", 999: "overruled" });
+    expect(ruled.rulings).toEqual({ sustained: 1, overruled: 0, pending: s.total - 1 });
+  });
+  it("records objection rulings in a module-private store and rejects Q/A without an objection", () => {
+    seedAnalysis(db());
+    const dep = getDeposition(ANALYSIS_SEED_IDS.depositions.voss)!;
+    const withObjection = dep.transcript.findIndex((qa) => qa.objection);
+    const without = dep.transcript.findIndex((qa) => !qa.objection);
+    expect(objectionSummary(dep.id)!.rulings.sustained).toBe(0);
+    const rec = setObjectionRuling(dep.id, withObjection, "sustained");
+    expect(rec).toMatchObject({ id: `${dep.id}:${withObjection}`, ruling: "sustained", depositionId: dep.id });
+    expect(objectionRulings(dep.id)).toEqual({ [withObjection]: "sustained" });
+    expect(objectionSummary(dep.id)!.rulings.sustained).toBe(1);
+    expect(() => setObjectionRuling(dep.id, without, "overruled")).toThrow(/No objection/);
+    expect(() => setObjectionRuling(dep.id, 10_000, "overruled")).toThrow(/out of range/);
+    expect(setObjectionRuling("dep_missing", 0, "overruled")).toBeNull();
+    // back to pending clears the record; the deposition itself is untouched
+    setObjectionRuling(dep.id, withObjection, "pending");
+    expect(objectionRulings(dep.id)).toEqual({});
+    expect(getDeposition(dep.id)!.transcript[withObjection]).toEqual(dep.transcript[withObjection]);
   });
   it("renders transcript text for prompts with cites, objections and exhibits", () => {
     const t = transcriptText(VOSS_DEPOSITION, { indexes: [6, 7] });

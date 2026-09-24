@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDown, ArrowUp, Paperclip, MessagesSquare, Copy, Files, FileSearch, ChevronsUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, Paperclip, MessagesSquare, Copy, Files, FileSearch, ChevronsUpDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScoreBar } from "@/components/ui/progress";
@@ -160,6 +160,11 @@ export function DocTable({ hits, loading, total, totalWorkspace, tookMs, semanti
       <footer className="flex h-7 shrink-0 items-center justify-between border-t bg-muted/30 px-3 text-[11px] text-muted-foreground">
         <span className="tabular">
           {loading ? "Searching…" : <><span className="text-foreground">{hits.length.toLocaleString()}</span> of <span className="text-foreground">{total.toLocaleString()}</span> in view · {totalWorkspace.toLocaleString()} total in workspace</>}
+          {!loading && hits.length < total && onLoadMore && (
+            <button onClick={onLoadMore} disabled={loadingMore} className="ml-2 inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10.5px] text-primary hover:bg-accent disabled:opacity-60 cursor-pointer">
+              {loadingMore ? <Loader2 className="size-3 animate-spin" /> : null}{loadingMore ? "Loading…" : `Load ${Math.min(500, total - hits.length).toLocaleString()} more`}
+            </button>
+          )}
           {selected.length > 0 && <span className="ml-2 rounded bg-primary/10 px-1.5 py-px text-primary">{selected.length} selected</span>}
         </span>
         <span className="hidden items-center gap-3 sm:flex">

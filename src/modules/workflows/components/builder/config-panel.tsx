@@ -127,8 +127,8 @@ function NodeConfig({ nodeId, meta }: { nodeId: string; meta: WorkflowMeta | nul
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            <Tip label="Duplicate"><Button variant="ghost" size="icon-xs" onClick={() => duplicate([node.id])}><Copy className="size-3.5" /></Button></Tip>
-            <Tip label="Delete step"><Button variant="ghost" size="icon-xs" className="hover:text-destructive" onClick={() => { removeNodes([node.id]); select(null); }}><Trash2 className="size-3.5" /></Button></Tip>
+            <Tip label="Duplicate"><Button variant="ghost" size="icon-xs" onClick={() => duplicate([node.id])} aria-label="Duplicate step"><Copy className="size-3.5" /></Button></Tip>
+            <Tip label="Delete step"><Button variant="ghost" size="icon-xs" className="hover:text-destructive" onClick={() => { removeNodes([node.id]); select(null); }} aria-label="Delete step"><Trash2 className="size-3.5" /></Button></Tip>
           </div>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{spec?.description}</p>

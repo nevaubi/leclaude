@@ -17,7 +17,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Markdown } from "@/components/ai/markdown";
 import type { Deposition, DepositionQA } from "@/lib/types/domain";
-import { QA_FLAGS, formatPageLine, formatRange, type AnalysisTabProps, type Designation, type DepositionSummary, type QAFlag } from "../types";
+import { OBJECTION_RULINGS, QA_FLAGS, formatPageLine, formatRange, type AnalysisTabProps, type Designation, type DepositionSummary, type ObjectionRuling, type QAFlag } from "../types";
+import { resolvePageLine } from "../transcript";
 import { TranscriptViewer } from "./transcript-viewer";
 import { FLAG_STYLES, FlagBadge, ListSkeleton, NoKeyCallout, ObjectionBadge, AiLabel, AiButtonHint, formatShortDate, typingTarget, OBJECTION_STYLES } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useDeposition, useDepositions, useOverview, useTranscriptSearch, type DepositionDetail } from "./use-analysis-data";
@@ -30,7 +31,7 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
   const deps = useDepositions(matterId);
   const overview = useOverview(matterId);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [jumpIndex, setJumpIndex] = React.useState<number | null>(null);
+  const [jumpIndex, setJumpIndex] = React.useState<number | string | null>(null);
   const [q, setQ] = React.useState("");
   const [outlineOpen, setOutlineOpen] = React.useState(false);
   const list = React.useMemo(() => deps.data?.depositions ?? [], [deps.data]);
@@ -41,7 +42,9 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
       const fromUrl = url.searchParams.get("depo");
       const qa = url.searchParams.get("qa");
       setSelectedId(fromUrl && list.some((d) => d.id === fromUrl) ? fromUrl : list.find((d) => d.status !== "scheduled")?.id ?? list[0].id);
+      // ?qa= is a Q/A index or a page:line locator ("24:5"); the transcript resolves the latter.
       if (fromUrl && qa && /^\d+$/.test(qa)) setJumpIndex(Number(qa));
+      else if (fromUrl && qa && /^\d+:\d+$/.test(qa)) setJumpIndex(qa);
     }
   }, [list, selectedId]);
 
@@ -145,7 +148,7 @@ function SearchResults({ matterId, q, onOpen }: { matterId: string; q: string; o
 
 // ---------------------------------------------------------------------------
 
-function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpenDocument, onChanged }: { id: string; matterId: string; jumpIndex: number | null; onJumped: () => void; aiConfigured: boolean; onOpenDocument?: (docId: string) => void; onChanged: () => void }) {
+function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpenDocument, onChanged }: { id: string; matterId: string; jumpIndex: number | string | null; onJumped: () => void; aiConfigured: boolean; onOpenDocument?: (docId: string) => void; onChanged: () => void }) {
   const detail = useDeposition(id);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [find, setFind] = React.useState("");
@@ -160,7 +163,13 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
   const transcript = React.useMemo(() => dep?.transcript ?? [], [dep]);
   const exhibitDocIds = React.useMemo(() => Object.fromEntries((detail.data?.exhibits ?? []).map((e) => [e.id, e.docId])), [detail.data]);
 
-  React.useEffect(() => { if (jumpIndex != null && transcript.length) { setActiveIndex(jumpIndex); setFlagFilter(null); onJumped(); } }, [jumpIndex, transcript.length, onJumped]);
+  React.useEffect(() => {
+    if (jumpIndex == null || !transcript.length) return;
+    const idx = typeof jumpIndex === "number" ? Math.min(transcript.length - 1, Math.max(0, jumpIndex)) : resolvePageLine(transcript, jumpIndex);
+    if (idx >= 0) { setActiveIndex(idx); setFlagFilter(null); }
+    else toast.info(`${jumpIndex} is not in the excerpted transcript`, { description: "Use find-in-transcript to locate nearby testimony." });
+    onJumped();
+  }, [jumpIndex, transcript, onJumped]);
 
   const findHits = React.useMemo(() => {
     const t = find.trim().toLowerCase();
@@ -205,6 +214,13 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
   const updateDesignation = async (d: Designation, patch: Partial<Designation>) => {
     try { const r = await api<{ designation: Designation }>(`/api/ediscovery/analysis/depositions/${id}/designations`, { method: "PATCH", json: { id: d.id, ...patch } }); detail.mutate((cur) => (cur ? { ...cur, designations: cur.designations.map((x) => (x.id === d.id ? r.designation : x)) } : cur)); }
     catch (e) { toast.error("Could not update designation", { description: (e as Error).message }); }
+  };
+
+  const setRuling = async (index: number, ruling: ObjectionRuling) => {
+    try {
+      const r = await api<{ objections: DepositionDetail["objections"]; rulings: Record<number, ObjectionRuling> }>(`/api/ediscovery/analysis/depositions/${id}`, { method: "PATCH", json: { index, ruling } });
+      detail.mutate((cur) => (cur ? { ...cur, objections: r.objections, rulings: r.rulings } : cur));
+    } catch (e) { toast.error("Could not record ruling", { description: (e as Error).message }); }
   };
 
   const runDigest = async (force = false) => {
@@ -339,9 +355,9 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
               ))}
             </nav>
             <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-              {panel === "digest" && <DigestPanel dep={dep} digesting={digesting} noKey={noKey || !aiConfigured} onRun={() => runDigest(false)} onJump={(cite) => { const m = cite.match(/(\d+):(\d+)/); if (!m) return; const idx = transcript.findIndex((qa) => qa.page === Number(m[1]) && qa.line === Number(m[2])); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } }} />}
-              {panel === "designations" && <DesignationsPanel detail={detail.data!} onJump={(d) => { const idx = transcript.findIndex((qa) => qa.page === d.startPage && qa.line === d.startLine) ; if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } }} onRemove={removeDesignation} onUpdate={updateDesignation} onStart={() => { setDesignating(true); setSelection({}); }} />}
-              {panel === "objections" && <ObjectionsPanel detail={detail.data!} onJump={(i) => { setFlagFilter(null); setActiveIndex(i); }} />}
+              {panel === "digest" && <DigestPanel dep={dep} digesting={digesting} noKey={noKey || !aiConfigured} onRun={() => runDigest(false)} onJump={(cite) => { const m = cite.match(/(\d+):(\d+)/); if (!m) return; const idx = resolvePageLine(transcript, `${Number(m[1])}:${Number(m[2])}`); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } else toast.info(`${cite} is not in the excerpted transcript`); }} />}
+              {panel === "designations" && <DesignationsPanel detail={detail.data!} onJump={(d) => { const idx = resolvePageLine(transcript, `${d.startPage}:${d.startLine}`); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } }} onRemove={removeDesignation} onUpdate={updateDesignation} onStart={() => { setDesignating(true); setSelection({}); }} />}
+              {panel === "objections" && <ObjectionsPanel detail={detail.data!} onJump={(i) => { setFlagFilter(null); setActiveIndex(i); }} onRule={setRuling} />}
               {panel === "exhibits" && <ExhibitsPanel detail={detail.data!} onOpen={openExhibit} onJump={(ref) => { const idx = transcript.findIndex((qa) => qa.exhibit === ref); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } }} />}
               {panel === "flags" && <FlagsPanel transcript={transcript} onJump={(i) => { setFlagFilter(null); setActiveIndex(i); }} />}
             </div>
@@ -423,8 +439,11 @@ function DesignationsPanel({ detail, onJump, onRemove, onUpdate, onStart }: { de
   );
 }
 
-function ObjectionsPanel({ detail, onJump }: { detail: DepositionDetail; onJump: (index: number) => void }) {
+const RULING_CLS: Record<ObjectionRuling, string> = { pending: "text-muted-foreground", sustained: "border-success/40 bg-success/10 text-success", overruled: "border-destructive/40 bg-destructive/10 text-destructive" };
+
+function ObjectionsPanel({ detail, onJump, onRule }: { detail: DepositionDetail; onJump: (index: number) => void; onRule: (index: number, ruling: ObjectionRuling) => void }) {
   const s = detail.objections;
+  const rulings = detail.rulings ?? {};
   const rows = detail.deposition.transcript.map((qa, i) => ({ qa, i })).filter(({ qa }) => qa.objection);
   if (!s || !s.total) return <div className="p-3"><EmptyState icon={Gavel} title="No objections on the record" /></div>;
   const max = Math.max(...s.byBasis.map((b) => b.count), 1);
@@ -433,7 +452,7 @@ function ObjectionsPanel({ detail, onJump }: { detail: DepositionDetail; onJump:
       <div className="grid grid-cols-3 gap-2">
         {[["Total", s.total], ["Sustained", s.rulings.sustained], ["Overruled", s.rulings.overruled]].map(([k, v]) => <div key={String(k)} className="rounded-md border bg-card px-2 py-1.5"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div><div className="text-base font-semibold tabular">{v}</div></div>)}
       </div>
-      <p className="text-[11px] text-muted-foreground">Rulings are entered when the court rules on designations; all {s.total} are pending.</p>
+      <p className="text-[11px] text-muted-foreground">{s.rulings.pending === s.total ? `All ${s.total} objections are pending — record the court's rulings on designated testimony below.` : `${s.rulings.pending} of ${s.total} pending.`}</p>
       <section>
         <h4 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">By basis</h4>
         <ul className="space-y-1">{s.byBasis.map((b) => (
@@ -450,7 +469,18 @@ function ObjectionsPanel({ detail, onJump }: { detail: DepositionDetail; onJump:
       </section>
       <section>
         <h4 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">On the record</h4>
-        <ul className="space-y-0.5">{rows.map(({ qa, i }) => <li key={i}><button type="button" onClick={() => onJump(i)} className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[11.5px] hover:bg-accent cursor-pointer"><span className="w-12 shrink-0 font-mono text-muted-foreground">{formatPageLine(qa.page, qa.line)}</span><ObjectionBadge basis={qa.objection!.basis} /><span className="truncate text-muted-foreground">{qa.objection!.text ?? qa.question}</span></button></li>)}</ul>
+        <ul className="space-y-0.5">{rows.map(({ qa, i }) => {
+          const ruling = rulings[i] ?? "pending";
+          return (
+            <li key={i} className="flex items-center gap-1 rounded px-1.5 py-1 hover:bg-accent/60">
+              <button type="button" onClick={() => onJump(i)} className="flex min-w-0 flex-1 items-center gap-2 text-left text-[11.5px] cursor-pointer"><span className="w-12 shrink-0 font-mono text-muted-foreground">{formatPageLine(qa.page, qa.line)}</span><ObjectionBadge basis={qa.objection!.basis} /><span className="truncate text-muted-foreground">{qa.objection!.text ?? qa.question}</span></button>
+              <Select value={ruling} onValueChange={(v) => onRule(i, v as ObjectionRuling)}>
+                <SelectTrigger size="sm" className={cn("h-5 w-auto shrink-0 gap-1 rounded border px-1.5 text-[10.5px] shadow-none", RULING_CLS[ruling])} aria-label={`Ruling at ${formatPageLine(qa.page, qa.line)}`}><SelectValue /></SelectTrigger>
+                <SelectContent>{OBJECTION_RULINGS.map((r) => <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </li>
+          );
+        })}</ul>
       </section>
     </div>
   );

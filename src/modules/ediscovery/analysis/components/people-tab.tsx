@@ -276,7 +276,7 @@ function KnowledgeMapDialog({ open, onOpenChange, matterId, aiConfigured, topics
                     <td className="px-2 py-1.5 leading-relaxed">{e.knew}</td>
                     <td className="px-2 py-1.5 font-mono tabular text-muted-foreground">{e.firstKnownDate}</td>
                     <td className="px-2 py-1.5"><Badge variant={CONF[e.confidence] ?? "muted"} className="capitalize">{e.confidence}</Badge></td>
-                    <td className="px-2 py-1.5"><div className="flex flex-wrap gap-1">{e.cites.map((c, j) => <CiteChip key={j} cite={c.cite} kind={c.sourceKind} onClick={c.sourceId ? () => (c.sourceKind === "document" ? onOpenDocument?.(c.sourceId!) : openTestimony(c.sourceId!)) : undefined} />)}</div></td>
+                    <td className="px-2 py-1.5"><div className="flex flex-wrap gap-1">{e.cites.map((c, j) => <CiteChip key={j} cite={c.cite} kind={c.sourceKind} onClick={c.sourceId ? () => (c.sourceKind === "document" ? onOpenDocument?.(c.sourceId!) : openTestimony(c.sourceId!, c.cite)) : undefined} />)}</div></td>
                   </tr>
                 ))}</tbody>
               </table>

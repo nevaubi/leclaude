@@ -59,11 +59,30 @@ export interface Designation {
   createdBy: string;
 }
 
+export type ObjectionRuling = "sustained" | "overruled" | "pending";
+export const OBJECTION_RULINGS: { id: ObjectionRuling; label: string }[] = [
+  { id: "pending", label: "Pending" },
+  { id: "sustained", label: "Sustained" },
+  { id: "overruled", label: "Overruled" },
+];
+
+/** A court ruling on an objection, keyed by deposition and Q/A index (module-private store). */
+export interface ObjectionRulingRecord {
+  id: string; // `${depositionId}:${index}`
+  matterId: string;
+  depositionId: string;
+  index: number;
+  ruling: ObjectionRuling;
+  note?: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
 export interface ObjectionSummary {
   total: number;
   byBasis: { basis: string; count: number }[];
   byAttorney: { attorney: string; count: number }[];
-  /** Placeholder until rulings are entered on the record. */
+  /** Counts of rulings entered from the Objections panel; everything else is pending. */
   rulings: { sustained: number; overruled: number; pending: number };
 }
 

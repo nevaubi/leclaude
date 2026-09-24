@@ -24,8 +24,9 @@ const OUT = "/tmp/claude-0/-home-user-leclaude/1e92e83e-74f3-502e-8533-69680f74d
 
 describe("generate word proposals from seeded doc", () => {
   it("runs every edit tool once", async () => {
+    const live = process.env.REVIEW_BASE ? ((await (await fetch(`${process.env.REVIEW_BASE}/api/office/docs/wd_afff_motion_brief`)).json()) as { doc: { content: PMNode } }).doc.content : null;
     const d = db().officeDocs.get("wd_afff_motion_brief")!;
-    const doc = ensureBlockIds(d.content as PMNode);
+    const doc = ensureBlockIds((live ?? d.content) as PMNode);
     const { ctx, proposals, snapshot } = makeCtx(doc);
     const tools = wordAgentTools(ctx);
     const run = async (name: string, args: Record<string, unknown>) => { const t = tools.find((x) => x.name === name)!; return (t.execute as (a: unknown, c: unknown) => unknown)(args, { emit: () => {}, state: {} }); };
@@ -59,5 +60,5 @@ describe("generate word proposals from seeded doc", () => {
     if (lists[1]) await run("replace_text_in_paragraph", { id: lists[1].id, find: lists[1].text.split(" ")[0], replace: "Item" });
     fs.writeFileSync(OUT, JSON.stringify(proposals, null, 1));
     expect(proposals.length).toBeGreaterThan(15);
-  });
+  }, 120_000);
 });

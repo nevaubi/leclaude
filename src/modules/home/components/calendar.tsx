@@ -18,9 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { CalendarEvent } from "@/lib/types/domain";
 import { computeDeadline, DEADLINE_PRESETS, type DeadlineDirection, type DeadlineMethod, type DeadlineResult } from "../deadline";
-import { addDays, addMonths, dateKey, daysBetween, endOfMonth, endOfWeek, fmtDate, fmtDateLong, fmtRange, fmtTime, isSameDay, localIso, startOfMonth, startOfWeek, toDate, DATE_ONLY_RE } from "../time";
+import { addDays, addMonths, dateKey, daysBetween, endOfMonth, endOfWeek, fmtDate, fmtDateLong, fmtRange, fmtTime, isSameDay, startOfMonth, startOfWeek, toDate, DATE_ONLY_RE } from "../time";
 import { EVENT_KINDS, EVENT_KIND_LABEL, type CalendarEntry, type EventInput } from "../types";
 import { useHomeUI, type CalendarView } from "../store";
+import { eventFormFor, type EventForm } from "../forms";
 import { useHome } from "./home-provider";
 import { CountdownChip, DateInput, EmptyRow, FieldLabel, KIND_STYLE, KindBadge, KindDot, MatterBadge, NONE, Section, TimeInput } from "./shared";
 
@@ -542,18 +543,6 @@ export function EventSheet() {
 // Event dialog (create / edit)
 // ---------------------------------------------------------------------------
 
-interface EventForm { title: string; kind: CalendarEvent["kind"]; matterId: string; date: string; start: string; end: string; allDay: boolean; location: string; attendeeIds: string[]; notes: string; ruleSource: string }
-
-function toForm(e: CalendarEntry | null, initial: Partial<EventInput> | null, now: Date): EventForm {
-  const src = e ?? initial;
-  const startsAt = src?.startsAt ?? localIso(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10));
-  const s = toDate(startsAt);
-  const en = src?.endsAt ? toDate(src.endsAt) : new Date(s.getTime() + 3600_000);
-  const allDay = src?.allDay ?? DATE_ONLY_RE.test(startsAt);
-  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  return { title: src?.title ?? "", kind: src?.kind ?? "meeting", matterId: src?.matterId ?? "", date: dateKey(s), start: allDay ? "10:00" : hhmm(s), end: allDay ? "11:00" : hhmm(en), allDay, location: src?.location ?? "", attendeeIds: src?.attendeeIds ?? [], notes: src?.notes ?? "", ruleSource: src?.ruleSource ?? "" };
-}
-
 export function EventDialog() {
   const { events } = useHome();
   const dlg = useHomeUI((s) => s.eventDialog);
@@ -561,8 +550,8 @@ export function EventDialog() {
   const existing = React.useMemo(() => (dlg.eventId ? events.find((e) => e.id === dlg.eventId) ?? null : null), [events, dlg.eventId]);
   return (
     <Dialog open={dlg.open} onOpenChange={(o) => { if (!o) close(); }}>
-      {/* DialogContent unmounts on close, so the form re-initialises from props on every open. */}
-      <EventDialogForm existing={existing} initial={dlg.initial} onClose={close} />
+      {/* Mount the form only while open (keyed by event) so its state re-initialises from the selected event / initial values on every open. */}
+      {dlg.open && <EventDialogForm key={dlg.eventId ?? "new"} existing={existing} initial={dlg.initial} onClose={close} />}
     </Dialog>
   );
 }
@@ -570,7 +559,7 @@ export function EventDialog() {
 function EventDialogForm({ existing, initial, onClose }: { existing: CalendarEntry | null; initial: Partial<EventInput> | null; onClose: () => void }) {
   const { people, matters, now, createEvent, updateEvent, userId } = useHome();
   const openEvent = useHomeUI((s) => s.openEvent);
-  const [form, setForm] = React.useState<EventForm>(() => toForm(existing, initial, now));
+  const [form, setForm] = React.useState<EventForm>(() => eventFormFor(existing, initial, now));
   const [saving, setSaving] = React.useState(false);
   const [attendeeQuery, setAttendeeQuery] = React.useState("");
   const set = <K extends keyof EventForm>(k: K, v: EventForm[K]) => setForm((f) => ({ ...f, [k]: v }));

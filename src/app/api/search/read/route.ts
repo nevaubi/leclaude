@@ -1,5 +1,5 @@
 import { jsonError } from "@/lib/ai/sse";
-import { parseReadRef, readSource } from "@/modules/search/service";
+import { parseReadRef, providerMessage, readSource } from "@/modules/search/service";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,9 @@ export async function POST(req: Request) {
     return Response.json({ result });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const unreachable = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|fetch failed|timeout|ETIMEDOUT|ECONNRESET/i.test(msg);
-    return jsonError(unreachable ? "Provider unreachable (network). Retry when online." : msg, unreachable ? 502 : /^No /.test(msg) ? 404 : 502, { code: unreachable ? "provider_unreachable" : "read_failed" });
+    // Network failures and proxy/provider refusals (403/407/429) are "unreachable" for the UI: same wording as the results tabs, with a retry hint.
+    const unreachable = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|fetch failed|timeout|ETIMEDOUT|ECONNRESET|network|\b(401|403|407|429)\b/i.test(msg);
+    if (unreachable) return jsonError(providerMessage(e), 502, { code: "provider_unreachable" });
+    return jsonError(msg, /^No /.test(msg) ? 404 : 502, { code: "read_failed" });
   }
 }

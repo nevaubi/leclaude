@@ -18,6 +18,7 @@ import type { Task } from "@/lib/types/domain";
 import { addDays, dateKey, daysBetween, endOfWeek, fmtDate, toDate } from "../time";
 import { TASK_PRIORITIES, TASK_STATUSES, TASK_STATUS_LABEL, type TaskInput } from "../types";
 import { useHomeUI } from "../store";
+import { taskFormFor, type TaskForm } from "../forms";
 import { useHome } from "./home-provider";
 import { CountdownChip, DateInput, EmptyRow, FieldLabel, MatterBadge, NONE, PRIORITY_STYLE, PriorityBadge, Section, SourceIcon } from "./shared";
 
@@ -396,8 +397,6 @@ function BoardCard({ task: t, handleProps, overlay }: { task: Task; handleProps?
 // Task dialog (create / edit)
 // ---------------------------------------------------------------------------
 
-interface TaskForm { title: string; description: string; matterId: string; assigneeId: string; status: Task["status"]; priority: Task["priority"]; dueAt: string; tags: string; links: { label: string; href: string }[] }
-
 export function TaskDialog() {
   const { tasks } = useHome();
   const dlg = useHomeUI((s) => s.taskDialog);
@@ -405,18 +404,15 @@ export function TaskDialog() {
   const existing = React.useMemo(() => (dlg.taskId ? tasks.find((t) => t.id === dlg.taskId) ?? null : null), [tasks, dlg.taskId]);
   return (
     <Dialog open={dlg.open} onOpenChange={(o) => { if (!o) close(); }}>
-      {/* DialogContent unmounts on close, so the form re-initialises from props on every open. */}
-      <TaskDialogForm existing={existing} initial={dlg.initial} onClose={close} />
+      {/* Mount the form only while open (keyed by task) so its state re-initialises from the selected task / initial values on every open. */}
+      {dlg.open && <TaskDialogForm key={dlg.taskId ?? "new"} existing={existing} initial={dlg.initial} onClose={close} />}
     </Dialog>
   );
 }
 
 function TaskDialogForm({ existing, initial, onClose: close }: { existing: Task | null; initial: Partial<TaskInput> | null; onClose: () => void }) {
   const { people, matters, userId, matterFilter, createTask, updateTask, deleteTask } = useHome();
-  const [form, setForm] = React.useState<TaskForm>(() => {
-    const src = existing ?? initial;
-    return { title: src?.title ?? "", description: src?.description ?? "", matterId: src?.matterId ?? matterFilter ?? "", assigneeId: src?.assigneeId ?? userId, status: src?.status ?? "todo", priority: src?.priority ?? "medium", dueAt: src?.dueAt ?? "", tags: (src?.tags ?? []).join(", "), links: src?.links ?? [] };
-  });
+  const [form, setForm] = React.useState<TaskForm>(() => taskFormFor(existing, initial, { userId, matterFilter }));
   const [saving, setSaving] = React.useState(false);
   const set = <K extends keyof TaskForm>(k: K, v: TaskForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 

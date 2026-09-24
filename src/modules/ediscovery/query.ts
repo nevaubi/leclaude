@@ -71,7 +71,8 @@ export function parseBatesRange(raw: string): { start: BatesNumber; end: BatesNu
   if (!m) return null;
   const start = parseBates(m[1]);
   if (!start) return null;
-  const end = parseBates(m[2]) ?? { prefix: start.prefix, number: Number(m[2]), width: m[2].length, raw: m[2] };
+  // An abbreviated end ("…-0041999") inherits the prefix; its raw form is canonicalised so chips and cites read "MFC-0041999".
+  const end = parseBates(m[2]) ?? { prefix: start.prefix, number: Number(m[2]), width: m[2].length, raw: formatBates(start.prefix, Number(m[2]), Math.max(start.width, m[2].length)) };
   if (end.prefix !== start.prefix) return null;
   if (end.number < start.number) return { start: end, end: start };
   return { start, end };

@@ -42,11 +42,15 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
   const [describeOpen, setDescribeOpen] = React.useState(false);
   const [describeText, setDescribeText] = React.useState("");
   const [mine, setMine] = React.useState(mineInitial);
+  // `?tab=` links (e.g. "All runs") re-render this page in place, so follow the prop instead of only reading it once.
+  React.useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [showArchived, setShowArchived] = React.useState(false);
   const term = q.trim().toLowerCase();
   const filter = (w: WorkflowListItem) => (!category || w.category === category) && (!term || `${w.name} ${w.description ?? ""} ${(w.tags ?? []).join(" ")}`.toLowerCase().includes(term));
   const shownTemplates = templates.filter(filter);
-  const shownMine = mine.filter(filter).filter((w) => w.status !== "archived" || term);
+  const archivedCount = mine.filter((w) => w.status === "archived").length;
+  const shownMine = mine.filter(filter).filter((w) => w.status !== "archived" || term || showArchived);
 
   const applyTemplate = async (id: string) => {
     setBusy(id);
@@ -132,6 +136,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
                 <div className="flex flex-wrap gap-1">
                   <CategoryChip active={!category} onClick={() => setCategory("")}>All</CategoryChip>
                   {WORKFLOW_CATEGORIES.map((c) => <CategoryChip key={c.value} active={category === c.value} onClick={() => setCategory(category === c.value ? "" : c.value)}>{c.label}</CategoryChip>)}
+                  {tab === "mine" && archivedCount > 0 && <CategoryChip active={showArchived} onClick={() => setShowArchived((v) => !v)}><Archive className="mr-1 inline size-3" />Archived {archivedCount}</CategoryChip>}
                 </div>
               </>
             )}
@@ -148,7 +153,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
             <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
               <div className="min-w-0 overflow-hidden rounded-lg border">
                 {shownMine.length === 0 ? (
-                  <EmptyState icon={WorkflowIcon} title={term || category ? "No workflows match" : "No workflows yet"} description={term || category ? "Try another search or category." : "Start from a template or describe what you need."} action={<div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setTab("templates")}>Browse templates</Button><Button size="sm" onClick={() => setDescribeOpen(true)}><Sparkles className="size-3.5" /> Describe a workflow</Button></div>} className="m-4" />
+                  <EmptyState icon={WorkflowIcon} title={term || category ? "No workflows match" : archivedCount ? "No active workflows" : "No workflows yet"} description={term || category ? "Try another search or category." : archivedCount ? `${archivedCount} archived workflow${archivedCount === 1 ? " is" : "s are"} hidden — use the Archived filter to see ${archivedCount === 1 ? "it" : "them"}.` : "Start from a template or describe what you need."} action={<div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setTab("templates")}>Browse templates</Button><Button size="sm" onClick={() => setDescribeOpen(true)}><Sparkles className="size-3.5" /> Describe a workflow</Button></div>} className="m-4" />
                 ) : (
                   <Table>
                     <TableHeader className="bg-muted/40">
