@@ -144,7 +144,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
 
           {tab === "mine" && (
             <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-              <div className="min-w-0 overflow-hidden rounded-lg border">
+              <div className="min-w-0 overflow-x-auto rounded-lg border scrollbar-thin">
                 {shownMine.length === 0 ? (
                   <EmptyState icon={WorkflowIcon} title={term || category ? "No workflows match" : archivedCount ? "No active workflows" : "No workflows yet"} description={term || category ? "Try another search or category." : archivedCount ? `${archivedCount} archived workflow${archivedCount === 1 ? " is" : "s are"} hidden — use the Archived filter to see ${archivedCount === 1 ? "it" : "them"}.` : "Start from a template or describe what you need."} action={<div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setTab("templates")}>Browse templates</Button><Button size="sm" onClick={() => setDescribeOpen(true)}><Sparkles className="size-3.5" /> Describe a workflow</Button></div>} className="m-4" />
                 ) : (
@@ -153,9 +153,9 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
                       <TableRow>
                         <TableHead>Workflow</TableHead>
                         <TableHead className="w-[90px]">Status</TableHead>
-                        <TableHead>Schedule</TableHead>
+                        <TableHead className="hidden xl:table-cell">Schedule</TableHead>
                         <TableHead>Last run</TableHead>
-                        <TableHead className="text-right">Runs</TableHead>
+                        <TableHead className="hidden text-right lg:table-cell">Runs</TableHead>
                         <TableHead className="w-[130px] text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -173,9 +173,9 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
                             </div>
                           </TableCell>
                           <TableCell><WorkflowStatusBadge status={w.status} /></TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{w.schedule ? <div><div className="flex items-center gap-1"><CalendarClock className="size-3" /> {describeSchedule(w.schedule)}</div>{w.nextRunAt && <div className="text-[10.5px]">next <RelativeTime value={w.nextRunAt} /></div>}</div> : "Manual"}</TableCell>
+                          <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">{w.schedule ? <div><div className="flex items-center gap-1"><CalendarClock className="size-3" /> {describeSchedule(w.schedule)}</div>{w.nextRunAt && <div className="text-[10.5px]">next <RelativeTime value={w.nextRunAt} /></div>}</div> : "Manual"}</TableCell>
                           <TableCell className="text-xs">{w.lastRunAt ? <div className="space-y-0.5">{w.lastRunStatus && <RunStatusBadge status={w.lastRunStatus} />}<div className="text-[10.5px] text-muted-foreground"><RelativeTime value={w.lastRunAt} /></div></div> : <span className="text-muted-foreground">Never</span>}</TableCell>
-                          <TableCell className="text-right tabular text-xs">{w.runsCount ?? 0}</TableCell>
+                          <TableCell className="hidden text-right tabular text-xs lg:table-cell">{w.runsCount ?? 0}</TableCell>
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
                               <Switch size="sm" checked={w.status === "active"} onCheckedChange={(v) => patch(w.id, { status: v ? "active" : "draft" }, v ? "Activated" : "Set to draft")} aria-label="Active" />

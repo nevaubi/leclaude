@@ -23,8 +23,8 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
   const dl = deadline ? deadlineLabel(deadline.daysLeft) : null;
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 overflow-x-auto border-b bg-card/40 px-4 no-scrollbar" aria-label="Matter summary">
-      <h1 className="w-auto min-w-[120px] max-w-[26vw] shrink-0 truncate text-[13px] font-semibold tracking-tight lg:max-w-[32vw]" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
-      {matter?.stage && <Chip tone="muted" title={`Stage: ${matter.stage}`} className="hidden max-w-[200px] shrink md:inline-flex">{matter.stage}</Chip>}
+      <h1 className="w-auto min-w-[120px] max-w-[24vw] shrink-0 truncate text-[13px] font-semibold tracking-tight xl:max-w-[30vw]" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
+      {matter?.stage && <Chip tone="muted" title={`Stage: ${matter.stage}`} className="hidden max-w-[200px] shrink xl:inline-flex">{matter.stage}</Chip>}
       <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden />
       {loading && !stats ? (
         <Skeleton className="h-4 w-56" />
@@ -36,7 +36,7 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
                 <span className={cn("absolute inset-y-0 left-0 rounded-full", pct >= 90 ? "bg-success" : "bg-primary")} style={{ width: `${pct}%` }} />
               </span>
               <span className="tabular font-medium">{pct}%</span>
-              <span className="hidden text-muted-foreground lg:inline">reviewed</span>
+              <span className="hidden text-muted-foreground xl:inline">reviewed</span>
             </span>
           </Tip>
           {deadline && dl && (

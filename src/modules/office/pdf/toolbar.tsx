@@ -104,7 +104,7 @@ export function PdfToolbar({ onSearch, onNextHit, onOpenSignature, onRedactSearc
           <form onSubmit={(e) => { e.preventDefault(); if (q === search.query && search.hits.length) onNextHit(1); else onSearch(q, { regex: search.regex, caseSensitive: search.caseSensitive }); }} className="flex items-center gap-0.5">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search (⌘F)" className="h-7 w-[150px] pl-7 pr-6 text-xs lg:w-[180px]" aria-label="Search document" onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); onSearch(""); } if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); onNextHit(-1); } }} />
+              <Input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search (⌘F)" className="h-7 w-[120px] pl-7 pr-6 text-xs xl:w-[180px]" aria-label="Search document" onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); onSearch(""); } if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); onNextHit(-1); } }} />
               {q && <button type="button" onClick={() => { setQ(""); onSearch(""); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer" aria-label="Clear search"><X className="size-3" /></button>}
             </div>
             {search.query && <span className="min-w-[48px] text-center text-[11px] tabular text-muted-foreground">{search.running ? "…" : search.hits.length ? `${search.index + 1}/${search.hits.length}` : "0"}</span>}
@@ -143,7 +143,7 @@ export function PdfToolbar({ onSearch, onNextHit, onOpenSignature, onRedactSearc
       </DropdownMenu>
       <ToolSep />
       <DropdownMenu>
-        <Tip label="Stamp: pick text, then click the page"><DropdownMenuTrigger asChild><ToolMenuTrigger icon={Stamp} label={tool === "stamp" ? stampText : "Stamp"} active={tool === "stamp"} aria-label="Stamp" hideLabelBelow="lg" className="max-w-[150px]" /></DropdownMenuTrigger></Tip>
+        <Tip label="Stamp: pick text, then click the page"><DropdownMenuTrigger asChild><ToolMenuTrigger icon={Stamp} label={tool === "stamp" ? stampText : "Stamp"} active={tool === "stamp"} aria-label="Stamp" hideLabelBelow="xl" className="max-w-[150px]" /></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuLabel>Stamp text — then click the page</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={stampText} onValueChange={(v) => { store.getState().setPrefs({ stampText: v }); setTool("stamp"); }}>
@@ -154,7 +154,7 @@ export function PdfToolbar({ onSearch, onNextHit, onOpenSignature, onRedactSearc
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
-        <Tip label="Redaction: draw boxes, redact search hits or a pattern"><DropdownMenuTrigger asChild><ToolMenuTrigger icon={ScanSearch} label="Redact" active={tool === "redaction"} aria-label="Redaction" hideLabelBelow="lg" /></DropdownMenuTrigger></Tip>
+        <Tip label="Redaction: draw boxes, redact search hits or a pattern"><DropdownMenuTrigger asChild><ToolMenuTrigger icon={ScanSearch} label="Redact" active={tool === "redaction"} aria-label="Redaction" hideLabelBelow="xl" /></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="start" className="w-72">
           <DropdownMenuItem onClick={() => setTool("redaction")}><Square /> Draw redaction box <span className="ml-auto text-[10px] text-muted-foreground">X</span></DropdownMenuItem>
           <DropdownMenuItem disabled={!search.query || !search.hits.length} onClick={() => onRedactSearch(search.query, search.regex, redactionReason)}><Search /> Redact all {search.hits.length ? `${search.hits.length} ` : ""}search results</DropdownMenuItem>

@@ -97,7 +97,7 @@ export function WordToolbar(props: ToolbarProps) {
       right={
         <>
           <ToolButton icon={PenLine} label={trackChanges ? "Track changes on — click to turn off" : "Track changes off — click to turn on"} shortcut="⌘⇧E" active={trackChanges} onClick={() => onTrackChanges(!trackChanges)} keepFocus={false} className={cn("px-2", trackChanges && "text-primary")}>
-            <span className="hidden text-[12.5px] xl:inline">Track changes</span>
+            <span className="hidden text-[12.5px] 2xl:inline">Track changes</span>
           </ToolButton>
           <ToolButton icon={Eye} label={readOnly ? "Back to editing" : "Preview with changes accepted"} active={readOnly} onClick={() => onView(readOnly ? "edit" : "preview")} keepFocus={false} />
         </>
@@ -110,7 +110,7 @@ export function WordToolbar(props: ToolbarProps) {
 
         {/* Style */}
         <DropdownMenu>
-          <Tip label="Paragraph style"><DropdownMenuTrigger asChild><ToolMenuTrigger label={styleLabel} width={118} aria-label="Paragraph style" /></DropdownMenuTrigger></Tip>
+          <Tip label="Paragraph style"><DropdownMenuTrigger asChild><ToolMenuTrigger label={styleLabel} width={108} aria-label="Paragraph style" /></DropdownMenuTrigger></Tip>
           <DropdownMenuContent align="start" className="w-64">
             <DropdownMenuLabel>Style</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={state.style} onValueChange={(v) => applyParagraphStyle(editor, v as ParagraphStyle)}>
@@ -121,7 +121,7 @@ export function WordToolbar(props: ToolbarProps) {
 
         {/* Font */}
         <DropdownMenu>
-          <Tip label="Font"><DropdownMenuTrigger asChild><ToolMenuTrigger label={<span style={{ fontFamily: font.css }}>{font.label}</span>} width={126} aria-label="Font family" hideLabelBelow="lg" /></DropdownMenuTrigger></Tip>
+          <Tip label="Font"><DropdownMenuTrigger asChild><ToolMenuTrigger label={<span style={{ fontFamily: font.css }}>{font.label}</span>} width={112} aria-label="Font family" hideLabelBelow="lg" /></DropdownMenuTrigger></Tip>
           <DropdownMenuContent align="start" className="w-60">
             <DropdownMenuLabel>Font</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={fontId} onValueChange={(v) => { const f = FONT_FAMILIES.find((x) => x.id === v)!; if (v === settings.font) editor.chain().focus().unsetFontFamily().run(); else editor.chain().focus().setFontFamily(f.css).run(); }}>

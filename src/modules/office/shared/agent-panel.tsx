@@ -217,14 +217,14 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
   const selectedPending = pending.filter((p) => selected.has(p.id)).length;
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col bg-background", className)} data-office-agent-panel>
+    <div className={cn("@container flex h-full min-h-0 flex-col bg-background", className)} data-office-agent-panel>
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-b px-3">
         <Sparkles className="size-4 text-primary" />
         <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{title}</div>
         {onVersions && (
-          <Tip label="Version history"><button onClick={onVersions} className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"><History className="size-3.5" /><span className="hidden sm:inline">Versions{versionCount ? ` (${versionCount})` : ""}</span></button></Tip>
+          <Tip label="Version history"><button onClick={onVersions} className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"><History className="size-3.5" /><span className="hidden @min-[380px]:inline">Versions{versionCount ? ` (${versionCount})` : ""}</span>{versionCount ? <span className="tabular @min-[380px]:hidden">{versionCount}</span> : null}</button></Tip>
         )}
-        {onUndo && <Tip label="Undo last edit" shortcut="⌘Z"><Button variant="ghost" size="xs" onClick={onUndo} className="text-muted-foreground"><Undo2 className="size-3.5" /> Undo</Button></Tip>}
+        {onUndo && <Tip label="Undo last edit" shortcut="⌘Z"><Button variant="ghost" size="xs" onClick={onUndo} className="text-muted-foreground" aria-label="Undo last edit"><Undo2 className="size-3.5" /><span className="hidden @min-[340px]:inline">Undo</span></Button></Tip>}
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" aria-label="Assistant options"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">

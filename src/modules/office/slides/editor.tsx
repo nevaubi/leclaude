@@ -248,7 +248,7 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
           { id: "comments", label: "Comments", icon: MessageSquare, shortcut: "⌘⇧M", active: commentsOpen, onToggle: () => setCommentsOpen((v) => !v), count: openComments },
           { id: "assistant", label: "Deck assistant", icon: Sparkles, shortcut: "⌘/", active: agentOpen, onToggle: () => setAgentOpen((v) => !v) },
         ]}
-        primary={<Tip label="Present from current slide" shortcut="⌘⇧P"><Button variant="outline" size="sm" onClick={() => setPresenting(Math.max(0, slideIndex))} disabled={!ready || deck.slides.length === 0} className="gap-1.5"><Play className="size-3.5" /> <span className="hidden md:inline">Present</span></Button></Tip>}
+        primary={<Tip label="Present from current slide" shortcut="⌘⇧P"><Button variant="outline" size="sm" onClick={() => setPresenting(Math.max(0, slideIndex))} disabled={!ready || deck.slides.length === 0} className="gap-1.5"><Play className="size-3.5" /> <span className="hidden xl:inline">Present</span></Button></Tip>}
       />
 
       {ready ? <SlidesToolbar textEditorRef={textEditorRef} onInsertImage={() => setImageOpen(true)} onEditData={(el) => setDataEl(el)} /> : <ToolbarSkeleton />}

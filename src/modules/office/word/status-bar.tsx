@@ -21,25 +21,25 @@ export function StatusBar(p: StatusBarProps) {
   return (
     <OfficeStatusBar>
       <StatusItem title={`${p.words.toLocaleString()} words · ${p.characters.toLocaleString()} characters`}><span className="tabular text-foreground">{p.words.toLocaleString()}</span> words</StatusItem>
-      <StatusItem title="Page setup (change under Page in the toolbar)" className="hidden md:flex">{p.pageLabel}</StatusItem>
+      <StatusItem title="Page setup (change under Page in the toolbar)" hide="xl">{p.pageLabel}</StatusItem>
       <StatusItem title="Estimated printed pages"><span className="tabular">~{p.pages}</span> page{p.pages === 1 ? "" : "s"}</StatusItem>
       <StatusItem title="Current paragraph"><span className="tabular">¶ {p.paraIndex || "–"} of {p.paraTotal}</span></StatusItem>
       {p.section && <StatusItem className="hidden min-w-0 max-w-[280px] lg:flex" title="Current section"><span className="truncate">§ {p.section}</span></StatusItem>}
       <StatusSpacer />
       {p.comments > 0 && <StatusItem onClick={p.onComments} title="Open comments"><MessageSquare className="size-3" /> <span className="tabular">{p.comments}</span></StatusItem>}
       <StatusItem onClick={p.onTrackChanges ? () => p.onTrackChanges?.(!p.trackChanges) : undefined} active={p.trackChanges} title="Toggle track changes (⌘⇧E)">
-        <PenLine className="size-3" /> Track changes {p.trackChanges ? "on" : "off"}
+        <PenLine className="size-3" /> <span className="hidden lg:inline">Track changes </span>{p.trackChanges ? "on" : "off"}
         {p.pending > 0 && <span className="ml-1 rounded-full bg-primary/10 px-1.5 tabular text-primary">{p.pending} pending</span>}
       </StatusItem>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button className="flex h-full items-center gap-1 border-r px-2.5 hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Proofing language"><Globe className="size-3" /> <span className="hidden sm:inline">{p.language}</span></button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><button className="flex h-full items-center gap-1 whitespace-nowrap border-r px-2.5 hover:bg-accent hover:text-foreground cursor-pointer" aria-label={`Proofing language: ${p.language}`} title={`Proofing language: ${p.language}`}><Globe className="size-3" /> <span className="hidden xl:inline">{p.language}</span></button></DropdownMenuTrigger>
         <DropdownMenuContent align="end"><DropdownMenuRadioGroup value={LANGUAGES.find((l) => l.label === p.language)?.id ?? "en-US"} onValueChange={p.onLanguage}>{LANGUAGES.map((l) => <DropdownMenuRadioItem key={l.id} value={l.id}>{l.label}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button className="flex h-full items-center gap-1 border-r px-2.5 tabular hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Zoom"><ZoomIn className="size-3" /> {Math.round(p.zoom * 100)}%{p.zoomMode === "fit" ? " · fit" : ""}</button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><button className="flex h-full items-center gap-1 whitespace-nowrap border-r px-2.5 tabular hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Zoom" title="Zoom"><ZoomIn className="size-3" /> {Math.round(p.zoom * 100)}%{p.zoomMode === "fit" ? " · fit" : ""}</button></DropdownMenuTrigger>
         <DropdownMenuContent align="end"><DropdownMenuRadioGroup value={String(p.zoomMode)} onValueChange={(v) => p.onZoom(v === "fit" ? "fit" : Number(v))}><DropdownMenuRadioItem value="fit">Fit width</DropdownMenuRadioItem>{[0.75, 0.9, 1, 1.1, 1.25, 1.5].map((z) => <DropdownMenuRadioItem key={z} value={String(z)}>{Math.round(z * 100)}%</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent>
       </DropdownMenu>
-      <StatusItem className={cn("min-w-[120px] justify-end", p.saveState === "error" && "text-destructive")} title="Save state">{p.loading ? <Loader2 className="size-3 animate-spin" /> : null}{p.saveLabel}</StatusItem>
+      <StatusItem className={cn("min-w-[96px] justify-end", p.saveState === "error" && "text-destructive")} title="Save state">{p.loading ? <Loader2 className="size-3 animate-spin" /> : null}{p.saveLabel}</StatusItem>
     </OfficeStatusBar>
   );
 }

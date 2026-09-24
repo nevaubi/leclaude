@@ -149,7 +149,7 @@ export function ReviewTab() {
         )}
         <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
           {!fullscreen && (
-            <ResizablePanel defaultSize={s.openDocId ? "42" : "100"} minSize={340} className="flex min-w-0 flex-col">
+            <ResizablePanel defaultSize={s.openDocId ? "38" : "100"} minSize={300} className="flex min-w-0 flex-col">
               <SearchBox response={search.data} loading={search.loading} />
               <BulkBar hits={hits} onCode={bulk} />
               <DocTable hits={hits} loading={search.loading && !search.data} total={search.data?.total ?? 0} totalWorkspace={search.data?.totalWorkspace ?? 0} tookMs={search.data?.tookMs} semantic={!!search.data?.semantic} onLoadMore={search.loadMore} loadingMore={search.loadingMore} />
@@ -158,7 +158,7 @@ export function ReviewTab() {
           {s.openDocId && (
             <>
               {!fullscreen && <ResizableHandle withHandle />}
-              <ResizablePanel defaultSize={fullscreen ? "100" : "58"} minSize={fullscreen ? undefined : 420} className="min-w-0">
+              <ResizablePanel defaultSize={fullscreen ? "100" : "62"} minSize={fullscreen ? undefined : 560} className="min-w-0">
                 <DocViewer docId={s.openDocId} terms={search.data?.parsed.terms ?? []} onNavigate={move} onClose={() => s.setOpenDocId(null)} index={ids.indexOf(s.openDocId)} count={ids.length} />
               </ResizablePanel>
             </>

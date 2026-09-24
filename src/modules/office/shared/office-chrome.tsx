@@ -122,7 +122,7 @@ export function OfficeChrome(props: OfficeChromeProps) {
       {matters && onMatterChange && (matter || ready) && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className={cn("hidden h-6 max-w-[180px] shrink-0 items-center gap-1 truncate rounded-md border px-2 text-[11.5px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:flex cursor-pointer", !matter && "border-dashed")} aria-label={matter ? `Matter: ${matter.shortName}` : "Link a matter"}>
+            <button className={cn("hidden h-6 max-w-[140px] shrink-0 xl:max-w-[180px] items-center gap-1 truncate rounded-md border px-2 text-[11.5px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:flex cursor-pointer", !matter && "border-dashed")} aria-label={matter ? `Matter: ${matter.shortName}` : "Link a matter"}>
               <Briefcase className="size-3" /><span className="truncate">{matter ? matter.shortName : "Link matter"}</span><ChevronDown className="size-3 opacity-60" />
             </button>
           </DropdownMenuTrigger>
@@ -143,7 +143,7 @@ export function OfficeChrome(props: OfficeChromeProps) {
         aria-label={`${meta.noun[0].toUpperCase()}${meta.noun.slice(1)} title`}
         placeholder={titlePlaceholder ?? meta.placeholder}
         disabled={!ready}
-        className="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-[13px] font-semibold outline-none transition-colors hover:border-border focus:border-ring focus:bg-background disabled:opacity-70"
+        className="h-7 min-w-[7.5rem] flex-1 rounded-md border border-transparent bg-transparent px-2 text-[13px] font-semibold outline-none transition-colors hover:border-border focus:border-ring focus:bg-background disabled:opacity-70"
       />
       <span className={cn("hidden shrink-0 text-[11.5px] tabular xl:inline", tone === "destructive" ? "text-destructive" : tone === "warning" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")} aria-live="polite">{savedAtLabel(saveState, lastSavedAt)}</span>
       <div className="flex shrink-0 items-center gap-0.5">
