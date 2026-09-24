@@ -134,6 +134,25 @@ export function useProduction(matterId: string) {
   return useFetch<ProductionSummary>(`production:${matterId}`, () => api(`/api/ediscovery/production?matter=${encodeURIComponent(matterId)}`));
 }
 
+/**
+ * Pending AI-record count for the matter (Codes & privilege → Needs review). Resolves to
+ * null when the integrity endpoint is missing so callers can hide the count.
+ */
+export function useReviewQueueCount(matterId: string) {
+  const [pending, setPending] = React.useState<number | null>(null);
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    let alive = true;
+    api<{ counts?: { pending?: number } }>(`/api/integrity/review?matter=${encodeURIComponent(matterId)}&limit=1`)
+      .then((r) => { if (alive) setPending(Number(r?.counts?.pending ?? 0)); })
+      .catch(() => { if (alive) setPending(null); });
+    return () => { alive = false; };
+  }, [matterId, tick]);
+  const refresh = React.useCallback(() => setTick((t) => t + 1), []);
+  const set = React.useCallback((n: number) => setPending(n), []);
+  return { pending, refresh, set };
+}
+
 export function useRules(matterId: string) {
   return useFetch<{ rules: string }>(`rules:${matterId}`, () => api(`/api/ediscovery/rules?matter=${encodeURIComponent(matterId)}`));
 }

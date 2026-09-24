@@ -109,10 +109,10 @@ export function PersonChip({ id, className, size = "xs" }: { id?: string | null;
 export function Section({ id, title, icon: Icon, count, actions, children, className, bodyClassName, onExpand, expanded, description }: { id?: string; title: React.ReactNode; icon?: LucideIcon; count?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string; bodyClassName?: string; onExpand?: () => void; expanded?: boolean; description?: React.ReactNode }) {
   return (
     <section id={id} className={cn("@container flex min-w-0 flex-col rounded-xl border bg-card shadow-xs", expanded && "h-full", className)}>
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3.5">
-        {Icon && <Icon className="size-4 text-muted-foreground" />}
-        <h2 className="text-[13px] font-semibold tracking-tight">{title}</h2>
-        {count != null && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10.5px] font-medium tabular text-muted-foreground">{count}</span>}
+      <header className="section-header h-10">
+        {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
+        <h2 className="section-title">{title}</h2>
+        {count != null && <span className="section-count">{count}</span>}
         {description && <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground @lg:inline">{description}</span>}
         <div className="flex-1" />
         <div className="flex items-center gap-1">{actions}</div>

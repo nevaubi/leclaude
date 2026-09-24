@@ -10,7 +10,7 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  { label: "Home", href: "/", icon: Home, shortcut: "G H", description: "News, team updates, calendar and tasks" },
+  { label: "Home", href: "/", icon: Home, shortcut: "G H", description: "Today, matters, tasks, calendar and the team's updates" },
   { label: "Search", href: "/search", icon: Search, shortcut: "G S", description: "Case law, statutes, regulations, dockets and internal knowledge" },
   { label: "E-Discovery", href: "/ediscovery", icon: FileSearch, shortcut: "G E", description: "Review, depositions, chronologies, people graph, privilege" },
   { label: "Workflows", href: "/workflows", icon: Workflow, shortcut: "G W", description: "Automations and multi-step agent playbooks" },
@@ -30,4 +30,7 @@ export const NAV: NavItem[] = [
   { label: "Library", href: "/library", icon: Library, shortcut: "G L", description: "Shared folders, templates, clause bank and knowledge" },
 ];
 
-export const SECONDARY_NAV: NavItem[] = [{ label: "Settings", href: "/settings", icon: Settings }];
+export const SECONDARY_NAV: NavItem[] = [{ label: "Settings", href: "/settings", icon: Settings, shortcut: "G ,", description: "AI, research providers, data integrity and the review queue" }];
+
+/** "G" chord targets: key → href (shared by the shell and the palette so both stay in sync). */
+export const GO_CHORD: Record<string, string> = { h: "/", s: "/search", e: "/ediscovery", w: "/workflows", o: "/office", l: "/library", ",": "/settings" };

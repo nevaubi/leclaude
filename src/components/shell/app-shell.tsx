@@ -3,9 +3,9 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChevronLeft, ChevronRight, Moon, Search, Sun, Sparkles, Monitor, Menu, X, KeyRound, LogOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, Moon, Search, Sun, Monitor, Menu, X, KeyRound, LogOut, ShieldAlert, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV, SECONDARY_NAV } from "./nav";
+import { GO_CHORD, NAV, SECONDARY_NAV } from "./nav";
 import { useShellStore } from "./shell-store";
 import { useTheme } from "./theme-provider";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { Tip } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { CommandPalette } from "./command-palette";
-import { Badge } from "@/components/ui/badge";
 import { SWMark, BrandLockup } from "@/components/brand/logo";
 
 const CURRENT_USER = { name: "Jordan Whitfield", role: "Partner", email: "jwhitfield@seegerweiss.com" };
@@ -46,8 +45,7 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       if (chord === "g") {
-        const map: Record<string, string> = { h: "/", s: "/search", e: "/ediscovery", w: "/workflows", o: "/office", l: "/library" };
-        const dest = map[e.key.toLowerCase()];
+        const dest = GO_CHORD[e.key.toLowerCase()];
         chord = null;
         if (dest) { e.preventDefault(); router.push(dest); }
         return;
@@ -75,15 +73,16 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "group relative flex items-center rounded-lg text-[13px] font-medium transition-colors",
+          "group relative flex items-center rounded-lg text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           expanded ? "gap-3 px-2.5 py-2" : "size-10 justify-center",
           active ? "bg-primary/10 text-primary dark:bg-primary/15" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
         )}
       >
-        {active && <span className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-primary md:block" aria-hidden />}
+        {/* Active indicator: a short bar on the rail edge, aligned to the icon. */}
+        <span className={cn("absolute top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-primary transition-opacity", expanded ? "-left-3" : "-left-[14px]", active ? "opacity-100" : "opacity-0")} aria-hidden />
         <item.icon className={cn("size-[18px] shrink-0", active ? "text-primary" : "")} strokeWidth={active ? 2.25 : 1.9} />
         {expanded && <span className="flex-1 truncate">{item.label}</span>}
-        {expanded && item.shortcut && <span className="text-[10px] text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100">{item.shortcut}</span>}
+        {expanded && item.shortcut && <span className="text-[10px] tabular text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100">{item.shortcut}</span>}
       </Link>
     );
     return expanded ? <div key={item.href}>{link}</div> : <Tip key={item.href} label={item.label} side="right" shortcut={item.shortcut}>{link}</Tip>;
@@ -100,9 +99,9 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
           mobileOpen ? "flex shadow-2xl" : "hidden",
         )}
       >
-        <div className={cn("flex h-14 items-center border-b border-sidebar-border", expanded ? "px-3.5" : "justify-center px-0")}>
-          <Link href="/" className="flex min-w-0 items-center" aria-label={`${appName} home`}>
-            {expanded || mobileOpen ? <BrandLockup /> : <SWMark size={32} />}
+        <div className={cn("flex h-[52px] items-center border-b border-sidebar-border", expanded ? "px-3.5" : "justify-center px-0")}>
+          <Link href="/" className="flex min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50" aria-label={`${appName} home`}>
+            {expanded || mobileOpen ? <BrandLockup /> : <SWMark size={30} />}
           </Link>
         </div>
 
@@ -112,7 +111,7 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
               onClick={() => setPaletteOpen(true)}
               aria-label="Search or jump to anything"
               className={cn(
-                "flex items-center rounded-lg border border-transparent bg-background/70 text-muted-foreground shadow-xs transition-colors hover:border-border hover:bg-background hover:text-foreground cursor-pointer",
+                "flex items-center rounded-lg border border-transparent bg-background/70 text-muted-foreground shadow-xs transition-colors hover:border-border hover:bg-background hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 expanded ? "h-9 w-full gap-2 px-2.5 text-xs" : "size-10 justify-center",
               )}
             >
@@ -129,31 +128,29 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
         <div className={cn("flex flex-col gap-1 border-t border-sidebar-border py-2", expanded ? "px-3" : "items-center px-0")}>
           {SECONDARY_NAV.map(railItem)}
           <Tip label={expanded ? "Collapse" : "Expand"} side="right" shortcut="[">
-            <button onClick={toggleSidebar} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className={cn("flex items-center rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground cursor-pointer", expanded ? "gap-3 px-2.5 py-2 text-[13px]" : "size-10 justify-center")}>
+            <button onClick={toggleSidebar} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className={cn("flex items-center rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50", expanded ? "gap-3 px-2.5 py-2 text-[13px]" : "size-10 justify-center")}>
               {expanded ? <><ChevronLeft className="size-[18px]" /> Collapse</> : <ChevronRight className="size-[18px]" />}
             </button>
           </Tip>
-          <Tip label="Sign out" side="right">
-            <button aria-label="Sign out" className={cn("flex items-center rounded-lg text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground cursor-pointer", expanded ? "gap-3 px-2.5 py-2 text-[13px]" : "size-10 justify-center")} disabled>
-              <LogOut className="size-[18px]" />{expanded && "Sign out"}
+          {expanded && (
+            <button aria-label="Sign out" className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground" disabled>
+              <LogOut className="size-[18px]" /> Sign out
             </button>
-          </Tip>
+          )}
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-background/85 px-3 backdrop-blur md:px-4">
+        <header className="flex h-[52px] shrink-0 items-center gap-3 border-b bg-background px-3 md:px-4">
           <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Open navigation" onClick={() => setMobileOpen((o) => !o)}>{mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}</Button>
           <div className="min-w-0 flex-1" id="topbar-slot" />
-          <div className="flex items-center gap-1">
-            <AiStatusBadge />
+          <div className="flex items-center gap-0.5">
+            <AiStatus />
+            <ReviewQueueIndicator />
             <ThemeToggle />
-            <Tip label="Notifications">
-              <Button variant="ghost" size="icon-sm" className="relative" aria-label="Notifications"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-destructive" /></Button>
-            </Tip>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="ml-1 rounded-full ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring/50 cursor-pointer" aria-label="Account menu"><PersonAvatar name={CURRENT_USER.name} /></button>
+                <button className="ml-1 rounded-full ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer" aria-label="Account menu"><PersonAvatar name={CURRENT_USER.name} /></button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
                 <DropdownMenuLabel className="font-normal">
@@ -164,6 +161,7 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild><Link href="/settings">Settings</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/settings#ai">AI configuration</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link href="/settings#review">Review queue</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/settings#integrity">Data integrity</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled>Sign out</DropdownMenuItem>
@@ -178,7 +176,8 @@ export function AppShell({ children, appName, firmName }: { children: React.Reac
   );
 }
 
-function AiStatusBadge() {
+/** Quiet AI indicator: a dot when live; a small "add key" chip when nothing is configured. */
+function AiStatus() {
   const [status, setStatus] = React.useState<{ configured: boolean; model: string } | null>(null);
   React.useEffect(() => {
     let alive = true;
@@ -187,9 +186,26 @@ function AiStatusBadge() {
   }, []);
   if (!status) return null;
   return status.configured ? (
-    <Tip label={`OpenAI · ${status.model}`}><Badge variant="success" className="hidden md:inline-flex gap-1.5 rounded-full px-2.5 py-1"><Sparkles className="size-3" /> AI live</Badge></Tip>
+    <Tip label={`OpenAI · ${status.model}`}><span className="hidden h-8 items-center gap-1.5 px-2 text-[11px] text-muted-foreground md:inline-flex" aria-label="AI live"><span className="size-1.5 rounded-full bg-success" /> <Sparkles className="size-3" /></span></Tip>
   ) : (
-    <Tip label="Add OPENAI_API_KEY to .env.local to enable AI features"><Link href="/settings#ai"><Badge variant="warning" className="hidden md:inline-flex gap-1.5 rounded-full px-2.5 py-1 cursor-pointer"><KeyRound className="size-3" /> AI: add key</Badge></Link></Tip>
+    <Tip label="Add OPENAI_API_KEY to .env.local to enable AI features"><Link href="/settings#ai" className="chip chip-warning hidden md:inline-flex"><KeyRound className="size-3" /> AI: add key</Link></Tip>
+  );
+}
+
+/** Pending AI records awaiting a human decision; links to the review queue. Hidden when none or when the endpoint is unavailable. */
+function ReviewQueueIndicator() {
+  const pathname = usePathname();
+  const [pending, setPending] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    fetch("/api/integrity/scan").then((r) => (r.ok ? r.json() : null)).then((j) => { if (alive && j?.review) setPending(Number(j.review.pending ?? 0)); }).catch(() => {});
+    return () => { alive = false; };
+  }, [pathname]);
+  if (!pending) return null;
+  return (
+    <Tip label={`${pending} AI record${pending === 1 ? "" : "s"} awaiting review`}>
+      <Link href="/settings#review" className="chip chip-quiet hidden md:inline-flex" aria-label="Review queue"><ShieldAlert className="size-3 text-warning" /> {pending}</Link>
+    </Tip>
   );
 }
 

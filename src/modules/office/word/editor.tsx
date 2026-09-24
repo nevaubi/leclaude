@@ -17,18 +17,17 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/core";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Download, Eye, FileText, History, MessageSquare, PanelLeft, PenLine, Printer, Save, Sparkles, Briefcase, FileCode2, FileType2, Loader2, AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FileCode2, FileText, FileType2, History, MessageSquare, PanelLeft, Printer, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Matter, OfficeComment } from "@/lib/types/domain";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/misc";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { OfficeAgentPanel, saveStateLabel, useOfficeDoc, type ApplyResult, type EditProposal, type OfficeScope } from "@/modules/office/shared";
+import { ChromeToggle, OfficeChrome, ToolbarSkeleton, TrackedChangesStrip, useNarrowViewport, type DownloadItem } from "@/modules/office/shared/office-chrome";
 import "./word.css";
 import { applyProposal, revealBlock, revealPosition } from "./apply-proposals";
 import { debounce, downloadDocx, downloadMarkdown, downloadText, printDocument, renderMermaidToImageUrl, uploadBlob } from "./client-utils";
@@ -89,6 +88,7 @@ function computeCursor(editor: Editor): CursorInfo {
 export function WordEditorPage({ id, templateId, matterId, matters, initialMode }: WordEditorPageProps) {
   const office = useOfficeDoc<PMNode>({ id, kind: "word", emptyContent: emptyDoc, templateId: templateId ?? null, matterId: matterId ?? null, autosaveMs: 1500 });
   const { doc, loading, error } = office;
+  const narrow = useNarrowViewport();
   const [settings, setSettings] = React.useState<DocSettings>(DEFAULT_SETTINGS);
   const [trackChanges, setTrackChangesState] = React.useState(true);
   const [ready, setReady] = React.useState(false);
@@ -101,6 +101,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   const [agentOpen, setAgentOpen] = React.useState(true);
   const [view, setView] = React.useState<"edit" | "preview">("edit");
   const [versionsOpen, setVersionsOpen] = React.useState(false);
+  const [versionsCount, setVersionsCount] = React.useState<number | undefined>(undefined);
   const [diagramOpen, setDiagramOpen] = React.useState(false);
   const [diagramInitial, setDiagramInitial] = React.useState<{ source: string; pos: number } | null>(null);
   const [prompt, setPrompt] = React.useState<PromptRequest | null>(null);
@@ -122,6 +123,10 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const matter = React.useMemo(() => matters.find((m) => m.id === (doc?.matterId ?? matterId)) ?? null, [matters, doc?.matterId, matterId]);
+
+  // Narrow viewports (≤1180px) open with the outline and comment margin collapsed; the user can reopen them.
+  const autoCollapsed = React.useRef(false);
+  React.useEffect(() => { if (narrow && !autoCollapsed.current) { autoCollapsed.current = true; setSidebarOpen(false); setCommentsOpen(false); } }, [narrow]);
 
   const ask = React.useCallback((req: PromptRequest) => new Promise<{ value: string; secondary?: string } | null>((res) => { promptResolver.current = res; setPrompt(req); }), []);
 
@@ -205,6 +210,14 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   const docTitle = doc?.title;
   React.useEffect(() => { if (docTitle && document.activeElement?.getAttribute("data-title-input") !== "1") setTitle(docTitle); }, [docTitle]);
   React.useEffect(() => { if (ready) editor?.setEditable(view === "edit", false); }, [view, editor, ready]);
+  // Version count for the assistant header ("Versions (n)"); refreshed after each save.
+  const contentVersion = doc?.contentVersion;
+  React.useEffect(() => {
+    if (!ready || !doc?.id) return;
+    let alive = true;
+    officeRef.current.versions.list().then((v) => { if (alive) setVersionsCount(v.length); }).catch(() => {});
+    return () => { alive = false; };
+  }, [ready, doc?.id, contentVersion]);
   // Development hook for browser automation / debugging (never in production builds).
   React.useEffect(() => { if (process.env.NODE_ENV !== "production" && editor) (window as unknown as { __leclaudeWordEditor?: Editor; __leclaudeWordApply?: unknown }).__leclaudeWordEditor = editor; }, [editor]);
 
@@ -251,7 +264,6 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     const pos = commentAnchorPos(editor, c);
     if (pos == null) return;
     revealPosition(editor, pos - 1);
-    // Highlight the mark
     canvasRef.current?.querySelectorAll(".comment-active").forEach((el) => el.classList.remove("comment-active"));
     canvasRef.current?.querySelectorAll(`[data-comment-id="${c.id}"]`).forEach((el) => el.classList.add("comment-active"));
   }, [editor]);
@@ -267,6 +279,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   }, [editor, changes]);
   const resolveCurrent = (mode: "accept" | "reject") => { if (!editor || !changes.length) return; const c = changes[Math.min(changeIndex, changes.length - 1)]; if (mode === "accept") editor.commands.acceptChange(c.id); else editor.commands.rejectChange(c.id); toast.success(mode === "accept" ? "Change accepted" : "Change rejected", { duration: 1200 }); };
   const resolveAll = (mode: "accept" | "reject") => { if (!editor) return; const n = changes.length; if (mode === "accept") editor.commands.acceptAllChanges(); else editor.commands.rejectAllChanges(); toast.success(`${mode === "accept" ? "Accepted" : "Rejected"} ${n} change${n === 1 ? "" : "s"}`); void saveNow({ summary: `${mode === "accept" ? "Accepted" : "Rejected"} all tracked changes (${n})` }); };
+  const changeAuthors = React.useMemo(() => Array.from(new Set(changes.map((c) => c.author).filter(Boolean))), [changes]);
 
   // ---- insert actions -----------------------------------------------------------
   const sectionsForToc = (): DocSection[] => outline.map((o) => ({ id: o.id, title: o.text, level: o.level, index: o.index, wordCount: o.words, blockCount: 0, start: o.index, end: o.index }));
@@ -330,6 +343,13 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
       else downloadText(json, doc.title);
     } catch (e) { toast.error(`Export failed: ${(e as Error).message}`); } finally { setExporting(null); }
   };
+  const downloadItems: DownloadItem[] = [
+    { id: "docx", label: "Word (.docx) with tracked changes", icon: FileText, onSelect: () => void doExport("docx") },
+    { id: "docx-clean", label: "Word (.docx), changes accepted", icon: FileText, onSelect: () => void doExport("docx-clean") },
+    { id: "pdf", label: "PDF (print)", icon: Printer, shortcut: "⌘P", onSelect: () => void doExport("pdf") },
+    { id: "md", label: "Markdown (.md)", icon: FileCode2, separatorBefore: true, onSelect: () => void doExport("md") },
+    { id: "txt", label: "Plain text (.txt)", icon: FileType2, onSelect: () => void doExport("txt") },
+  ];
 
   // ---- agent integration ---------------------------------------------------------
   const scopes = React.useMemo<OfficeScope[]>(() => {
@@ -412,16 +432,17 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   const landscape = settings.orientation === "landscape";
   const font = FONT_FAMILIES.find((f) => f.id === settings.font) ?? FONT_FAMILIES[0];
   const pageWidthPx = (landscape ? page.height : page.width) * 96;
-  const zoom = zoomMode === "fit" ? Math.min(1, Math.max(0.55, (canvasWidth - (commentsOpen ? 272 : 0) - 32) / pageWidthPx)) : zoomMode;
+  const zoom = zoomMode === "fit" ? Math.min(1, Math.max(0.55, (canvasWidth - (commentsOpen ? 272 : 0) - 48) / pageWidthPx)) : zoomMode;
   const pageStyle = { "--page-w": `${(landscape ? page.height : page.width) * 96}px`, "--page-h": `${(landscape ? page.width : page.height) * 96}px`, "--page-pt": `${m.top * 96}px`, "--page-pr": `${m.right * 96}px`, "--page-pb": `${m.bottom * 96}px`, "--page-pl": `${m.left * 96}px`, "--doc-font": font.css, "--doc-size": `${settings.fontSize}pt`, "--doc-lh": settings.lineSpacing } as React.CSSProperties;
   const stats = React.useMemo(() => (editor && ready ? docStats(editor.getJSON() as PMNode) : null), [editor, ready, words, changes.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const pages = stats ? estimatePages(stats) : 1;
   const saveLabel = saveStateLabel(office.saveState, office.lastSavedAt);
+  const openComments = comments.filter((c) => !c.resolved).length;
 
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <TopbarSlot><Link href="/library" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to Library</Link></TopbarSlot>
+        <TopbarSlot><Link href="/library" className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to Library</Link></TopbarSlot>
         <EmptyState icon={AlertTriangle} title={error} description="The document may have been deleted, or the link is wrong." action={<Button asChild variant="outline"><Link href="/office?kind=word">Open documents</Link></Button>} />
       </div>
     );
@@ -429,48 +450,36 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TopbarSlot>
-        <Tip label="Back to Library" shortcut="G L"><Link href="/library" className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" /> Library</Link></Tip>
-        <Badge variant="info" className="shrink-0 gap-1 font-mono"><FileText className="size-3" /> DOCX</Badge>
-        {matter && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><button className="hidden max-w-[180px] shrink-0 items-center gap-1 truncate rounded-md border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground lg:flex cursor-pointer"><Briefcase className="size-3" /><span className="truncate">{matter.shortName}</span><ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">
-              <DropdownMenuLabel>Matter</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={matter.id} onValueChange={(v) => void office.save({ matterId: v })}>{matters.map((mm) => <DropdownMenuRadioItem key={mm.id} value={mm.id}><span className="truncate">{mm.shortName} <span className="text-muted-foreground">· {mm.client}</span></span></DropdownMenuRadioItem>)}</DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <input data-title-input="1" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => void commitTitle()} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} aria-label="Document title" placeholder="Untitled document" className="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold outline-none transition-colors hover:border-border focus:border-ring focus:bg-background" />
-        <span className={cn("hidden shrink-0 text-[11px] xl:inline", office.saveState === "error" ? "text-destructive" : office.saveState === "dirty" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")}>{saveLabel}</span>
-        <div className="flex shrink-0 items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5">{exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem onClick={() => void doExport("docx")}><FileText /> Word (.docx) with tracked changes</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doExport("docx-clean")}><FileText /> Word (.docx), changes accepted</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doExport("pdf")}><Printer /> PDF (print) <span className="ml-auto text-[10px] text-muted-foreground">⌘P</span></DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => void doExport("md")}><FileCode2 /> Markdown (.md)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doExport("txt")}><FileType2 /> Plain text (.txt)</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Tip label="Save" shortcut="⌘S"><Button variant="ghost" size="sm" onClick={() => void saveNow()} disabled={office.saveState === "saving"}><Save className="size-4" /> Save</Button></Tip>
-          <Tip label="Version history"><Button variant="ghost" size="sm" onClick={() => setVersionsOpen(true)} disabled={!ready}><History className="size-4" /> Versions</Button></Tip>
-          <Tip label="Track changes" shortcut="⌘⇧E"><Button variant={trackChanges ? "secondary" : "ghost"} size="sm" onClick={() => setTrackChanges(!trackChanges)} aria-pressed={trackChanges}><PenLine className={cn("size-4", trackChanges && "text-primary")} /> Track changes</Button></Tip>
-          <div className="flex h-8 items-center rounded-md border p-0.5">
-            <Tip label="Edit"><button onClick={() => setView("edit")} aria-label="Edit view" aria-pressed={view === "edit"} className={cn("rounded px-1.5 py-1 cursor-pointer", view === "edit" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}><PenLine className="size-3.5" /></button></Tip>
-            <Tip label="Preview (changes accepted)"><button onClick={() => setView("preview")} aria-label="Preview with changes accepted" aria-pressed={view === "preview"} className={cn("rounded px-1.5 py-1 cursor-pointer", view === "preview" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}><Eye className="size-3.5" /></button></Tip>
-          </div>
-          <Tip label="Comments" shortcut="⌘⇧C to add"><Button variant={commentsOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setCommentsOpen((v) => !v)} aria-pressed={commentsOpen} aria-label="Toggle comments"><MessageSquare className="size-4" />{comments.filter((c) => !c.resolved).length > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-[9px] leading-3 text-primary-foreground tabular">{comments.filter((c) => !c.resolved).length}</span>}</Button></Tip>
-          <Tip label="Drafting assistant" shortcut="⌘/"><Button variant={agentOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setAgentOpen((v) => !v)} aria-pressed={agentOpen} aria-label="Toggle assistant"><Sparkles className={cn("size-4", agentOpen && "text-primary")} /></Button></Tip>
-        </div>
-      </TopbarSlot>
+      <OfficeChrome
+        kind="word"
+        title={title}
+        onTitleChange={setTitle}
+        onTitleCommit={commitTitle}
+        titlePlaceholder="Untitled document"
+        matter={matter}
+        matters={matters}
+        onMatterChange={(v) => void office.save({ matterId: v })}
+        saveState={office.saveState}
+        lastSavedAt={office.lastSavedAt}
+        onSave={() => void saveNow()}
+        ready={ready}
+        download={{ items: downloadItems, busy: Boolean(exporting) }}
+        tools={
+          <>
+            <Tip label="Version history"><Button variant="ghost" size="icon-sm" onClick={() => setVersionsOpen(true)} disabled={!ready} aria-label="Version history"><History className="size-4" /></Button></Tip>
+            <ChromeToggle icon={MessageSquare} label="Comments" shortcut="⌘⇧C to add" pressed={commentsOpen} onClick={() => setCommentsOpen((v) => !v)} count={openComments} />
+            <ChromeToggle icon={Sparkles} label="Drafting assistant" shortcut="⌘/" pressed={agentOpen} onClick={() => setAgentOpen((v) => !v)} />
+          </>
+        }
+      />
 
       {editor && ready ? (
-        <WordToolbar editor={editor} settings={settings} onSettings={updateSettings} onInsert={(a) => void onInsert(a)} changes={changes} changeIndex={Math.min(changeIndex, Math.max(0, changes.length - 1))} onChangeNav={(d) => goToChange(changeIndex + d)} onAcceptAll={() => resolveAll("accept")} onRejectAll={() => resolveAll("reject")} onAcceptCurrent={() => resolveCurrent("accept")} onRejectCurrent={() => resolveCurrent("reject")} trackChanges={trackChanges} disabled={view === "preview"} />
+        <WordToolbar editor={editor} settings={settings} onSettings={updateSettings} onInsert={(a) => void onInsert(a)} trackChanges={trackChanges} onTrackChanges={setTrackChanges} view={view} onView={setView} disabled={view === "preview"} />
       ) : (
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">{[120, 90, 24, 24, 24, 24, 60, 24, 24].map((w, i) => <Skeleton key={i} className="h-6" style={{ width: w }} />)}</div>
+        <ToolbarSkeleton />
+      )}
+      {ready && view === "edit" && (
+        <TrackedChangesStrip count={changes.length} index={Math.min(changeIndex, Math.max(0, changes.length - 1))} authors={changeAuthors} onPrev={() => goToChange(changeIndex - 1)} onNext={() => goToChange(changeIndex + 1)} onAcceptCurrent={() => resolveCurrent("accept")} onRejectCurrent={() => resolveCurrent("reject")} onAcceptAll={() => resolveAll("accept")} onRejectAll={() => resolveAll("reject")} />
       )}
 
       <div className="flex min-h-0 flex-1">
@@ -481,9 +490,9 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
           </div>
         )}
         <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
-          <ResizablePanel minSize={420}>
+          <ResizablePanel minSize={360}>
             <div ref={canvasRef} className="word-canvas relative h-full overflow-auto scrollbar-thin" onClick={(e) => { if (e.target === e.currentTarget) editor?.commands.focus("end"); }}>
-              <div className={cn("flex min-h-full items-start justify-center gap-0 px-4 py-8", commentsOpen && "pr-1")}>
+              <div className={cn("flex min-h-full items-start justify-center gap-0 px-6 py-8", commentsOpen && "pr-2")}>
                 <div style={{ ...pageStyle, zoom: canvasWidth ? zoom : 1 }} className={cn("word-editor shrink-0", view === "preview" && "preview")}>
                   {!ready || !editor ? (
                     <div className="word-page serif" style={pageStyle}><div className="space-y-3">{[90, 100, 96, 80, 100, 60, 0, 100, 94, 88, 100, 70].map((w, i) => (w ? <Skeleton key={i} className="h-3.5" style={{ width: `${w}%` }} /> : <div key={i} className="h-4" />))}</div></div>
@@ -509,15 +518,15 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
           {agentOpen && (
             <>
               <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={400} minSize={320} maxSize={640}>
-                <OfficeAgentPanel endpoint="/api/office/word/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled document"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => editor?.chain().focus().undo().run()} onLocate={onLocate} suggestions={SUGGESTIONS} defaultMode={initialMode ?? "draft"} onApplied={onApplied} extraContext={() => ({ cursorParagraph: cursor.paraIndex, currentSection: cursor.headingText, settings })} />
+              <ResizablePanel defaultSize={narrow ? 340 : 400} minSize={300} maxSize={640}>
+                <OfficeAgentPanel endpoint="/api/office/word/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled document"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => editor?.chain().focus().undo().run()} onLocate={onLocate} suggestions={SUGGESTIONS} defaultMode={initialMode ?? "draft"} onApplied={onApplied} extraContext={() => ({ cursorParagraph: cursor.paraIndex, currentSection: cursor.headingText, settings })} onOpenVersions={() => setVersionsOpen(true)} versionsCount={versionsCount} onClose={() => setAgentOpen(false)} />
               </ResizablePanel>
             </>
           )}
         </ResizablePanelGroup>
       </div>
 
-      <StatusBar words={words} characters={stats?.characters ?? 0} pages={pages} pageLabel={`${page.label.split(" ")[0]} · ${m.label.split(" ")[0]} margins${landscape ? " · landscape" : ""}`} paraIndex={cursor.paraIndex} paraTotal={cursor.total} section={cursor.headingText} trackChanges={trackChanges} pending={changes.length} language={LANGUAGES.find((l) => l.id === settings.language)?.label ?? settings.language} onLanguage={(l) => updateSettings({ language: l })} saveLabel={saveLabel} comments={comments.filter((c) => !c.resolved).length} loading={loading} zoom={zoom} zoomMode={zoomMode} onZoom={setZoomMode} />
+      <StatusBar words={words} characters={stats?.characters ?? 0} pages={pages} pageLabel={`${page.label.split(" ")[0]} · ${m.label.split(" ")[0]} margins${landscape ? " · landscape" : ""}`} paraIndex={cursor.paraIndex} paraTotal={cursor.total} section={cursor.headingText} trackChanges={trackChanges} onTrackChanges={setTrackChanges} pending={changes.length} language={LANGUAGES.find((l) => l.id === settings.language)?.label ?? settings.language} onLanguage={(l) => updateSettings({ language: l })} saveLabel={saveLabel} saveState={office.saveState} comments={openComments} onComments={() => setCommentsOpen(true)} loading={loading} zoom={zoom} zoomMode={zoomMode} onZoom={setZoomMode} />
 
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImageFile(f); e.target.value = ""; }} />
       <VersionsDialog open={versionsOpen} onOpenChange={setVersionsOpen} list={office.versions.list} get={office.versions.get} checkpoint={async (label) => { await saveNow(); return office.versions.checkpoint(label); }} restore={async (vid) => { const d = await office.versions.restore(vid); if (d && editor) { loadContent(editor, d.content as PMNode); scheduleDerived(editor); scheduleCursor(editor); } return d; }} currentContent={() => (editor?.getJSON() as PMNode) ?? emptyDoc()} />

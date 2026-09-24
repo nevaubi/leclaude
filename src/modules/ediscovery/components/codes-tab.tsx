@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Tags, BookOpenText, ShieldAlert, PackageCheck, Plus, Pencil, Trash2, Save, Loader2, Download, FileText, Sparkles, RefreshCw, Eye, Check, ChevronDown, ExternalLink } from "lucide-react";
+import { Tags, BookOpenText, ShieldAlert, PackageCheck, Plus, Pencil, Trash2, Save, Loader2, Download, FileText, Sparkles, RefreshCw, Eye, Check, ChevronDown, ExternalLink, ShieldQuestion } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { readSSE } from "@/lib/ai/sse";
@@ -22,10 +22,13 @@ import { ISSUE_COLORS, type IssueCodeInput, type PrivilegeLogRow } from "../type
 import { useReview } from "./review-page";
 import { ApiError, api, usePrivilegeLog, useProduction, useRules } from "./use-review-data";
 import { IssueChip, NoKeyCallout, SectionLabel, TypeIcon, formatShortDate, issueColorClasses } from "./shared";
+import { ReviewQueueSection } from "./review-queue-section";
+import { CountChip } from "@/components/ui/misc";
 
-export type CodesSection = "codes" | "rules" | "privilege" | "production";
+export type CodesSection = "codes" | "rules" | "privilege" | "production" | "review";
 type Section = CodesSection;
 const SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
+  { id: "review", label: "Needs review", icon: ShieldQuestion },
   { id: "codes", label: "Issue codes", icon: Tags },
   { id: "rules", label: "Coding rules", icon: BookOpenText },
   { id: "privilege", label: "Privilege log", icon: ShieldAlert },
@@ -33,22 +36,26 @@ const SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
 ];
 
 export function CodesTab({ initialSection }: { initialSection?: CodesSection } = {}) {
+  const { matterId, reviewQueuePending, setReviewQueuePending } = useReview();
   const [section, setSection] = React.useState<Section>(initialSection ?? "codes");
+  const onQueueChanged = React.useCallback((n: number) => setReviewQueuePending(n), [setReviewQueuePending]);
+  const count = (id: Section) => (id === "review" && reviewQueuePending ? <CountChip tone="warning" className="ml-auto">{reviewQueuePending}</CountChip> : null);
   return (
     <div className="flex h-full min-h-0">
       <aside className="hidden w-[200px] shrink-0 border-r bg-sidebar/40 md:block">
         <SectionLabel>Codes & privilege</SectionLabel>
-        <nav className="px-1.5">
+        <nav className="px-1.5" aria-label="Codes and privilege sections">
           {SECTIONS.map((s) => (
             <button key={s.id} onClick={() => setSection(s.id)} className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors cursor-pointer", section === s.id ? "bg-accent font-medium text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent")} aria-current={section === s.id ? "page" : undefined}>
-              <s.icon className={cn("size-3.5", section === s.id ? "text-primary" : "text-muted-foreground")} />{s.label}
+              <s.icon className={cn("size-3.5", section === s.id ? "text-primary" : "text-muted-foreground")} />{s.label}{count(s.id)}
             </button>
           ))}
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-1 border-b px-2 md:hidden">{SECTIONS.map((s) => <button key={s.id} onClick={() => setSection(s.id)} className={cn("h-9 px-2.5 text-xs font-medium cursor-pointer", section === s.id ? "border-b-2 border-primary text-foreground" : "text-muted-foreground")}>{s.label}</button>)}</div>
+        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-2 no-scrollbar md:hidden">{SECTIONS.map((s) => <button key={s.id} onClick={() => setSection(s.id)} className={cn("flex h-9 shrink-0 items-center gap-1 px-2.5 text-xs font-medium cursor-pointer", section === s.id ? "border-b-2 border-primary text-foreground" : "text-muted-foreground")}>{s.label}{count(s.id)}</button>)}</div>
         <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
+          {section === "review" && <ReviewQueueSection matterId={matterId} onChanged={onQueueChanged} />}
           {section === "codes" && <IssueCodesSection />}
           {section === "rules" && <RulesSection />}
           {section === "privilege" && <PrivilegeLogSection />}

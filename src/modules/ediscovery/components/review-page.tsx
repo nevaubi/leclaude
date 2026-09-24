@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ChevronRight, FileSearch, KeyRound, Keyboard, RefreshCw, Sparkles, Maximize2, Minimize2, Loader2 } from "lucide-react";
+import { ChevronRight, FileSearch, KeyRound, Keyboard, RefreshCw, Sparkles, Maximize2, Minimize2, Loader2, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
@@ -11,10 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { CountChip } from "@/components/ui/misc";
 import { REVIEW_TABS, type ReviewTab, type SavedViewCounts } from "../types";
 import { DepositionsTab, CrossAnalysisTab, TimelineTab, PeopleGraphTab, ConflictsTab } from "../analysis";
 import { useReviewStore } from "./store";
-import { api, useIssueCodes, useStats } from "./use-review-data";
+import { api, useIssueCodes, useReviewQueueCount, useStats } from "./use-review-data";
 import { MatterHeader } from "./matter-header";
 import { ReviewTab as ReviewTabView } from "./review-tab";
 import { CodesTab, type CodesSection } from "./codes-tab";
@@ -40,6 +42,10 @@ interface ReviewContextValue {
   refreshList: () => void;
   openDocument: (id: string) => void;
   setTab: (tab: ReviewTab) => void;
+  /** Pending AI records awaiting a human decision in this matter (null when the integrity endpoint is unavailable). */
+  reviewQueuePending: number | null;
+  setReviewQueuePending: (n: number) => void;
+  refreshReviewQueue: () => void;
 }
 
 const ReviewContext = React.createContext<ReviewContextValue | null>(null);
@@ -80,6 +86,7 @@ export function ReviewPage(props: ReviewPageProps) {
   const setActiveMatterId = useShellStore((s) => s.setActiveMatterId);
   const stats = useStats(matterId);
   const codes = useIssueCodes(matterId);
+  const queue = useReviewQueueCount(matterId);
   const matter = props.matters.find((m) => m.id === matterId);
 
   // Initial state from the URL (doc / query / custodian deep links from other modules).
@@ -134,7 +141,8 @@ export function ReviewPage(props: ReviewPageProps) {
   const ctx = React.useMemo<ReviewContextValue>(() => ({
     matterId, matter, aiConfigured: props.aiConfigured, reviewers: props.reviewers, currentUserId: props.currentUserId,
     issueCodes: codes.data?.codes ?? [], viewCounts: stats.data?.views ?? null, refreshIssueCodes: codes.refresh, refreshStats: stats.refresh, refreshList, openDocument, setTab,
-  }), [matterId, matter, props.aiConfigured, props.reviewers, props.currentUserId, codes.data, stats.data, codes.refresh, stats.refresh, refreshList, openDocument, setTab]);
+    reviewQueuePending: queue.pending, setReviewQueuePending: queue.set, refreshReviewQueue: queue.refresh,
+  }), [matterId, matter, props.aiConfigured, props.reviewers, props.currentUserId, codes.data, stats.data, codes.refresh, stats.refresh, refreshList, openDocument, setTab, queue.pending, queue.set, queue.refresh]);
 
   const fullscreen = store.fullscreen && tab === "review" && !!store.openDocId;
 
@@ -162,18 +170,24 @@ export function ReviewPage(props: ReviewPageProps) {
         {!props.aiConfigured && (
           <Tip label="AI analysis, batch prediction and privilege-log drafting need OPENAI_API_KEY"><Link href="/settings#ai" className="shrink-0"><Badge variant="warning" className="cursor-pointer"><KeyRound className="size-3" /> No OpenAI key</Badge></Link></Tip>
         )}
-        <Tip label="Score unreviewed documents for responsiveness (batch AI)"><Button variant="ghost" size="sm" onClick={() => setPredictOpen(true)} aria-label="AI predict"><Sparkles className="size-4" /> <span className="hidden xl:inline">AI predict</span></Button></Tip>
-        <Tip label="Rebuild the search index for this matter"><Button variant="ghost" size="sm" onClick={rebuildIndex} disabled={indexing} aria-label="Reindex">{indexing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} <span className="hidden xl:inline">Reindex</span></Button></Tip>
         {tab === "review" && store.openDocId && (
           <Tip label={store.fullscreen ? "Exit full-screen viewer" : "Full-screen viewer"} shortcut="F"><Button variant="ghost" size="icon-sm" onClick={() => store.setFullscreen(!store.fullscreen)} aria-label="Toggle full screen">{store.fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button></Tip>
         )}
-        <Tip label="Keyboard shortcuts" shortcut="?"><Button variant="ghost" size="icon-sm" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts"><Keyboard className="size-4" /></Button></Tip>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="More actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem onClick={() => setPredictOpen(true)}><Sparkles /> AI predict responsiveness<span className="ml-auto text-[10px] text-muted-foreground">batch</span></DropdownMenuItem>
+            <DropdownMenuItem onClick={rebuildIndex} disabled={indexing}>{indexing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Rebuild search index</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setHelpOpen(true)}><Keyboard /> Keyboard shortcuts<span className="ml-auto text-[10px] text-muted-foreground">?</span></DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </TopbarSlot>
 
       <div className="flex h-full min-h-0 flex-col">
         {!fullscreen && (
           <>
-            <MatterHeader matter={matter} stats={stats.data} loading={stats.loading} onOpenCodes={() => setTabState("codes")} />
+            <MatterHeader matter={matter} stats={stats.data} loading={stats.loading} onOpenCodes={() => setTabState("codes")} onOpenHot={() => { useReviewStore.getState().setView("hot"); setTabState("review"); }} onOpenPrivileged={() => { useReviewStore.getState().setView("privileged"); setTabState("review"); }} />
             <nav className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b px-2 no-scrollbar" aria-label="Workspace tabs">
               {REVIEW_TABS.map((t, i) => (
                 <button
@@ -183,8 +197,8 @@ export function ReviewPage(props: ReviewPageProps) {
                   aria-current={tab === t.id ? "page" : undefined}
                 >
                   {t.label}
-                  {t.id === "review" && stats.data && <span className="rounded bg-muted px-1 py-px text-[10px] tabular text-muted-foreground">{stats.data.total.toLocaleString()}</span>}
-                  {t.id === "codes" && stats.data && stats.data.privileged > 0 && <span className="rounded bg-muted px-1 py-px text-[10px] tabular text-muted-foreground">{stats.data.privileged} priv</span>}
+                  {t.id === "review" && stats.data && <CountChip>{stats.data.total.toLocaleString()}</CountChip>}
+                  {t.id === "codes" && !!queue.pending && <Tip label={`${queue.pending} AI record${queue.pending === 1 ? "" : "s"} need review`}><CountChip tone="warning">{queue.pending}</CountChip></Tip>}
                   <span className="sr-only">shortcut {i + 1}</span>
                   {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />}
                 </button>
