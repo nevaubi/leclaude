@@ -9,5 +9,6 @@ import "./scans";
 import "@/modules/ediscovery/scans";
 import "@/modules/workflows/scans";
 import "@/modules/library/scans";
+import "@/modules/intel/scans";
 
 export { runScans, listScans, lastReport, fixFinding, ensureScheduledScans } from "./scans";

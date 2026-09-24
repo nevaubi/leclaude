@@ -62,3 +62,18 @@ export function describeFiles(files: { size: number }[]): string {
 
 /** Radix Select cannot hold an empty-string value; this sentinel stands in for "none". */
 export const NONE_VALUE = "__none__";
+
+/** Folder tree node as served by /api/library/tree (only the fields the pickers read). */
+export interface FolderTreeNode { id: string; name: string; depth?: number; children?: FolderTreeNode[] }
+export interface FolderOption { id: string; name: string; depth?: number; path?: string }
+
+/** Depth-first flatten of a folder tree into picker options with an indent depth and a " / " path. */
+export function flattenFolders(roots: FolderTreeNode[] | undefined, depth = 0, trail: string[] = []): FolderOption[] {
+  const out: FolderOption[] = [];
+  for (const n of roots ?? []) {
+    const path = [...trail, n.name];
+    out.push({ id: n.id, name: n.name, depth, path: path.join(" / ") });
+    out.push(...flattenFolders(n.children, depth + 1, path));
+  }
+  return out;
+}

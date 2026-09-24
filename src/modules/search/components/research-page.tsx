@@ -3,7 +3,6 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Loader2, PanelLeftOpen, PanelRightOpen, Scale, Search as SearchIcon, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -35,7 +35,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageTopbar icon={SettingsIcon} title="Settings" context={cfg.hasKey ? `OpenAI · ${cfg.model}` : "AI features need an OpenAI key"} />
+      <PageTopbar icon={<SettingsIcon />} title="Settings" context={cfg.hasKey ? `OpenAI · ${cfg.model}` : "AI features need an OpenAI key"} />
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         <div className="mx-auto grid max-w-6xl gap-x-6 gap-y-3 p-3 md:grid-cols-[176px_minmax(0,1fr)] md:p-4">
           <div className="md:sticky md:top-0 md:self-start">

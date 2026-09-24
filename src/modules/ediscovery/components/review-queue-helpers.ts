@@ -21,6 +21,7 @@ export const KIND_LABEL: Record<ProvenanceKind, string> = {
   "library.autotag": "Library auto-tag",
   "library.compare": "Clause comparison",
   research: "Research answer",
+  "intel.job": "Intelligence job",
 };
 
 /** Order groups appear in: the record types a reviewer must clear before production first. */

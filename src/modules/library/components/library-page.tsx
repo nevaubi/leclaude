@@ -142,6 +142,8 @@ function useLibraryShortcuts() {
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.closest("[role=dialog]"));
       const l = ref.current;
       if (typing) return;
+      // The list view's DataTable owns row navigation, selection and activation keys while it has focus.
+      if (t?.closest("[role=grid]") && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " ", "Home", "End"].includes(e.key)) return;
       // The shell's "g" navigation chord (g s, g l, …) must not also trigger single-key library shortcuts.
       if (chord === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) { chord = null; return; }
       if (e.key.toLowerCase() === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) { chord = "g"; clearTimeout(chordTimer); chordTimer = setTimeout(() => (chord = null), 900); return; }

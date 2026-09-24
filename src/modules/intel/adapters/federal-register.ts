@@ -18,7 +18,7 @@ const schema = z.object({
 
 export type FederalRegisterConfig = z.infer<typeof schema>;
 
-const TYPE_LABEL: Record<string, string> = { RULE: "Final rule", PRORULE: "Proposed rule", NOTICE: "Notice", PRESDOCU: "Presidential document" };
+const TYPE_LABEL: Record<string, string> = { RULE: "Final rule", "Rule": "Final rule", PRORULE: "Proposed rule", "Proposed Rule": "Proposed rule", NOTICE: "Notice", "Notice": "Notice", PRESDOCU: "Presidential document", "Presidential Document": "Presidential document" };
 
 /** Federal Register documents matching saved queries; full text fetched when available. */
 export const federalRegisterAdapter = defineAdapter<FederalRegisterConfig>({

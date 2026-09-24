@@ -6,35 +6,22 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
 import { SegmentedControl } from "@/components/ui/form";
-import { Filterbar, type FilterbarFilter, type FilterValues, type SavedView } from "@/components/ui/filterbar";
+import { Filterbar, type FilterbarFilter, type SavedView } from "@/components/ui/filterbar";
 import { deleteView, loadViews, saveView, storeViews } from "@/components/ui/filterbar-helpers";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { LibraryItemType } from "@/lib/types/domain";
-import { PRACTICE_AREAS, TYPE_LABEL, type LibraryFilters, type LibrarySort } from "../types";
+import { PRACTICE_AREAS, TYPE_LABEL, type LibrarySort } from "../types";
 import { LIBRARY_FOLDERS } from "../ids";
 import { useLibrary } from "./library-provider";
 import { useLibraryUI } from "./store";
 import { isFileDrag, readItemDrag } from "./use-uploads";
+import { filterValuesFrom, filtersPatchFrom } from "./toolbar-model";
 
 const SORT_LABEL: Record<LibrarySort, string> = { name: "Name", updated: "Last updated", created: "Created", size: "Size", type: "Type" };
 const TYPE_OPTIONS: (LibraryItemType | "office")[] = ["folder", "office", "docx", "xlsx", "pptx", "pdf", "template", "clause", "note", "link"];
-const FILTER_IDS = ["type", "matterId", "status", "practiceArea", "ownerId", "tag", "from", "to"] as const;
-type FilterId = (typeof FILTER_IDS)[number];
 const VIEWS_KEY = "leclaude:library:views";
 
-/** Library filters → Filterbar values (single-value chips; empty strings are dropped). */
-export function filterValuesFrom(filters: LibraryFilters): FilterValues {
-  const out: FilterValues = {};
-  for (const id of FILTER_IDS) { const v = filters[id]; if (v) out[id] = String(v); }
-  return out;
-}
-
-/** Filterbar values → a LibraryFilters patch (every known key present so cleared chips clear the filter). */
-export function filtersPatchFrom(values: FilterValues): Partial<LibraryFilters> {
-  const patch: Record<string, string | undefined> = {};
-  for (const id of FILTER_IDS) { const v = values[id]; patch[id] = Array.isArray(v) ? v[0] : v || undefined; }
-  return patch as Partial<LibraryFilters>;
-}
+export { filterValuesFrom, filtersPatchFrom } from "./toolbar-model";
 
 /** One 36px toolbar: breadcrumbs, quick search, chip filters, saved views, sort, view mode, upload and new. */
 export function Toolbar() {
@@ -72,7 +59,7 @@ export function Toolbar() {
   const filterDefs = React.useMemo<FilterbarFilter[]>(() => [
     { id: "type", label: "Type", options: TYPE_OPTIONS.map((t) => ({ value: t, label: t === "office" ? "Office documents" : TYPE_LABEL[t] })) },
     { id: "matterId", label: "Matter", icon: Briefcase, options: matters.map((m) => ({ value: m.id, label: m.shortName })) },
-    { id: "status", label: "Status", options: [{ value: "approved", label: "Approved" }, { value: "draft", label: "Draft" }, { value: "archived", label: "Archived" }] },
+    { id: "status", label: "Status", pinned: false, options: [{ value: "approved", label: "Approved" }, { value: "draft", label: "Draft" }, { value: "archived", label: "Archived" }] },
     { id: "practiceArea", label: "Practice area", pinned: false, options: PRACTICE_AREAS.map((p) => ({ value: p, label: p })) },
     { id: "ownerId", label: "Owner", pinned: false, options: people.map((p) => ({ value: p.id, label: p.name })) },
     { id: "tag", label: "Tag", pinned: false, options: (tree?.tags ?? []).map((t) => ({ value: t.tag, label: t.tag, count: t.count })) },
@@ -130,7 +117,7 @@ export function Toolbar() {
     >
       <DropdownMenu>
         <Tip label={`Sort: ${SORT_LABEL[sort]} · ${dir === "asc" ? "ascending" : "descending"}`}>
-          <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 gap-1 px-2 text-[11.5px] text-muted-foreground" aria-label="Sort">{dir === "asc" ? <ArrowDownAZ className="size-3.5" /> : <ArrowUpDown className="size-3.5" />}<span className="hidden lg:inline">{SORT_LABEL[sort]}</span><ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="xs" className="h-7 gap-1 px-2 text-[11.5px] text-muted-foreground" aria-label="Sort">{dir === "asc" ? <ArrowDownAZ className="size-3.5" /> : <ArrowUpDown className="size-3.5" />}<span className="hidden 2xl:inline">{SORT_LABEL[sort]}</span><ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
         </Tip>
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuLabel>Sort by</DropdownMenuLabel>
@@ -146,9 +133,9 @@ export function Toolbar() {
       </DropdownMenu>
       <SegmentedControl size="xs" ariaLabel="View" value={viewMode} onChange={(v) => setViewMode(v)} options={[{ value: "grid", label: <span className="sr-only">Grid</span>, icon: LayoutGrid, title: "Grid (1)" }, { value: "list", label: <span className="sr-only">List</span>, icon: List, title: "List (2)" }]} />
       <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void actions.upload(e.target.files); e.target.value = ""; }} />
-      <Tip label="Upload files into this folder" shortcut="U"><Button variant="outline" size="xs" onClick={() => fileRef.current?.click()} aria-label="Upload"><Upload className="size-3.5" /> <span className="hidden xl:inline">Upload</span></Button></Tip>
+      <Tip label="Upload files into this folder" shortcut="U"><Button variant="outline" size="xs" onClick={() => fileRef.current?.click()} aria-label="Upload"><Upload className="size-3.5" /><span className="hidden 2xl:inline">Upload</span></Button></Tip>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button size="xs" className="gap-1" aria-label="New item"><FilePlus2 className="size-3.5" /> <span className="hidden lg:inline">New</span> <ChevronDown className="size-3.5 opacity-70" /></Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><Button size="xs" className="gap-1" aria-label="New item"><FilePlus2 className="size-3.5" /><span className="hidden xl:inline">New</span><ChevronDown className="size-3.5 opacity-70" /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>In {list?.folder?.name ?? "Library"}</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => openDialog({ kind: "folder", parentId: folderId })}><FolderPlus /> Folder <span className="ml-auto text-[10px] text-muted-foreground">F</span></DropdownMenuItem>

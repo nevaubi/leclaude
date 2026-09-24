@@ -36,6 +36,8 @@ export interface HomeContextValue {
   userId: string;
   userName: string;
   aiConfigured: boolean;
+  /** The intelligence layer has published insights for the "For you" slot. */
+  intelInsights: boolean;
   people: PersonLite[];
   matters: MatterLite[];
   personById: (id?: string | null) => PersonLite | undefined;
@@ -288,6 +290,7 @@ export function HomeProvider({ initial, children }: { initial: HomeInitialData; 
     userId: data.userId,
     userName: data.userName,
     aiConfigured: data.aiConfigured,
+    intelInsights: data.intelInsights ?? false,
     people: data.people,
     matters: data.matters,
     personById,

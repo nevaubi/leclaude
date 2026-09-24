@@ -17,6 +17,9 @@ import { useHome } from "./home-provider";
 import { EmptyRow, PeopleStack, Section } from "./shared";
 import { hotCell, keyDateTone, matterMeta, matterRows, taskCell } from "./matters-table-model";
 
+/** Columns the overview leaves out so the table fits beside the brief; the focused view offers them in the chooser. */
+const OVERVIEW_HIDDEN = ["stage", "events", "team", "area", "client"];
+
 /** Matters as one dense table: name, stage, next key date, due, open tasks, hot docs, events, team. */
 export function MattersOverview() {
   const { matterOverview, matterFilter, setMatterFilter } = useHome();
@@ -48,14 +51,14 @@ function MattersTable({ rows, virtualize, activeId, density }: { rows: MatterOve
       id: "matter", header: "Matter", width: 260, minWidth: 160, sortable: true, locked: true, accessor: (m) => m.shortName,
       render: (m) => (
         <span className="flex min-w-0 items-baseline gap-1.5">
-          <Link href={`/ediscovery?matter=${m.id}`} className="truncate font-medium hover:underline underline-offset-2" onClick={(e) => e.stopPropagation()}>{m.shortName}</Link>
+          <Link href={`/ediscovery?matter=${m.id}`} className="max-w-full shrink-0 truncate font-medium hover:underline underline-offset-2" onClick={(e) => e.stopPropagation()}>{m.shortName}</Link>
           <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground xl:inline" title={matterMeta(m)}>{matterMeta(m)}</span>
         </span>
       ),
     },
     { id: "stage", header: "Stage", width: 150, minWidth: 90, sortable: true, accessor: (m) => m.stage ?? "", render: (m) => <span className="truncate text-muted-foreground">{m.stage ?? "—"}</span> },
     {
-      id: "keyDate", header: "Next key date", width: 240, minWidth: 140, sortable: true, accessor: (m) => m.nextKeyDate?.daysUntil ?? null,
+      id: "keyDate", header: "Next key date", width: 220, minWidth: 140, sortable: true, accessor: (m) => m.nextKeyDate?.daysUntil ?? null,
       render: (m) => m.nextKeyDate ? (
         <span className="flex min-w-0 items-baseline gap-1.5">
           <span className="truncate">{m.nextKeyDate.label}</span>
@@ -101,6 +104,7 @@ function MattersTable({ rows, virtualize, activeId, density }: { rows: MatterOve
       fill={virtualize}
       summary={virtualize}
       columnChooser={virtualize}
+      hiddenColumns={virtualize ? undefined : OVERVIEW_HIDDEN}
       activeId={activeId ?? undefined}
       ariaLabel="Matters"
       onRowActivate={(m) => router.push(`/ediscovery?matter=${m.id}`)}

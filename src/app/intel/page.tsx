@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Intelligence" };
 export default function IntelPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageTopbar icon={Radar} title="Intelligence" />
+      <PageTopbar icon={<Radar />} title="Intelligence" />
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         <div className="mx-auto max-w-3xl p-6">
           <h1 className="text-[17px] font-semibold tracking-tight">Intelligence</h1>

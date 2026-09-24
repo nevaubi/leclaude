@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/intel/jobs/tick", "schedule": "*/10 * * * *" }
+  ]
+}

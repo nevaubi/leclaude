@@ -1,7 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import type { Matter } from "@/lib/types/domain";
-import { courtIdFromName, courtMention, COURT_NAMES, dedupeMentions, jurisdictionForCourt, mention, mentionsFromCaption, mentionsFromCounselString, mentionsFromJudgeField, type IntelEntityMention } from "../mentions";
+import { courtIdFromName, courtMention, COURT_NAMES, dedupeMentions, jurisdictionForCourt, mention, mentionsFromCaption, mentionsFromCounselString, mentionsFromJudgeField } from "../mentions";
+import type { IntelEntityMention } from "../types";
 import { daysAgoISO } from "../providers/base";
 import type { CLDocketHit } from "../providers/courtlistener";
 import { defineAdapter, type AdapterContext } from "./types";
@@ -23,7 +24,7 @@ const schema = z.object({
 
 export type CourtListenerDocketsConfig = z.infer<typeof schema>;
 
-interface Target { docketId?: number; docketNumber?: string; matterIds: string[]; label: string; court?: string }
+interface Target { docketId?: number; docketNumber?: string; matterIds: string[]; label: string; court?: string; hit?: CLDocketHit }
 
 function matterCaseName(m: Matter): string {
   return m.name.replace(/^in re:?\s*/i, "").replace(/\s*\(.*?\)\s*$/, "").trim();
@@ -60,7 +61,7 @@ async function resolveTargets(ctx: AdapterContext<CourtListenerDocketsConfig>): 
       if (!res?.results.length) { ctx.note(`No CourtListener docket found for ${m.shortName}.`); continue; }
       const best = res.results.map((r) => ({ r, s: similarity(r.caseName, m.name) + (mdl && r.docketNumber?.includes(mdl) ? 0.5 : 0) })).sort((a, b) => b.s - a.s)[0];
       if (best.s < 0.2 || !best.r.docketId) { ctx.note(`Docket candidates for ${m.shortName} did not match well enough (best: ${best.r.caseName}).`); continue; }
-      targets.push({ docketId: best.r.docketId, matterIds: [m.id], label: m.shortName, court: best.r.courtId });
+      targets.push({ docketId: best.r.docketId, matterIds: [m.id], label: m.shortName, court: best.r.courtId, hit: best.r });
     }
   }
   // merge duplicates
@@ -68,7 +69,7 @@ async function resolveTargets(ctx: AdapterContext<CourtListenerDocketsConfig>): 
   for (const t of targets) {
     const key = t.docketId ? `id:${t.docketId}` : `no:${t.docketNumber!.toLowerCase()}`;
     const prev = byKey.get(key);
-    if (prev) prev.matterIds = Array.from(new Set([...prev.matterIds, ...t.matterIds])); else byKey.set(key, { ...t });
+    if (prev) { prev.matterIds = Array.from(new Set([...prev.matterIds, ...t.matterIds])); prev.hit = prev.hit ?? t.hit; } else byKey.set(key, { ...t });
   }
   return Array.from(byKey.values());
 }
@@ -114,6 +115,8 @@ export const courtListenerDocketsAdapter = defineAdapter<CourtListenerDocketsCon
         if (res && !docket) ctx.note(`Docket ${t.docketNumber} was not found on CourtListener.`);
       }
       if (!docket?.docketId) continue;
+      // The docket endpoint omits parties and counsel; merge them from the search hit when we have one.
+      if (t.hit) docket = { ...docket, parties: docket.parties.length ? docket.parties : t.hit.parties, attorneys: docket.attorneys.length ? docket.attorneys : t.hit.attorneys, assignedTo: docket.assignedTo ?? t.hit.assignedTo, referredTo: docket.referredTo ?? t.hit.referredTo, natureOfSuit: docket.natureOfSuit ?? t.hit.natureOfSuit, cause: docket.cause ?? t.hit.cause };
       const courtId = docket.courtId;
       const court = courtId ? COURT_NAMES[courtId] ?? docket.court : docket.court;
       const judgeMentions = mentionsFromJudgeField(docket.assignedTo);

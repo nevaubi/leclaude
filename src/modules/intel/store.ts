@@ -4,7 +4,7 @@ import { hybridSearch, indexDocuments, indexStats, removeDocument } from "@/lib/
 import { aiConfig } from "@/lib/ai/config";
 import { contentHash, sha256 } from "@/lib/integrity/hash";
 import { chunkIndexText, chunkIntelText, normalizeText, type ChunkOptions } from "./chunk";
-import { canonicalKey } from "./mentions";
+import { canonicalKey, cleanFirmName, cleanPersonName } from "./mentions";
 import {
   INTEL_COLLECTIONS,
   INTEL_VECTOR_NAMESPACE,
@@ -130,10 +130,13 @@ export function upsertDocument(input: IntelDocumentInput, opts: { now?: Date } =
   const text = normalizeText(input.text ?? "").slice(0, MAX_TEXT_CHARS);
   const hash = contentHash(text || input.title);
   const docs = intelDocuments();
-  const byHash = docs.findOne((x) => x.hash === hash && x.adapter === input.adapter);
-  const byExternal = !byHash && input.externalId ? docs.findOne((x) => x.adapter === input.adapter && x.externalId === input.externalId) : null;
-  const existing = byHash ?? byExternal ?? (input.id ? docs.get(input.id) : null);
-  const meta = compactMeta({ ...(existing?.meta ?? {}), ...(input.meta ?? {}), ...(input.entities?.length ? { entities: input.entities.slice(0, 60) } : {}) });
+  const byExternal = input.externalId ? docs.findOne((x) => x.adapter === input.adapter && x.externalId === input.externalId) : null;
+  const byId = !byExternal && input.id ? docs.get(input.id) : null;
+  // Same text from the same adapter merges into an existing row unless both carry different external identities.
+  const byHash = !byExternal && !byId ? docs.findOne((x) => x.hash === hash && x.adapter === input.adapter && (!input.externalId || !x.externalId)) : null;
+  const existing = byExternal ?? byId ?? byHash;
+  const duplicateOf = !existing && input.externalId ? docs.findOne((x) => x.hash === hash && x.adapter === input.adapter && x.id !== input.id) : null;
+  const meta = compactMeta({ ...(existing?.meta ?? {}), ...(input.meta ?? {}), ...(input.entities?.length ? { entities: input.entities.slice(0, 60) } : {}), ...(duplicateOf ? { duplicateOf: duplicateOf.id } : {}) });
   const base: IntelDocument = {
     id: existing?.id ?? input.id ?? docIdFor(input.adapter, input.externalId, hash),
     sourceId: input.sourceId,
@@ -163,7 +166,7 @@ export function upsertDocument(input: IntelDocumentInput, opts: { now?: Date } =
     chunkCount: existing?.chunkCount ?? 0,
     matterIds: uniq([...(existing?.matterIds ?? []), ...(input.matterIds ?? [])]),
     tags: uniq([...(existing?.tags ?? []), ...(input.tags ?? [])]),
-    flags: mergeFlags(existing?.flags, input.flags),
+    flags: mergeFlags(existing?.flags, [...(input.flags ?? []), ...(duplicateOf ? [{ kind: "duplicate" as const, note: `Identical text to ${duplicateOf.title.slice(0, 80)} (${duplicateOf.id})`, at: now, by: "store" }] : [])]),
     confidence: Math.max(0, Math.min(1, input.confidence ?? existing?.confidence ?? 0.7)),
     provenance: input.provenance ?? existing?.provenance,
     meta,
@@ -171,6 +174,7 @@ export function upsertDocument(input: IntelDocumentInput, opts: { now?: Date } =
     updatedAt: now,
   };
   const textChanged = !existing || existing.hash !== hash || !existing.textBlobId;
+  if (textChanged && existing?.meta?.seeded && !input.meta?.seeded) base.meta = { ...(base.meta ?? {}), seeded: false, seededReplacedAt: now };
   if (textChanged) {
     const blobId = textBlobIdFor(base.id);
     d.blobs.put(new TextEncoder().encode(text), "text/plain; charset=utf-8", { id: blobId, name: `${base.title.slice(0, 80)}.txt`, meta: { docId: base.id, kind: base.kind } });
@@ -408,12 +412,18 @@ export function entityIdFor(type: IntelEntityType, name: string) {
 }
 
 /** Find an entity by (type, name/alias) or external id. */
+/** Person and firm names are cleaned (honorifics, suffixes) before matching. */
+export function cleanEntityName(type: IntelEntityType, name: string): string {
+  return type === "judge" || type === "attorney" || type === "expert" ? cleanPersonName(name) : type === "firm" ? cleanFirmName(name) : name.replace(/\s+/g, " ").trim();
+}
+
 export function findEntity(type: IntelEntityType, name: string, externalIds?: Record<string, string>): IntelEntity | null {
-  const key = canonicalKey(name);
+  const key = canonicalKey(cleanEntityName(type, name));
   return intelEntities().findOne((e) => e.type === type && (e.canonical === key || e.aliases.some((a) => canonicalKey(a) === key) || Boolean(externalIds && e.externalIds && Object.entries(externalIds).some(([k, v]) => e.externalIds![k] === v))));
 }
 
-export function upsertEntity(input: EntityInput, now = new Date().toISOString()): IntelEntity {
+export function upsertEntity(rawInput: EntityInput, now = new Date().toISOString()): IntelEntity {
+  const input = { ...rawInput, name: cleanEntityName(rawInput.type, rawInput.name) || rawInput.name };
   const existing = (input.id ? intelEntities().get(input.id) : null) ?? findEntity(input.type, input.name, input.externalIds);
   const docIds = uniq([...(existing?.docIds ?? []), input.docId, input.source?.docId]).slice(-200);
   const sources = [...(existing?.sources ?? [])];

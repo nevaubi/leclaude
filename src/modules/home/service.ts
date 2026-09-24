@@ -416,6 +416,7 @@ export function loadHomeInitialData(opts: { now?: Date; userId?: string; aiConfi
   return {
     now: now.toISOString(),
     aiConfigured: opts.aiConfigured,
+    intelInsights: hasPublishedInsights(d),
     userId,
     userName: me?.name ?? currentUser().name,
     people: listPeopleLite(),
@@ -427,6 +428,11 @@ export function loadHomeInitialData(opts: { now?: Date; userId?: string; aiConfi
     matterOverview: matterOverview(now, userId),
     brief: getOrComputeBrief(now, userId),
   };
+}
+
+/** Whether the intelligence layer has insights to show on Home (collection is module-private to intel; read-only here). */
+function hasPublishedInsights(d: ReturnType<typeof db>): boolean {
+  try { return d.collection<{ id: string; status?: string }>("intel_insights").find((i) => i.status === "published" || i.status === "verified").length > 0; } catch { return false; }
 }
 
 /** Merge a patch: undefined leaves a field alone, null clears it. */

@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
-import { courtMention, dedupeMentions, jurisdictionForCourt, mention, type IntelEntityMention } from "../mentions";
+import { courtMention, dedupeMentions, jurisdictionForCourt, mention } from "../mentions";
+import type { IntelEntityMention } from "../types";
 import { intelDocuments } from "../store";
 import { defineAdapter } from "./types";
 

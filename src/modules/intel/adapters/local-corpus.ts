@@ -56,9 +56,10 @@ export const localCorpusAdapter = defineAdapter<LocalCorpusConfig>({
       return;
     }
     const exts = new Set(cfg.extensions.map((e) => e.toLowerCase().replace(/^\./, "")));
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     const matterKeys = new Map<string, string>();
-    for (const [k, v] of Object.entries(cfg.matterMap)) matterKeys.set(k.toLowerCase(), v);
-    for (const m of ctx.matters) { matterKeys.set(m.slug.toLowerCase(), m.id); matterKeys.set(m.shortName.toLowerCase(), m.id); matterKeys.set(m.id.toLowerCase(), m.id); }
+    for (const [k, v] of Object.entries(cfg.matterMap)) matterKeys.set(norm(k), v);
+    for (const m of ctx.matters) { matterKeys.set(norm(m.slug), m.id); matterKeys.set(norm(m.shortName), m.id); matterKeys.set(norm(m.id), m.id); }
     const maxBytes = cfg.maxFileMb * 1024 * 1024;
     let seen = 0;
     for (const dir of dirs) {
@@ -87,7 +88,7 @@ export const localCorpusAdapter = defineAdapter<LocalCorpusConfig>({
           continue;
         }
         const rel = path.relative(root, file);
-        const segments = rel.split(path.sep).slice(0, -1).map((s) => s.toLowerCase());
+        const segments = rel.split(path.sep).slice(0, -1).map(norm);
         const matterIds = Array.from(new Set(segments.map((s) => matterKeys.get(s)).filter((x): x is string => Boolean(x))));
         const extracted = await extractIntelText(bytes, path.basename(file), "");
         const text = extracted.text.slice(0, cfg.maxTextChars);

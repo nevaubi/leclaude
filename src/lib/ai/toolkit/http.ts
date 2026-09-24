@@ -76,6 +76,8 @@ export interface CachedHttpResponse {
   finalUrl: string;
   fetchedAt: string;
   expiresAt: string;
+  /** Selected response headers (retry-after, etag, last-modified), lower-cased. */
+  headers?: Record<string, string>;
 }
 
 /** Pluggable cache store (the intel layer supplies one backed by `intel_http_cache`). */
@@ -115,7 +117,7 @@ export function memoryHttpCache(max = 200): HttpCacheStore {
   };
 }
 
-export interface FetchCachedOptions extends RequestInit {
+export interface FetchCachedOptions extends Omit<RequestInit, "cache"> {
   timeoutMs?: number;
   maxBytes?: number;
   /** 0 disables caching for this call. Default 24h. */
@@ -154,7 +156,9 @@ export async function fetchCached(url: string, init: FetchCachedOptions = {}): P
     const max = init.maxBytes ?? 2_500_000;
     const body = new TextDecoder("utf-8", { fatal: false }).decode(buf.subarray(0, max));
     const now = Date.now();
-    const out: CachedHttpResponse = { status: res.status, contentType: res.headers.get("content-type") ?? "", body, finalUrl: res.url || url, fetchedAt: new Date(now).toISOString(), expiresAt: new Date(now + ttl).toISOString() };
+    const headers: Record<string, string> = {};
+    for (const h of ["retry-after", "etag", "last-modified"]) { const v = res.headers.get(h); if (v) headers[h] = v; }
+    const out: CachedHttpResponse = { status: res.status, contentType: res.headers.get("content-type") ?? "", body, finalUrl: res.url || url, fetchedAt: new Date(now).toISOString(), expiresAt: new Date(now + ttl).toISOString(), headers: Object.keys(headers).length ? headers : undefined };
     if (ttl > 0 && init.cache && (res.ok || init.cacheErrors)) init.cache.set(key, out);
     return { ...out, cached: false };
   } finally {

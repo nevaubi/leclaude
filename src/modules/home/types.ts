@@ -73,6 +73,8 @@ export interface MatterLite { id: string; shortName: string; name: string; capti
 export interface HomeInitialData {
   now: string; // ISO timestamp used for the first render (hydration-safe)
   aiConfigured: boolean;
+  /** True once the intelligence layer holds published insights; the "For you" slot fetches only then. */
+  intelInsights?: boolean;
   userId: string;
   userName: string;
   people: PersonLite[];

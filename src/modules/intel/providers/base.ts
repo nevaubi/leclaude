@@ -152,7 +152,7 @@ export class ProviderClient {
         maxBytes: opts.maxBytes,
         signal: opts.signal,
       });
-      const err = this.mapStatus(res.status, url, opts.retryableStatuses);
+      const err = this.mapStatus(res.status, url, opts.retryableStatuses, res.headers?.["retry-after"]);
       if (err) { this.stats.errors++; throw err; }
       return { text: res.body, status: res.status, contentType: res.contentType, finalUrl: res.finalUrl, cached: res.cached, fetchedAt: res.fetchedAt };
     } catch (e) {
@@ -224,10 +224,12 @@ export interface ProviderFactoryOptions {
   limiter?: TokenBucket;
   sleep?: (ms: number) => Promise<void>;
   maxWaitMs?: number;
-  env?: Partial<Record<"COURTLISTENER_API_TOKEN" | "GOVINFO_API_KEY" | "FIRECRAWL_API_KEY" | "TAVILY_API_KEY" | "OPENFDA_API_KEY", string | undefined>>;
+  env?: Partial<Record<ProviderEnvKey, string | undefined>>;
 }
 
-export function envValue(opts: ProviderFactoryOptions | undefined, key: NonNullable<ProviderFactoryOptions["env"]> extends Record<infer K, unknown> ? K : never): string | undefined {
+export type ProviderEnvKey = "COURTLISTENER_API_TOKEN" | "GOVINFO_API_KEY" | "FIRECRAWL_API_KEY" | "TAVILY_API_KEY" | "OPENFDA_API_KEY";
+
+export function envValue(opts: ProviderFactoryOptions | undefined, key: ProviderEnvKey): string | undefined {
   if (opts?.env && key in opts.env) { const v = opts.env[key]; return v && v.trim() ? v.trim() : undefined; }
   const v = process.env[key];
   return v && v.trim() ? v.trim() : undefined;

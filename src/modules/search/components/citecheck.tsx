@@ -151,10 +151,10 @@ export function CiteChecker({ initialText, matterId }: { initialText?: string; m
   return (
     <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-4 overflow-y-auto p-6 scrollbar-thin">
       <div>
-        <div className="flex items-center gap-2"><ShieldCheck className="size-5 text-primary" /><h1 className="text-lg font-semibold tracking-tight">Citation checker</h1></div>
+        <div className="flex items-center gap-2"><ShieldCheck className="size-4 text-muted-foreground" /><h1 className="text-[17px] font-semibold tracking-tight">Citation checker</h1></div>
         <p className="mt-1 text-sm text-muted-foreground">Paste a brief, memo or draft. Every case citation is resolved against CourtListener; statutes, regulations and Federal Register cites are checked for form and linked to the official source. Unresolved cites are the first place to look for hallucinated or mistyped authority.</p>
       </div>
-      <div className="rounded-xl border bg-card p-3 shadow-xs">
+      <div className="rounded-md border bg-card p-3">
         <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste text containing citations, e.g. 550 U.S. 544, 860 F.3d 249, 15 U.S.C. § 2607(e), 40 C.F.R. § 141.61…" className="min-h-[180px] font-serif text-[13.5px] leading-relaxed" spellCheck={false} />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Button onClick={check} disabled={loading || !text.trim()}>{loading ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />} Check citations</Button>

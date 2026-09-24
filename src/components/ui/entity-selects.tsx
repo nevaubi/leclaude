@@ -2,7 +2,9 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
-import { NONE_VALUE } from "./form-helpers";
+import { NONE_VALUE, flattenFolders, type FolderOption, type FolderTreeNode } from "./form-helpers";
+
+export { flattenFolders, type FolderOption } from "./form-helpers";
 
 /**
  * Entity pickers for workflow front ends and forms. Each accepts explicit
@@ -12,10 +14,8 @@ import { NONE_VALUE } from "./form-helpers";
 
 export interface MatterOption { id: string; shortName: string; name?: string; caption?: string }
 export interface PersonOption { id: string; name: string; title?: string }
-export interface FolderOption { id: string; name: string; depth?: number; path?: string }
-
 interface TreePayload {
-  roots?: { id: string; name: string; depth?: number; children?: TreePayload["roots"] }[];
+  roots?: FolderTreeNode[];
   matters?: { id: string; shortName: string; name?: string }[];
   people?: { id: string; name: string }[];
 }
@@ -31,15 +31,6 @@ function loadTree(): Promise<TreePayload | null> {
 /** Test hook: forget the cached payload (e.g. after creating a folder). */
 export function resetEntityCache() { treePromise = null; }
 
-export function flattenFolders(roots: TreePayload["roots"] | undefined, depth = 0, trail: string[] = []): FolderOption[] {
-  const out: FolderOption[] = [];
-  for (const n of roots ?? []) {
-    const path = [...trail, n.name];
-    out.push({ id: n.id, name: n.name, depth, path: path.join(" / ") });
-    out.push(...flattenFolders(n.children, depth + 1, path));
-  }
-  return out;
-}
 
 function useTree<T>(pick: (t: TreePayload) => T[], explicit?: T[]): T[] {
   const [loaded, setLoaded] = React.useState<T[]>([]);

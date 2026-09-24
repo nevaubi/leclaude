@@ -63,7 +63,7 @@ export function Filterbar(p: FilterbarProps) {
       <div className="flex min-h-9 flex-wrap items-center gap-1.5 px-2 py-1">
         {p.leading}
         {p.onQueryChange && (
-          <div className="relative w-full sm:w-52 lg:w-60">
+          <div className="relative w-full sm:w-44 xl:w-56">
             {p.queryLoading ? <Loader2 className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" /> : <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />}
             <Input ref={p.inputRef} size={inputSize} value={p.query ?? ""} onChange={(e) => p.onQueryChange?.(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { p.onQueryChange?.(""); (e.target as HTMLInputElement).blur(); } }} placeholder={p.queryPlaceholder ?? "Search…"} className="pl-7 pr-7" aria-label={p.queryPlaceholder ?? "Search"} />
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
@@ -142,7 +142,7 @@ function SavedViewsMenu({ views, active, canSave, onSave, onApply, onDelete }: {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="xs" className={cn("h-7 gap-1 px-2 text-[11.5px]", active ? "text-foreground" : "text-muted-foreground")} aria-label="Saved views"><Bookmark className={cn("size-3", active && "fill-current")} /><span className="hidden md:inline">{active ? active.name : "Views"}</span><ChevronDown className="size-3 opacity-60" /></Button>
+          <Button variant="ghost" size="xs" className={cn("h-7 gap-1 px-2 text-[11.5px]", active ? "text-foreground" : "text-muted-foreground")} aria-label="Saved views"><Bookmark className={cn("size-3", active && "fill-current")} /><span className="hidden xl:inline">{active ? active.name : "Views"}</span><ChevronDown className="size-3 opacity-60" /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
           <DropdownMenuLabel>Saved views</DropdownMenuLabel>

@@ -166,9 +166,13 @@ export function DataTable<T>(props: DataTableProps<T>) {
     if (!NAV_KEYS.has(key) && !isSelectAll) return;
     if (e.metaKey || e.ctrlKey || e.altKey) { if (!isSelectAll) return; }
     const { next, action } = keyboardNav({ selected, anchorId, activeIndex }, key, { ids, shift: e.shiftKey, meta: e.metaKey || e.ctrlKey, pageSize: Math.max(1, Math.floor((scrollRef.current?.clientHeight ?? 400) / rowH) - 1), mode: selectionMode });
-    if (action === "activate") { e.preventDefault(); const row = sorted[activeIndex]; if (row) props.onRowActivate?.(row); return; }
-    if (action === "none" && next === ({ selected, anchorId, activeIndex } as unknown)) return;
+    if (action === "activate") { e.preventDefault(); e.stopPropagation(); const row = sorted[activeIndex]; if (row) props.onRowActivate?.(row); return; }
+    // Escape with nothing selected is left to the page (close a panel, leave a section).
+    if (key === "Escape" && selected.length === 0) return;
+    if (action === "none" && !sorted.length) return;
     e.preventDefault();
+    // Handled keys stop here so window-level shortcuts (arrow navigation on cards, page hotkeys) do not act twice.
+    e.stopPropagation();
     applyNav(next);
   };
 

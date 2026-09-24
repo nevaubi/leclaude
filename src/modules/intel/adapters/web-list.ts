@@ -31,7 +31,8 @@ export const webListAdapter = defineAdapter<WebListConfig>({
   defaults: schema.parse({}),
   async run(ctx) {
     const cfg = ctx.config;
-    const entries = [...cfg.urls.map((u) => (typeof u === "string" ? { url: u, tags: [] as string[] } : u)), ...(ctx.scope.targets ?? []).filter((t) => /^https?:\/\//i.test(t)).map((url) => ({ url, tags: [] as string[] }))];
+    type Entry = { url: string; title?: string; matterId?: string; tags: string[]; kind?: WebListConfig["kind"] };
+    const entries: Entry[] = [...cfg.urls.map((u): Entry => (typeof u === "string" ? { url: u, tags: [] } : u)), ...(ctx.scope.targets ?? []).filter((t) => /^https?:\/\//i.test(t)).map((url): Entry => ({ url, tags: [] }))];
     if (!entries.length) { ctx.note("No URLs configured."); return; }
     const seen = new Set<string>();
     for (const e of entries) {
