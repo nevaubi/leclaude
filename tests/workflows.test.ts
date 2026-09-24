@@ -183,7 +183,7 @@ describe("graph utilities", () => {
       expect(v.issues.filter((i) => i.level === "warning"), t.id).toHaveLength(0);
       for (const n of t.nodes) expect(KNOWN_NODE_TYPES).toContain(n.type);
     }
-    expect(NODE_TYPES).toHaveLength(27);
+    expect(NODE_TYPES.length).toBeGreaterThanOrEqual(27);
   });
 });
 

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tip } from "@/components/ui/tooltip";
 import { PersonAvatar } from "@/components/ui/avatar";
-import { NotSourceBackedBanner, TrustChip } from "./trust";
+import { NotSourceBackedBanner, TrustBadge as TrustChip } from "@/components/ai/trust-badge";
 import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
 import { formatBluebook } from "../normalize";
 import { memoTitle } from "../memo";
@@ -87,7 +87,7 @@ function StatusLine({ message, live }: { message: Partial<ResearchMessage> & { c
     s ? `${s.rounds} round${s.rounds === 1 ? "" : "s"}` : null,
     s ? `${s.agents} agent${s.agents === 1 ? "" : "s"}` : null,
     s?.read ? `${s.read} read` : null,
-    v && v.verdicts?.length !== 0 && (v.supported + v.unsupported + v.contradicted) > 0 ? `${(v.score * 100).toFixed(0)}% verified` : null,
+    v && (v.supported + v.unsupported + v.contradicted) > 0 ? `${(v.score * 100).toFixed(0)}% verified` : null,
     s ? `${(s.durationMs / 1000).toFixed(1)}s` : null,
   ].filter(Boolean);
   return (

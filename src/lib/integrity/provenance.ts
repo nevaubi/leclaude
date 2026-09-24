@@ -1,5 +1,5 @@
 import { aiConfig } from "@/lib/ai/config";
-import { promptHash } from "./hash";
+import { promptHash } from "./hash-pure";
 import { CONFIDENCE_GATE, type Provenance, type ProvenanceSource } from "./types";
 
 /** Build a provenance record for an AI output. Attach as `provenance` on the stored record. */

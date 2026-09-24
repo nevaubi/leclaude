@@ -69,7 +69,7 @@ export function ResearchComposer(p: ComposerProps) {
     const on = LAW_GROUPS.filter((g) => g.sources.some((x) => s.sources.includes(x)));
     if (on.length === LAW_GROUPS.length) return "All law";
     if (on.length === 0) return "No law scope";
-    return on.map((g) => g.label).join(", ");
+    return on.length > 2 ? `${on[0].label} +${on.length - 1}` : on.map((g) => g.label).join(", ");
   }, [s.sources]);
   const jurisdictionLabel = s.jurisdiction === "all-federal" ? "All jurisdictions" : j.label.split(" (")[0];
   const preview = React.useMemo(() => planLanes({ question: p.value || "question", settings: s, mode: s.fast ? "fast" : "deep", hasMatter: Boolean(s.matterId) }), [p.value, s]);

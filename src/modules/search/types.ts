@@ -103,7 +103,7 @@ export interface SearchSettings {
 }
 
 export const DEFAULT_SETTINGS: SearchSettings = {
-  sources: ["caselaw", "statutes", "regulations", "library"],
+  sources: ["caselaw", "statutes", "regulations", "federal_register", "dockets", "library"],
   jurisdiction: "all-federal",
   courts: "",
   datePreset: "any",

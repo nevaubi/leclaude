@@ -82,7 +82,7 @@ function Empty({ children }: { children: React.ReactNode }) { return <li classNa
 function Row({ active, onClick, title, meta, time, onDelete, onPin, pinned }: { active: boolean; onClick: () => void; title: string; meta: string; time: string; onDelete?: () => void; onPin?: () => void; pinned?: boolean }) {
   return (
     <li className={cn("group relative rounded-md transition-colors", active ? "bg-primary/10" : "hover:bg-sidebar-accent")}>
-      <button onClick={onClick} className="block w-full px-2 py-1.5 text-left cursor-pointer">
+      <button onClick={onClick} className="block w-full px-2 py-1.5 pr-2 text-left cursor-pointer group-hover:pr-12">
         <div className={cn("truncate text-[12.5px]", active ? "font-medium text-primary" : "text-foreground")}>{title}</div>
         <div className="mt-0.5 flex items-center gap-1 truncate text-[10.5px] text-muted-foreground"><span className="truncate">{meta}</span>{meta && <span>·</span>}<RelTime iso={time} /></div>
       </button>

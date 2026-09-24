@@ -1,4 +1,4 @@
 export * from "./types";
-export * from "./hash";
+export * from "./hash-pure";
 export * from "./provenance";
 export * from "./dedupe";
