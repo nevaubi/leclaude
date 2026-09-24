@@ -86,6 +86,8 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
       const surface = `office.${config.kind}`;
       const startedAt = Date.now();
       let usage: Provenance["usage"] | undefined;
+      /** True when the runtime refused to start (no OPENAI_API_KEY): nothing was generated, so nothing is audited or given provenance. */
+      let noKey = false;
       const turnProvenance = () => makeProvenance({ surface, sources: citations, model, instructions: `${config.kind}:${mode}`, input: body.message });
       const ctx: OfficeAgentContext<S> = {
         mode,
@@ -162,9 +164,13 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
           },
         });
       } catch (e) {
-        if (e instanceof AIConfigError) { send({ type: "error", message: e.message, code: "no_api_key" }); return; }
+        if (e instanceof AIConfigError) { noKey = true; send({ type: "error", message: e.message, code: "no_api_key" }); return; }
         throw e;
       } finally {
+        if (noKey) {
+          // Explicit degraded state for the client; no audit event and no provenance record for a turn that never ran.
+          send({ type: "artifact", artifact: { kind: "office-summary", title: "summary", data: { proposals: 0, findings: 0, sources: 0, verification: null, error: "no_api_key" } } });
+        } else {
         // Final provenance for the turn: every proposal/finding gets the full source list, and record cites in the
         // proposal text are cross-checked against the matter's Bates numbers (unresolved ones get [VERIFY] in the summary).
         const known = matter ? db().edocs.find((x) => x.matterId === matter.id).flatMap((x) => [x.bates, ...(x.batesEnd ? [x.batesEnd] : [])]) : [];
@@ -180,6 +186,7 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
         audit("ai.generate", { kind: "officeDoc", id: body.docId, label: ctx.docTitle, matterId: matter?.id ?? undefined }, { surface, mode, research: ctx.research, model, tokens: usage?.total, proposals: proposals.length, findings: findings.length, sources: citations.slice(0, 10).map((c) => c.cite ?? c.url ?? c.title), durationMs: Date.now() - startedAt, message: body.message.slice(0, 200) });
         send({ type: "artifact", artifact: { kind: "office-provenance", title: "provenance", data: { run, proposals: proposals.map((p) => ({ id: p.id, provenance: p.provenance })), findings: findings.map((f) => ({ id: f.id, provenance: f.provenance })) } } });
         send({ type: "artifact", artifact: { kind: "office-summary", title: "summary", data: { proposals: proposals.length, findings: findings.length, sources: citations.length, verification: run.verification?.status ?? null } } });
+        }
       }
     });
   };

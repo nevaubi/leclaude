@@ -89,6 +89,18 @@ export function extractRunProvenance(data: unknown): { run: Provenance | null; p
   return out;
 }
 
+/** Per assistant-message run info kept by the office agent panel. */
+export interface AgentRunInfo { provenance: Provenance | null; research: boolean; mode: string; message: string; noKey?: boolean }
+
+/**
+ * Merge the run-level provenance from the `office-provenance` artifact into the message's run info.
+ * The artifact arrives after any error event, so an earlier `noKey` flag (and the research/mode/message
+ * captured at send time) must survive; only the provenance is replaced.
+ */
+export function mergeRunProvenance(prev: AgentRunInfo | undefined, run: Provenance | null, defaults: { research: boolean; mode: string; message: string }): AgentRunInfo {
+  return { ...(prev ?? {}), provenance: run, research: prev?.research ?? defaults.research, mode: prev?.mode ?? defaults.mode, message: prev?.message ?? defaults.message };
+}
+
 /** Research was requested but the run read nothing: warn before anyone relies on the answer. */
 export function needsNotSourceBackedBanner(research: boolean, provenance: Provenance | null | undefined): boolean {
   if (!research) return false;

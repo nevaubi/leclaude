@@ -17,7 +17,7 @@ import { ToolActivityList, CitationList } from "@/components/ai/tool-activity";
 import { NotSourceBackedBanner, TrustBadge } from "@/components/ai/trust-badge";
 import { useAgent, type AgentAttachment, type AgentMessage } from "@/hooks/use-agent";
 import type { AgentEvent } from "@/lib/ai/agent";
-import { extractRunProvenance, needsNotSourceBackedBanner, proposalAuditPayload, SegmentedControl, type AuditedProposalStatus } from "./office-chrome";
+import { extractRunProvenance, mergeRunProvenance, needsNotSourceBackedBanner, proposalAuditPayload, SegmentedControl, type AuditedProposalStatus } from "./office-chrome";
 import type { EditProposal, OfficeAgentMode, OfficeAgentSuggestions, OfficeScope, ReviewFinding } from "./types";
 
 export interface ApplyResult { applied: string[]; failed: { id: string; error: string }[] }
@@ -134,7 +134,8 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
       setFindings((fs) => [...fs, ev.artifact.data as ProvenancedFinding]);
     } else if (ev.type === "artifact" && ev.artifact.kind === "office-provenance") {
       const { run, proposals: perProposal, findings: perFinding } = extractRunProvenance(ev.artifact.data);
-      setRuns((rs) => ({ ...rs, [ctx.messageId]: { provenance: run, research: rs[ctx.messageId]?.research ?? researchRef.current, mode: rs[ctx.messageId]?.mode ?? modeRef.current, message: rs[ctx.messageId]?.message ?? lastMessageRef.current } }));
+      // The provenance artifact arrives after any error event: merge, never replace, so a no-key failure keeps its dedicated card.
+      setRuns((rs) => ({ ...rs, [ctx.messageId]: mergeRunProvenance(rs[ctx.messageId], run, { research: researchRef.current, mode: modeRef.current, message: lastMessageRef.current }) as RunInfo }));
       if (Object.keys(perProposal).length) setProposals((ps) => ps.map((p) => (perProposal[p.id] ? { ...p, provenance: perProposal[p.id] } : p)));
       if (Object.keys(perFinding).length) setFindings((fs) => fs.map((f) => (perFinding[f.id] ? { ...f, provenance: perFinding[f.id] } : f)));
     } else if (ev.type === "error" && ev.code === "no_api_key") {

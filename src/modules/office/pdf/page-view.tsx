@@ -113,7 +113,7 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
       await tl.render().catch((e: unknown) => { if (!cancelled && process.env.NODE_ENV !== "production") console.warn(`[pdf] text layer for page ${display} failed: ${e instanceof Error ? e.message : String(e)}`); });
     })();
     return () => { cancelled = true; layer?.cancel(); };
-  }, [pdfPage, viewport]);
+  }, [pdfPage, viewport, display]);
 
   // ---- text selection → store.selection / markups -------------------------------------
   const commitSelection = React.useCallback(() => {

@@ -1,5 +1,7 @@
 import * as React from "react";
 import type { Metadata } from "next";
+import { Settings as SettingsIcon } from "lucide-react";
+import { TopbarSlot } from "@/components/shell/app-shell";
 import { PageHeader } from "@/components/ui/misc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +44,11 @@ export default function SettingsPage() {
 
   return (
     <div className="h-full overflow-auto scrollbar-thin">
+      <TopbarSlot>
+        <SettingsIcon className="size-4 text-muted-foreground" />
+        <span className="text-sm font-semibold">Settings</span>
+        <span className="hidden text-xs text-muted-foreground md:inline">{cfg.hasKey ? `OpenAI · ${cfg.model}` : "AI features need an OpenAI key"}</span>
+      </TopbarSlot>
       <div className="mx-auto max-w-5xl p-4 md:p-6">
         <PageHeader title="Settings" description="Configuration is read from environment variables; edit .env.local and restart to change it." />
         <div className="mt-5 grid gap-6 md:grid-cols-[200px_minmax(0,1fr)]">

@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type { Provenance } from "@/lib/integrity/types";
 import type { EditProposal } from "@/modules/office/shared/types";
-import { KIND_BADGE, approximatePages, countLabel, downloadItemsToEntries, extractRunProvenance, needsNotSourceBackedBanner, proposalAuditPayload, saveButtonLabel, saveTone, savedAtLabel } from "@/modules/office/shared/office-chrome-helpers";
+import { KIND_BADGE, approximatePages, countLabel, downloadItemsToEntries, extractRunProvenance, mergeRunProvenance, needsNotSourceBackedBanner, proposalAuditPayload, saveButtonLabel, saveTone, savedAtLabel } from "@/modules/office/shared/office-chrome-helpers";
 
 const prov = (over: Partial<Provenance> = {}): Provenance => ({ model: "gpt-test", generatedAt: "2026-09-24T12:00:00.000Z", sources: [], surface: "office.word", ...over });
+
+describe("office chrome: run info merge", () => {
+  const defaults = { research: false, mode: "draft", message: "Tighten the standard" };
+  it("keeps the no-key flag and the values captured at send time when the provenance artifact arrives", () => {
+    const merged = mergeRunProvenance({ provenance: null, research: true, mode: "ask", message: "first", noKey: true }, prov(), defaults);
+    expect(merged.noKey).toBe(true);
+    expect(merged.research).toBe(true);
+    expect(merged.mode).toBe("ask");
+    expect(merged.message).toBe("first");
+    expect(merged.provenance?.model).toBe("gpt-test");
+  });
+  it("falls back to the panel's current state when the message had no run info yet", () => {
+    const merged = mergeRunProvenance(undefined, null, defaults);
+    expect(merged).toEqual({ provenance: null, research: false, mode: "draft", message: "Tighten the standard" });
+  });
+});
 
 describe("office chrome: save state", () => {
   it("maps save states to a tone and a primary button label", () => {

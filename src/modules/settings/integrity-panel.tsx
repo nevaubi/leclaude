@@ -32,7 +32,7 @@ export function IntegrityPanel() {
   };
   const findings = (report?.results ?? []).flatMap((r) => r.findings.map((f) => ({ ...f, scanName: r.name }))).sort((a, b) => ["high", "medium", "low", "info"].indexOf(a.severity) - ["high", "medium", "low", "info"].indexOf(b.severity));
   return (
-    <div className="space-y-6" id="integrity">
+    <div className="space-y-6">
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
           <div>
