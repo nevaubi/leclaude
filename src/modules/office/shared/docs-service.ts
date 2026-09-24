@@ -5,7 +5,10 @@ import type { OfficeComment, OfficeDocument, OfficeKind, OfficeVersion } from "@
 import { indexDocument, VECTOR_COLLECTIONS_OFFICE } from "./indexing";
 import { audit } from "@/lib/integrity/audit";
 
-const CURRENT_USER = { id: "p_jwhitfield", name: "Jordan Whitfield" };
+import { currentUser } from "@/lib/current-user";
+
+/** The acting user for document authorship (LECLAUDE_USER_ID aware). */
+function who() { return currentUser((id) => db().people.get(id)?.name); }
 const AUTOSAVE_VERSION_INTERVAL_MS = 10 * 60 * 1000;
 
 export function listOfficeDocs(opts: { kind?: OfficeKind; matterId?: string; limit?: number } = {}) {
@@ -24,15 +27,15 @@ export function createOfficeDoc(input: { kind: OfficeKind; title?: string; conte
     contentVersion: 1,
     createdAt: now,
     updatedAt: now,
-    createdById: CURRENT_USER.id,
-    updatedById: CURRENT_USER.id,
+    createdById: who().id,
+    updatedById: who().id,
     templateId: input.templateId,
     tags: input.tags,
     meta: input.meta,
     size: JSON.stringify(input.content ?? null).length,
   };
   db().officeDocs.put(doc);
-  db().officeVersions.put({ id: nanoid(10), docId: doc.id, version: 1, label: "Created", summary: input.templateId ? `Created from template ${input.templateId}` : "Created", authorId: CURRENT_USER.id, authorName: CURRENT_USER.name, createdAt: now, content: input.content });
+  db().officeVersions.put({ id: nanoid(10), docId: doc.id, version: 1, label: "Created", summary: input.templateId ? `Created from template ${input.templateId}` : "Created", authorId: who().id, authorName: who().name, createdAt: now, content: input.content });
   void reindex(doc);
   return doc;
 }
@@ -66,7 +69,7 @@ export function saveOfficeDoc(id: string, opts: SaveOptions): OfficeDocument | n
     tags: opts.tags ?? cur.tags,
     contentVersion: contentChanged ? cur.contentVersion + 1 : cur.contentVersion,
     updatedAt: now,
-    updatedById: CURRENT_USER.id,
+    updatedById: who().id,
     size: opts.content !== undefined ? JSON.stringify(opts.content ?? null).length : cur.size,
   };
   d.officeDocs.put(next);
@@ -77,7 +80,7 @@ export function saveOfficeDoc(id: string, opts: SaveOptions): OfficeDocument | n
     const stale = !last || Date.now() - new Date(last.createdAt).getTime() > AUTOSAVE_VERSION_INTERVAL_MS;
     if (explicitVersion || stale) {
       const changedFields = countChangedFields(last?.content, next.content);
-      d.officeVersions.put({ id: nanoid(10), docId: id, version: (last?.version ?? 0) + 1, label: opts.version?.label, summary: opts.version?.summary ?? "Saved changes", authorId: CURRENT_USER.id, authorName: opts.version?.authorName ?? CURRENT_USER.name, createdAt: now, content: next.content, changedFields });
+      d.officeVersions.put({ id: nanoid(10), docId: id, version: (last?.version ?? 0) + 1, label: opts.version?.label, summary: opts.version?.summary ?? "Saved changes", authorId: who().id, authorName: opts.version?.authorName ?? who().name, createdAt: now, content: next.content, changedFields });
       // Agent edits applied through the editors save a version whose summary starts with "Agent edit"; that is an AI application.
       if (/^agent edit/i.test(opts.version?.summary ?? "") || /^agent edit/i.test(opts.version?.label ?? "")) audit("ai.apply", { kind: "officeDoc", id, label: next.title, matterId: next.matterId }, { surface: `office.${next.kind}`, summary: opts.version?.summary ?? opts.version?.label, version: (last?.version ?? 0) + 1, changedFields, contentVersion: next.contentVersion });
     }
@@ -109,7 +112,7 @@ export function checkpoint(docId: string, label: string) {
   const cur = d.officeDocs.get(docId);
   if (!cur) return null;
   const versions = d.officeVersions.find((v) => v.docId === docId).sort((a, b) => b.version - a.version);
-  const v: OfficeVersion = { id: nanoid(10), docId, version: (versions[0]?.version ?? 0) + 1, label, summary: "Checkpoint", authorId: CURRENT_USER.id, authorName: CURRENT_USER.name, createdAt: new Date().toISOString(), content: cur.content };
+  const v: OfficeVersion = { id: nanoid(10), docId, version: (versions[0]?.version ?? 0) + 1, label, summary: "Checkpoint", authorId: who().id, authorName: who().name, createdAt: new Date().toISOString(), content: cur.content };
   d.officeVersions.put(v);
   return v;
 }
@@ -129,13 +132,13 @@ export function listComments(docId: string) {
 }
 
 export function addComment(docId: string, input: { anchor: string; body: string; quote?: string; source?: "user" | "agent"; authorName?: string }): OfficeComment {
-  const c: OfficeComment = { id: nanoid(10), docId, anchor: input.anchor, quote: input.quote, body: input.body, authorId: input.source === "agent" ? undefined : CURRENT_USER.id, authorName: input.authorName ?? (input.source === "agent" ? "Drafting assistant" : CURRENT_USER.name), createdAt: new Date().toISOString(), source: input.source ?? "user", replies: [] };
+  const c: OfficeComment = { id: nanoid(10), docId, anchor: input.anchor, quote: input.quote, body: input.body, authorId: input.source === "agent" ? undefined : who().id, authorName: input.authorName ?? (input.source === "agent" ? "Drafting assistant" : who().name), createdAt: new Date().toISOString(), source: input.source ?? "user", replies: [] };
   db().officeComments.put(c);
   return c;
 }
 
 export function updateComment(id: string, patch: Partial<Pick<OfficeComment, "resolved" | "body">> & { reply?: string }) {
-  return db().officeComments.update(id, (c) => ({ ...c, resolved: patch.resolved ?? c.resolved, body: patch.body ?? c.body, replies: patch.reply ? [...(c.replies ?? []), { id: nanoid(6), body: patch.reply, authorName: CURRENT_USER.name, createdAt: new Date().toISOString() }] : c.replies }));
+  return db().officeComments.update(id, (c) => ({ ...c, resolved: patch.resolved ?? c.resolved, body: patch.body ?? c.body, replies: patch.reply ? [...(c.replies ?? []), { id: nanoid(6), body: patch.reply, authorName: who().name, createdAt: new Date().toISOString() }] : c.replies }));
 }
 
 export function deleteComment(id: string) {

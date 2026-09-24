@@ -6,14 +6,14 @@ import { sha256 } from "./hash";
 import type { AuditAction, AuditEvent } from "./types";
 
 const AUDIT = "audit_log";
-const CURRENT_USER = { id: "p_jwhitfield", name: "Jordan Whitfield" };
+import { currentUser } from "@/lib/current-user";
 
 /**
  * Append-only, hash-chained audit log. Every AI generation/application,
  * coding change, import/export, workflow run and integrity fix records an
  * event so any AI-derived fact can be traced back to who/what produced it.
  */
-export function audit(action: AuditAction, target: AuditEvent["target"], meta?: Record<string, unknown>, actor: { id: string; name: string } = CURRENT_USER): AuditEvent {
+export function audit(action: AuditAction, target: AuditEvent["target"], meta?: Record<string, unknown>, actor: { id: string; name: string } = currentUser()): AuditEvent {
   const prevHash = kv.get<string>("audit:head") ?? undefined;
   const seq = (kv.get<number>("audit:seq") ?? 0) + 1;
   const base: Omit<AuditEvent, "hash"> = { id: `au_${nanoid(12)}`, seq, ts: new Date().toISOString(), actorId: actor.id, actorName: actor.name, action, target, meta: compact(meta), prevHash };

@@ -409,7 +409,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "logic.approval", category: "logic", label: "Approval", short: "Approval", icon: "UserCheck",
     description: "Pause the run until a person approves or rejects in the run panel. The approver sees your message with resolved variables.",
     keywords: ["review", "sign-off", "human", "gate", "pause", "partner"],
-    defaultConfig: { approverId: "p_jwhitfield", title: "Partner review", message: "Please review the draft memo before it is saved to the matter folder.\n\n{{steps.draft.output.text | truncate:1500}}", timeoutHours: 72 },
+    defaultConfig: { approverId: "{{user.id}}", title: "Partner review", message: "Please review the draft memo before it is saved to the matter folder.\n\n{{steps.draft.output.text | truncate:1500}}", timeoutHours: 72 },
     fields: [
       { key: "approverId", label: "Approver", type: "person", required: true },
       { key: "title", label: "Title", type: "text", required: true },
@@ -432,7 +432,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "logic.review" as WorkflowNodeType, category: "logic", label: "Trust review", short: "Review", icon: "ShieldAlert",
     description: "Gate on AI provenance: continues when every referenced AI step is trusted (source-backed, verified, above the confidence gate); otherwise pauses the run for a person with the reason (e.g. '3 extracted events failed verification'). Approving lets the run proceed; rejecting skips the gated path.",
     keywords: ["gate", "trust", "provenance", "human", "review", "confidence", "pause"],
-    defaultConfig: { steps: "events, memo", approverId: "p_jwhitfield", title: "Review AI output", message: "AI output needs a look before the workflow acts on it.", minConfidence: 0.6 },
+    defaultConfig: { steps: "events, memo", approverId: "{{user.id}}", title: "Review AI output", message: "AI output needs a look before the workflow acts on it.", minConfidence: 0.6 },
     fields: [
       { key: "steps", label: "Steps to review", type: "text", required: true, help: "Comma-separated node ids of AI steps; the gate reads their provenance." },
       { key: "approverId", label: "Reviewer", type: "person" },
@@ -449,7 +449,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "action.create_task", category: "action", label: "Create task", short: "Task", icon: "ListTodo",
     description: "Create a task on the matter with assignee, priority, tags and a due-date rule (e.g. +3d, +2w, next-friday, a date, or a template).",
     keywords: ["todo", "assign", "deadline", "follow-up"],
-    defaultConfig: { title: "Review: {{inputs.title}}", description: "{{steps.draft.output.text | truncate:800}}", assigneeId: "p_jwhitfield", priority: "medium", dueRule: "+3d", tags: ["workflow"], matterId: "{{matter.id}}" },
+    defaultConfig: { title: "Review: {{inputs.title}}", description: "{{steps.draft.output.text | truncate:800}}", assigneeId: "{{user.id}}", priority: "medium", dueRule: "+3d", tags: ["workflow"], matterId: "{{matter.id}}" },
     fields: [
       { key: "title", label: "Title", type: "template", required: true },
       { key: "description", label: "Description", type: "template", rows: 4 },
@@ -465,7 +465,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "action.create_event", category: "action", label: "Create calendar event", short: "Event", icon: "CalendarPlus",
     description: "Add a deadline, hearing, deposition or meeting to the firm calendar.",
     keywords: ["calendar", "deadline", "hearing", "meeting", "deposition"],
-    defaultConfig: { title: "{{inputs.title}}", kind: "deadline", startsAt: "+14d 09:00", durationMinutes: 60, location: "", notes: "", attendeeIds: ["p_jwhitfield"], ruleSource: "", matterId: "{{matter.id}}" },
+    defaultConfig: { title: "{{inputs.title}}", kind: "deadline", startsAt: "+14d 09:00", durationMinutes: 60, location: "", notes: "", attendeeIds: ["{{user.id}}"], ruleSource: "", matterId: "{{matter.id}}" },
     fields: [
       { key: "title", label: "Title", type: "template", required: true },
       { key: "kind", label: "Kind", type: "select", options: ["deadline", "hearing", "deposition", "meeting", "filing", "internal", "cle", "other"].map((k) => ({ value: k, label: k[0].toUpperCase() + k.slice(1) })) },
@@ -498,7 +498,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "action.notify", category: "action", label: "Notify", short: "Notify", icon: "BellRing",
     description: "Post an in-app notification (team update on the home page) to people on the matter.",
     keywords: ["message", "alert", "team", "update", "slack"],
-    defaultConfig: { channel: "in-app", recipientIds: ["p_jwhitfield"], kind: "update", message: "Workflow finished: {{run.workflowName}}\n\n{{steps.summary.output.text | truncate:600}}", matterId: "{{matter.id}}" },
+    defaultConfig: { channel: "in-app", recipientIds: ["{{user.id}}"], kind: "update", message: "Workflow finished: {{run.workflowName}}\n\n{{steps.summary.output.text | truncate:600}}", matterId: "{{matter.id}}" },
     fields: [
       { key: "channel", label: "Channel", type: "select", options: [{ value: "in-app", label: "In-app (team updates)" }] },
       { key: "recipientIds", label: "Recipients", type: "multiselect", options: [] },
@@ -673,7 +673,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "review.auto", category: "logic", label: "Steward", short: "Steward", icon: "ListChecks",
     description: "Automated reviewer over the run so far: classifies each failed step (rate limit, network, timeout, parse, empty, verification…), applies one allow-listed fix by re-running the step with adjusted configuration, and escalates to the review queue when the re-run fails too. Connect it after steps whose 'On failure' is set to Continue.",
     keywords: ["steward", "fix", "retry", "escalate", "review queue", "self-healing", "failures"],
-    defaultConfig: { steps: "", fixes: ["retry", "narrow", "fast_model", "skip_verify"], maxFixes: 3, escalate: true, reviewerId: "p_jwhitfield", stopOnEscalate: false },
+    defaultConfig: { steps: "", fixes: ["retry", "narrow", "fast_model", "skip_verify"], maxFixes: 3, escalate: true, reviewerId: "{{user.id}}", stopOnEscalate: false },
     fields: [
       { key: "steps", label: "Steps to watch", type: "text", help: "Comma-separated node ids; empty watches every earlier step." },
       { key: "fixes", label: "Allowed fixes", type: "multiselect", options: [{ value: "retry", label: "Retry", hint: "network, rate limit, unknown" }, { value: "narrow", label: "Narrow the request", hint: "smaller limits and windows" }, { value: "fast_model", label: "Use the fast model", hint: "timeouts on AI steps" }, { value: "skip_verify", label: "Skip verification", hint: "verification-only failures" }] },

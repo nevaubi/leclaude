@@ -29,7 +29,12 @@ updated with every wave.
 | Citation resolution without substitution, claim verification, trust records | `src/lib/evidence/{hash,resolve,verify,records}.ts` | wave 1 |
 | Evidence fixes at known violations (`src/modules/ediscovery/analysis/ai.ts` first-document fallback; unscoped `resolvePersonName`) | wave 2 after the e-discovery analysis build completes | planned |
 | Evals with the eight must-have adversarial cases | `evals/`, `tests/evals-*.test.ts` | wave 1 |
-| Orchestrator terminal states (never reduced to "done") | `RunTerminalState` in `src/lib/ai/providers/types.ts`; workflow engine adoption | planned |
+| Research engine: terminal/stop states, typed §46 events, cancellation, per-run metrics, fast-vs-deep trust UX | `src/modules/search/engine/**`, `src/lib/ai/events.ts`, `TrustBadge` states | wave 1 (W3) |
+| Safe egress (SSRF guard, redirect validation, byte/time limits), rate limiting, upload guard, log redaction | `src/lib/net/{safe-fetch,rate-limit,upload-guard,redact}.ts` wired into intel providers and toolkit fetch tools | wave 1 (W4) |
+| Durable jobs: leases, heartbeat, idempotency, dead-letter, boot recovery, one tick driver (cron in production, inline loop in dev) | `src/modules/intel/jobs.ts`, `background.ts`, `src/instrumentation.ts`, `vercel.json` | wave 1 (W4) |
+| Retrieval matter scope (no implicit "all"), strict mode, unscoped-call report; tool contract (examples, timeouts, bounded results, authorization hook, `runTool`) | `src/lib/ai/vector-store.ts`, `src/lib/ai/tools.ts`, `src/lib/ai/toolkit/{internal,legal}.ts` | wave 1 (W5) |
+| Workflow engine: terminal states, cancellation/retry, budgets and cost telemetry, leases/checkpoints, §46 events, upload validation | `src/modules/workflows/{engine,events,service,scheduler}.ts`, run UI | wave 1 (W6) |
+| Orchestrator terminal states (never reduced to "done") | `RunTerminalState` in `src/lib/ai/providers/types.ts`; research engine (W3) and workflow engine (W6) | wave 1 |
 | Durable background jobs with steward auto-fix and escalation | `src/modules/intel/jobs*`, `src/instrumentation.ts`, `vercel.json` cron | done |
 | Trust signaling in UI (no overstated certainty) | `TrustBadge`, `ProvenanceBadge`, `trustLabel()` | done / wave 1 |
 
@@ -64,11 +69,18 @@ record exists and the location is valid; ambiguity returns `requires_review`; th
 first-candidate fallback. Verification and review decisions bind to the artifact hash;
 a changed artifact drops back to the trust state its remaining evidence supports.
 
-**D7 — Waves.** Adoption runs in waves so it never conflicts with the phase-3 build agents
-that own module paths. Wave 1 owns `src/lib/ai/**` (runtime worker) and `src/lib/auth/**`,
-`src/lib/evidence/**`, `evals/**` plus routes outside module builds (auth worker). Wave 2
-applies the contracts inside e-discovery, office, ai and agent routes once those builds
-land.
+**D7 — Waves with disjoint ownership.** Adoption runs in waves so it never conflicts with the
+phase-3 build agents that own module paths. Wave 1 runs six workers with disjoint file
+ownership: W1 model runtime (`src/lib/ai/providers/**`, `agent.ts`), W2 authorization, evidence
+and evals (`src/lib/auth/**`, `src/lib/evidence/**`, `evals/**`, routes outside module builds),
+W3 research engine (`src/modules/search/**`), W4 egress security and durable jobs
+(`src/lib/net/**`, intel providers/jobs), W5 retrieval scope and tool contract
+(`src/lib/ai/vector-store.ts`, `tools.ts`, toolkit internal/legal), W6 workflow engine runtime
+(`src/modules/workflows/engine|events|service|scheduler`). The lead integrates, resolves the
+few shared seams (tool loop ↔ `runTool`, upload guard ↔ workflow uploads, evidence verify ↔
+research citecheck) and runs adversarial review. Wave 2 applies the contracts inside
+e-discovery (evidence fixes, deposition coverage, privilege CC), office (stale proposals,
+route authorization) and agent routes once those builds land.
 
 ## Verification
 

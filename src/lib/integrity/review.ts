@@ -5,7 +5,10 @@ import { gateReview } from "./provenance";
 import { listProvenance, updateProvenance, getProvenanceRecord } from "./store";
 import type { Provenance, ProvenanceKind, ReviewQueueItem } from "./types";
 
-const REVIEWER = { id: "p_jwhitfield", name: "Jordan Whitfield" };
+import { currentUser } from "@/lib/current-user";
+
+/** The acting reviewer: the request identity (LECLAUDE_USER_ID aware), never a literal id. */
+function reviewer() { return currentUser((id) => db().people.get(id)?.name); }
 
 /**
  * Review queue: every AI-produced record whose provenance.review.status is
@@ -44,7 +47,7 @@ export function reviewCounts(matterId?: string): { pending: number; byKind: Reco
 
 /** Approve or reject an AI-produced record; writes provenance.review on the sidecar and the native record, audits ai.verify (method human). */
 export function decideReview(input: { kind: ProvenanceKind; id: string; decision: "approved" | "rejected"; note?: string; by?: { id: string; name: string } }): { ok: boolean; provenance?: Provenance; message?: string } {
-  const by = input.by ?? REVIEWER;
+  const by = input.by ?? reviewer();
   const rec = getProvenanceRecord(input.kind, input.id);
   if (!rec) return { ok: false, message: `No provenance recorded for ${input.kind} ${input.id}` };
   const at = new Date().toISOString();
