@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-start.sh", "timeout": 20 }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "bash .claude/hooks/pre-tool-guard.sh", "timeout": 10 }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|NotebookEdit", "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-check.sh", "timeout": 90, "statusMessage": "Checking the edited file" }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-bash-mark-verify.sh", "timeout": 10 }] }
+    ],
+    "SubagentStart": [
+      { "hooks": [{ "type": "command", "command": "bash .claude/hooks/subagent-start.sh", "timeout": 10 }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "bash .claude/hooks/subagent-stop.sh", "timeout": 20 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "bash .claude/hooks/stop-gate.sh", "timeout": 20 }] }
+    ],
+    "PreCompact": [
+      { "hooks": [{ "type": "command", "command": "bash .claude/hooks/pre-compact.sh", "timeout": 30 }] }
+    ]
+  }
+}

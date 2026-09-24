@@ -46,3 +46,7 @@ next-env.d.ts
 
 # keep the documented example env file
 !.env.example
+
+# claude code project hook state and local settings
+.claude/state/
+.claude/settings.local.json
