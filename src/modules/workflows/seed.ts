@@ -3,7 +3,8 @@ import type { Database } from "@/lib/db";
 import type { Workflow, WorkflowRunStep } from "@/lib/types/domain";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
 import { buildTemplates, WORKFLOW_TEMPLATE_IDS as T } from "./templates";
-import type { RunApproval, RunArtifact, RunUsage, WorkflowRunRecord } from "./types";
+import { buildSystemTemplates, SYSTEM_WORKFLOW_IDS as S } from "./templates-system";
+import type { RunApproval, RunArtifact, RunOutput, RunUsage, WorkflowRunRecord } from "./types";
 
 const P = PEOPLE;
 const M = MATTERS;
@@ -23,6 +24,8 @@ export const WORKFLOW_SEED_IDS = {
     harborClauseWorkbook: "wf_harbor_clause_workbook",
   },
   runs: Array.from({ length: 13 }, (_, i) => `run_seed_${String(i + 1).padStart(2, "0")}`),
+  /** Run history of the system (automation) workflows. */
+  systemRuns: Array.from({ length: 5 }, (_, i) => `run_sys_${String(i + 1).padStart(2, "0")}`),
 } as const;
 
 const W = WORKFLOW_SEED_IDS.workflows;
@@ -53,6 +56,7 @@ interface RunSpec {
   startedAt: string; triggeredBy: WorkflowRunRecord["triggeredBy"]; triggeredById?: string; matterId?: string;
   inputs: Record<string, unknown>; steps: StepSpec[]; artifacts?: (Omit<RunArtifact, "nodeId"> & { nodeId?: string })[];
   approvals?: RunApproval[]; usage?: Partial<RunUsage>; error?: string; errorCode?: string; loopIterations?: WorkflowRunRecord["loopIterations"];
+  stewardship?: WorkflowRunRecord["stewardship"]; logs?: string[];
 }
 
 function iso(base: string, plusSec: number) { return new Date(new Date(base).getTime() + plusSec * 1000).toISOString(); }
@@ -95,8 +99,30 @@ function mkRun(spec: RunSpec, workflow: Workflow): WorkflowRunRecord {
     error: spec.error,
     errorCode: spec.errorCode,
     loopIterations: spec.loopIterations,
-    snapshot: { nodes: workflow.nodes, edges: workflow.edges, inputs: workflow.inputs },
+    stewardship: spec.stewardship,
+    logs: spec.logs,
+    handoffs: [],
+    deliverables: deliverablesOf(steps, workflow, spec.startedAt),
+    childRunIds: [],
+    snapshot: { nodes: workflow.nodes, edges: workflow.edges, inputs: workflow.inputs, frontend: workflow.frontend },
   };
+}
+
+/** Deliverables a seeded run produced: every succeeded output.file / save_document / export step with a link becomes a RunOutput. */
+function deliverablesOf(steps: WorkflowRunStep[], workflow: Workflow, startedAt: string): RunOutput[] {
+  const out: RunOutput[] = [];
+  for (const s of steps) {
+    if (s.status !== "succeeded" || !s.output || typeof s.output !== "object") continue;
+    const node = workflow.nodes.find((n) => n.id === s.nodeId);
+    if (!node || !["output.file", "action.save_document", "action.export"].includes(node.type)) continue;
+    const o = s.output as Record<string, unknown>;
+    const href = typeof o.href === "string" ? o.href : undefined;
+    const url = typeof o.url === "string" ? o.url : undefined;
+    if (!href && !url) continue;
+    const format = typeof o.format === "string" ? o.format : o.kind === "sheet" ? "xlsx" : o.kind === "word" ? "docx" : undefined;
+    out.push({ id: `out_seed_${s.nodeId}_${out.length + 1}`, kind: o.docId ? "document" : "file", format, title: String(o.title ?? o.label ?? o.filename ?? node.label), href: href ?? url, downloadHref: url, blobId: typeof o.blobId === "string" ? o.blobId : undefined, docId: typeof o.docId === "string" ? o.docId : undefined, matterId: undefined, nodeId: s.nodeId, at: s.finishedAt ?? startedAt, meta: { source: node.type } });
+  }
+  return out;
 }
 
 const DOCKET_RESULTS_0922 = [
@@ -491,9 +517,110 @@ function runs(workflows: Map<string, Workflow>): WorkflowRunRecord[] {
   return specs.map((s) => mkRun(s, workflows.get(s.workflowId)!));
 }
 
-/** workflows module seed: templates, user workflows and run history (idempotent, stable ids). */
+// ─────────────────────────── System workflow runs ───────────────────────────
+
+const SYS_OPINIONS = ["idoc_seed_op_afff_0921", "idoc_seed_op_afff_0919", "idoc_seed_op_depo_0920", "idoc_seed_op_ca4_0918", "idoc_seed_op_ilnd_0917", "idoc_seed_op_scotus_0916"];
+const SYS_DOCKETS = ["idoc_seed_de_2873_1204", "idoc_seed_de_3140_0331"];
+const SYS_DOCKET_ROWS = [
+  { id: SYS_DOCKETS[0], kind: "docket_entry", title: "MDL 2873 — Dkt. 1204: Order granting in part motion to compel Tier 2 custodial productions", date: "2026-09-23", court: "D.S.C.", docketNumber: "2:18-mn-02873", url: "https://www.courtlistener.com/docket/6524213/in-re-aqueous-film-forming-foams-products-liability-litigation/", confidence: 0.96, matterIds: [M.afff] },
+  { id: SYS_DOCKETS[1], kind: "docket_entry", title: "MDL 3140 — Dkt. 331: Case Management Order No. 12 (bellwether pool selection)", date: "2026-09-23", court: "N.D. Fla.", docketNumber: "3:25-md-03140", url: "https://www.courtlistener.com/docket/70120993/in-re-depo-provera-products-liability-litigation/", confidence: 0.95, matterIds: [M.depo] },
+];
+
+function systemRuns(workflows: Map<string, Workflow>): WorkflowRunRecord[] {
+  const R = WORKFLOW_SEED_IDS.systemRuns;
+  const trend = "iins_seed_trend_authority";
+  const specs: RunSpec[] = [
+    // 1 — authority refresh: quiet, complete
+    {
+      id: R[0], workflowId: S.authorityRefresh, workflowName: "Authority refresh", category: "automation", status: "succeeded", startedAt: "2026-09-23T09:00:02.000Z", triggeredBy: "schedule",
+      inputs: { __event: { scheduledFor: "2026-09-23T09:00:00.000Z", frequency: "daily" } },
+      steps: [
+        { nodeId: "schedule", status: "succeeded", secs: 0, output: { inputs: {}, startedAt: "2026-09-23T09:00:02.000Z", triggeredBy: "schedule", scheduledFor: "2026-09-23T09:00:00.000Z", frequency: "daily" } },
+        { nodeId: "opinions", status: "succeeded", secs: 41, output: { jobId: "ijob_seed_op_0923", status: "succeeded", sourceId: "isrc_sys_cl_opinions", sourceName: "CourtListener opinions", added: 6, updated: 2, skipped: 14, docIds: SYS_OPINIONS, errors: [], notes: ["3 queries · 22 results · 6 new"], kinds: ["opinion"] }, logs: ["CourtListener opinions: 6 added, 2 updated, 14 unchanged"] },
+        { nodeId: "rules", status: "succeeded", secs: 12, output: { jobId: "ijob_seed_rules_0923", status: "succeeded", sourceId: "isrc_sys_court_rules", sourceName: "Court rules", added: 0, updated: 1, skipped: 9, docIds: ["idoc_seed_rule_dsc_local"], errors: [], notes: ["D.S.C. Local Civil Rules: amended 2026-09-15"], kinds: ["court_rule"] }, logs: ["Court rules: 0 added, 1 updated"] },
+        { nodeId: "steward", status: "succeeded", secs: 0, output: { checked: 0, fixed: 0, escalated: 0, notes: ["No failed steps to review."], failures: [] }, logs: ["Steward: 0 failure(s) reviewed, 0 fixed, 0 escalated"] },
+        { nodeId: "extract", status: "succeeded", secs: 58, tokens: 14200, output: { docs: 6, summarized: 6, entitiesFound: 19, flagged: 0, docIds: SYS_OPINIONS, texts: [], uploaded: [] }, logs: ["Extracted 6 document(s): 6 summarized, 19 entity mention(s)"] },
+        { nodeId: "index", status: "succeeded", secs: 9, output: { docs: 6, chunks: 71, embedded: 71, docIds: SYS_OPINIONS }, logs: ["71 chunk(s) indexed, 71 embedded"] },
+        { nodeId: "entities", status: "succeeded", secs: 1, output: { docs: 6, entities: 11, relations: 17, entityIds: ["ient_judge_gergel", "ient_judge_rodgers", "ient_court_dsc", "ient_firm_dechert"], byType: { judge: 2, court: 3, attorney: 4, firm: 2 } }, logs: ["11 entit(ies) linked, 17 relation(s)"] },
+        { nodeId: "trends", status: "succeeded", secs: 3, output: { analysis: "trends", insightIds: [trend], insights: [{ id: trend, kind: "trend", title: "Case law and court rules — last 90 days", summary: "Opinions touching the matters' themes rose to 22 in September (Daubert rulings in the AFFF MDL drove the increase).", confidence: 0.82 }], docCount: 214, text: "22 opinions in September vs. a 14/month average; anomaly: +2.1σ." }, logs: ["trends: 1 insight(s) over 214 document(s)"] },
+        { nodeId: "verify", status: "succeeded", secs: 6, tokens: 3100, output: { target: "insights", checked: 1, verified: 1, flagged: 0, skipped: 0, trusted: true, insightIds: [trend] }, logs: ["1 insight(s) verified, 0 flagged"] },
+        { nodeId: "publish", status: "succeeded", secs: 0, output: { to: "home", published: 1, skipped: 0, notified: [], insightIds: [trend], itemIds: [], updateIds: [], href: `/?insight=${trend}` }, logs: ["Published 1 to home"] },
+      ],
+      usage: { input: 15100, output: 2200, total: 17300, calls: 8, costUsd: 0.06 },
+    },
+    // 2 — docket watch: two new entries, watchers alerted
+    {
+      id: R[1], workflowId: S.docketWatch, workflowName: "Docket watch", category: "automation", status: "succeeded", startedAt: "2026-09-23T14:05:01.000Z", triggeredBy: "schedule",
+      inputs: { __event: { scheduledFor: "2026-09-23T14:05:00.000Z", frequency: "hourly" } },
+      steps: [
+        { nodeId: "schedule", status: "succeeded", secs: 0, output: { inputs: {}, startedAt: "2026-09-23T14:05:01.000Z", triggeredBy: "schedule", scheduledFor: "2026-09-23T14:05:00.000Z", frequency: "hourly" } },
+        { nodeId: "dockets", status: "succeeded", secs: 18, output: { jobId: "ijob_seed_dk_0923", status: "succeeded", sourceId: "isrc_sys_cl_dockets", sourceName: "CourtListener dockets (RECAP)", added: 2, updated: 0, skipped: 41, docIds: SYS_DOCKETS, errors: [], notes: ["2 dockets · 43 entries · 2 new"], kinds: ["docket_entry"] }, logs: ["RECAP dockets: 2 added, 41 unchanged"] },
+        { nodeId: "steward", status: "succeeded", secs: 0, output: { checked: 0, fixed: 0, escalated: 0, notes: ["No failed steps to review."], failures: [] } },
+        { nodeId: "index", status: "succeeded", secs: 2, output: { docs: 2, chunks: 4, embedded: 4, docIds: SYS_DOCKETS } },
+        { nodeId: "new_entries", status: "succeeded", secs: 0, output: { source: "intel_documents", count: 2, total: 2, rows: SYS_DOCKET_ROWS, ids: SYS_DOCKETS, text: SYS_DOCKET_ROWS.map((r) => `- **${r.title}** · docket_entry · ${r.date} · ${r.court} — ${r.url}`).join("\n") }, logs: ["2 of 2 intel documents row(s)"] },
+        { nodeId: "any", status: "succeeded", secs: 0, output: { matched: "yes", label: "New entries", evaluations: [{ ruleId: "yes", label: "New entries", matched: true, conditions: [{ left: 2, op: "gt", right: "0", result: true }] }] }, logs: ['Matched "New entries"'] },
+        { nodeId: "alert", status: "succeeded", secs: 0, output: { to: "watch", published: 1, skipped: 0, notified: [P.jordanWhitfield, P.mariaLopez, P.priyaRaman], insightIds: ["iins_seed_alert_dockets_0923"], itemIds: [], updateIds: ["tu_wf_sys_dk_0923"], taskIds: [], href: "/?insight=iins_seed_alert_dockets_0923" }, logs: ["Published 1 to watch; notified 3"] },
+      ],
+      artifacts: [{ kind: "notification", id: "wn_sys_dk_0923", title: "2 new docket entries on watched dockets", href: "/?insight=iins_seed_alert_dockets_0923", nodeId: "alert", meta: { recipients: ["Jordan Whitfield", "Maria Lopez", "Priya Raman"] } }],
+      usage: { input: 0, output: 0, total: 0, calls: 0, costUsd: 0 },
+    },
+    // 3 — regulatory watch: openFDA hiccup fixed by the steward
+    {
+      id: R[2], workflowId: S.regulatoryWatch, workflowName: "Regulatory watch", category: "automation", status: "succeeded", startedAt: "2026-09-22T10:00:03.000Z", triggeredBy: "schedule",
+      inputs: { __event: { scheduledFor: "2026-09-22T10:00:00.000Z", frequency: "daily" } },
+      steps: [
+        { nodeId: "schedule", status: "succeeded", secs: 0, output: { inputs: {}, startedAt: "2026-09-22T10:00:03.000Z", triggeredBy: "schedule", scheduledFor: "2026-09-22T10:00:00.000Z", frequency: "daily" } },
+        { nodeId: "fda", status: "succeeded", secs: 33, output: { jobId: "ijob_seed_fda_0922", status: "succeeded", sourceId: "isrc_sys_openfda", sourceName: "openFDA", added: 3, updated: 0, skipped: 12, docIds: ["idoc_seed_fda_recall_0922", "idoc_seed_fda_label_dmpa_0921", "idoc_seed_fda_faers_0920"], errors: [], notes: ["enforcement + label endpoints"], kinds: ["recall", "regulation", "adverse_event"] }, logs: ["Failed (network); the run continues (on failure: continue)", "Steward re-run with {}", "openFDA: 3 added, 12 unchanged"] },
+        { nodeId: "fr", status: "succeeded", secs: 9, output: { jobId: "ijob_seed_fr_0922", status: "succeeded", sourceId: "isrc_sys_federal_register", sourceName: "Federal Register", added: 2, updated: 0, skipped: 6, docIds: ["idoc_seed_fr_2026_21044", "idoc_seed_fr_2026_21102"], errors: [], notes: [], kinds: ["register_notice"] } },
+        { nodeId: "ecfr", status: "succeeded", secs: 7, output: { jobId: "ijob_seed_ecfr_0922", status: "succeeded", sourceId: "isrc_sys_ecfr", sourceName: "eCFR", added: 0, updated: 0, skipped: 4, docIds: [], errors: [], notes: ["40 CFR 141 / 21 CFR 201: unchanged"], kinds: [] } },
+        { nodeId: "steward", status: "succeeded", secs: 34, output: { checked: 1, fixed: 1, escalated: 0, notes: ['"Fetch openFDA" recovered after retry.'], failures: [{ nodeId: "fda", label: "Fetch openFDA", code: "network", action: "retry", ok: true, error: "openFDA: 503 Service Unavailable", note: "Fixed by retry" }] }, logs: ['Steward: "Fetch openFDA" failed (network) → retry', "Steward: 1 failure(s) reviewed, 1 fixed, 0 escalated"] },
+        { nodeId: "extract", status: "succeeded", secs: 21, tokens: 5200, output: { docs: 2, summarized: 2, entitiesFound: 5, flagged: 0, docIds: ["idoc_seed_fr_2026_21044", "idoc_seed_fr_2026_21102"], texts: [], uploaded: [] } },
+        { nodeId: "index", status: "succeeded", secs: 3, output: { docs: 2, chunks: 9, embedded: 9, docIds: ["idoc_seed_fr_2026_21044", "idoc_seed_fr_2026_21102"] } },
+        { nodeId: "fresh", status: "succeeded", secs: 0, output: { source: "intel_documents", count: 5, total: 5, rows: [], ids: ["idoc_seed_fda_recall_0922", "idoc_seed_fda_label_dmpa_0921", "idoc_seed_fda_faers_0920", "idoc_seed_fr_2026_21044", "idoc_seed_fr_2026_21102"], text: "- **EPA — PFAS NPDWR compliance guidance** · register_notice · 2026-09-22\n- **Depo-Provera labeling supplement (meningioma)** · regulation · 2026-09-21" } },
+        { nodeId: "any", status: "succeeded", secs: 0, output: { matched: "yes", label: "New records", evaluations: [] } },
+        { nodeId: "trends", status: "succeeded", secs: 2, output: { analysis: "trends", insightIds: ["iins_seed_trend_regulatory"], insights: [{ id: "iins_seed_trend_regulatory", kind: "trend", title: "Regulatory activity — last 30 days", summary: "Regulatory records on the matters' products: 19 in the last 30 days, led by FDA labeling and EPA PFAS guidance.", confidence: 0.79 }], docCount: 63, text: "19 records / 30 days" } },
+        { nodeId: "verify", status: "succeeded", secs: 5, tokens: 2400, output: { target: "insights", checked: 1, verified: 1, flagged: 0, skipped: 0, trusted: true, insightIds: ["iins_seed_trend_regulatory"] } },
+        { nodeId: "publish", status: "succeeded", secs: 0, output: { to: "home", published: 1, skipped: 0, notified: [], insightIds: ["iins_seed_trend_regulatory"], itemIds: [], updateIds: [], href: "/?insight=iins_seed_trend_regulatory" } },
+      ],
+      stewardship: [{ nodeId: "fda", code: "network", action: "retry", fixed: true, escalated: false, note: "Fixed by retry" }],
+      logs: ['"Fetch openFDA" failed and the run continued: openFDA: 503 Service Unavailable'],
+      usage: { input: 6800, output: 900, total: 7700, calls: 4, costUsd: 0.03 },
+    },
+    // 4 — insight verification sweep: two flagged, task opened
+    {
+      id: R[3], workflowId: S.insightSweep, workflowName: "Insight verification sweep", category: "automation", status: "succeeded", startedAt: "2026-09-23T12:20:01.000Z", triggeredBy: "schedule",
+      inputs: { __event: { scheduledFor: "2026-09-23T12:20:00.000Z", frequency: "hourly" } },
+      steps: [
+        { nodeId: "schedule", status: "succeeded", secs: 0, output: { inputs: {}, startedAt: "2026-09-23T12:20:01.000Z", triggeredBy: "schedule", scheduledFor: "2026-09-23T12:20:00.000Z", frequency: "hourly", interval: 6 } },
+        { nodeId: "verify", status: "succeeded", secs: 84, tokens: 21900, output: { target: "insights", checked: 25, verified: 23, flagged: 2, skipped: 0, trusted: false, insightIds: ["iins_seed_profile_gergel", "iins_seed_chron_afff"], flaggedIds: ["iins_seed_profile_gergel", "iins_seed_chron_afff"] }, logs: ["25 insight(s) re-verified: 23 supported, 2 flagged (contradicted evidence)"] },
+        { nodeId: "flagged", status: "succeeded", secs: 0, output: { source: "intel_insights", count: 2, total: 2, rows: [{ id: "iins_seed_profile_gergel", kind: "profile", title: "Judge Gergel — profile", status: "flagged", confidence: 0.61 }, { id: "iins_seed_chron_afff", kind: "chronology", title: "Chronology — AFFF", status: "flagged", confidence: 0.58 }], ids: ["iins_seed_profile_gergel", "iins_seed_chron_afff"], text: "- **Judge Gergel — profile** · profile · flagged · 61%\n- **Chronology — AFFF** · chronology · flagged · 58%" } },
+        { nodeId: "any", status: "succeeded", secs: 0, output: { matched: "yes", label: "Flagged", evaluations: [] } },
+        { nodeId: "task", status: "succeeded", secs: 0, output: { taskId: "t_wf_sys_flagged_0923", title: "Review 2 flagged insight(s)", dueAt: "2026-09-25", assignee: "Aisha Khan", href: "/?task=t_wf_sys_flagged_0923" }, logs: ['Task "Review 2 flagged insight(s)" → Aisha Khan, due 2026-09-25'] },
+      ],
+      artifacts: [{ kind: "task", id: "t_wf_sys_flagged_0923", title: "Review 2 flagged insight(s)", href: "/?task=t_wf_sys_flagged_0923", nodeId: "task", meta: { dueAt: "2026-09-25", assignee: "Aisha Khan" } }],
+      usage: { input: 19800, output: 2100, total: 21900, calls: 25, costUsd: 0.07 },
+    },
+    // 5 — team digest: one brief per person
+    {
+      id: R[4], workflowId: S.teamDigest, workflowName: "Team digest", category: "automation", status: "succeeded", startedAt: "2026-09-23T11:00:02.000Z", triggeredBy: "schedule",
+      inputs: { __event: { scheduledFor: "2026-09-23T11:00:00.000Z", frequency: "daily" } },
+      steps: [
+        { nodeId: "schedule", status: "succeeded", secs: 0, output: { inputs: {}, startedAt: "2026-09-23T11:00:02.000Z", triggeredBy: "schedule", scheduledFor: "2026-09-23T11:00:00.000Z", frequency: "daily", weekdaysOnly: true } },
+        { nodeId: "people", status: "succeeded", secs: 0, output: { source: "people", count: 8, total: 8, rows: [], ids: [P.jordanWhitfield, P.priyaRaman, P.danielOkafor, P.elenaMarsh, P.samuelChen, P.mariaLopez, P.aishaKhan], text: "- **Jordan Whitfield** · Partner · attorney" } },
+        { nodeId: "each", status: "succeeded", secs: 4, output: { count: 8, total: 8, results: [], errors: [], errorCount: 0 }, logs: ["8 person(s) to process"] },
+        { nodeId: "digest", status: "succeeded", secs: 0, output: { to: "digest", published: 1, skipped: 0, notified: [P.aishaKhan], insightIds: ["iins_seed_digest_akhan_0923"], itemIds: [], updateIds: [], taskIds: [], href: "/?insight=iins_seed_digest_akhan_0923" } },
+        { nodeId: "done", status: "succeeded", secs: 0, output: { source: "intel_insights", count: 8, total: 8, rows: [], ids: [], text: "- **Your brief — Wednesday, September 23** · digest · published · 90%" } },
+      ],
+      usage: { input: 0, output: 0, total: 0, calls: 0, costUsd: 0 },
+    },
+  ];
+  return specs.map((s) => mkRun(s, workflows.get(s.workflowId)!));
+}
+
+/** workflows module seed: templates, user workflows, system workflows and run history (idempotent, stable ids). */
 export function seedWorkflows(db: Database) {
   const templates = buildTemplates();
+  const systemWorkflows = buildSystemTemplates();
   const byId = new Map(templates.map((t) => [t.id, t]));
   const userWorkflows: Workflow[] = USER_WORKFLOWS.map((u) => {
     const t = byId.get(u.templateId)!;
@@ -515,16 +642,16 @@ export function seedWorkflows(db: Database) {
     u.patch?.(w);
     return w;
   });
-  const all = new Map<string, Workflow>([...templates, ...userWorkflows].map((w) => [w.id, w]));
-  const runRecords = runs(all);
-  for (const w of userWorkflows) {
+  const all = new Map<string, Workflow>([...templates, ...userWorkflows, ...systemWorkflows].map((w) => [w.id, w]));
+  const runRecords = [...runs(all), ...systemRuns(all)];
+  for (const w of [...userWorkflows, ...systemWorkflows]) {
     const mine = runRecords.filter((r) => r.workflowId === w.id);
     w.runsCount = mine.length;
     w.lastRunAt = mine.map((r) => r.startedAt).sort().at(-1);
   }
-  db.workflows.putMany([...templates, ...userWorkflows]);
+  db.workflows.putMany([...templates, ...userWorkflows, ...systemWorkflows]);
   db.workflowRuns.putMany(runRecords);
   // Scheduled workflows: treat "now" as the last fire so the scheduler waits for the next natural slot.
   const now = new Date().toISOString();
-  for (const w of userWorkflows) if (w.nodes.some((n) => n.type === "trigger.schedule") && !db.kv.get(`wf:schedule:last:${w.id}`)) db.kv.set(`wf:schedule:last:${w.id}`, now);
+  for (const w of [...userWorkflows, ...systemWorkflows]) if (w.nodes.some((n) => n.type === "trigger.schedule") && !db.kv.get(`wf:schedule:last:${w.id}`)) db.kv.set(`wf:schedule:last:${w.id}`, now);
 }

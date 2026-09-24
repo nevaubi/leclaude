@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import {
-  AlertCircle, AlignLeft, BellRing, BookOpenCheck, CalendarClock, CalendarPlus, Check, CheckCircle2, CircleDashed, ClipboardCheck, Clock, CopyMinus, Download, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitMerge, Globe, Library, ListTodo, Loader2, Mail, MinusCircle, PauseCircle, PenLine, Play, Repeat, Scale, ScanSearch, ShieldAlert, ShieldCheck, Sparkles, Stamp, Tags, Timer, UserCheck, XCircle, type LucideIcon,
+  AlertCircle, AlignLeft, BellRing, BookOpenCheck, Briefcase, CalendarClock, CalendarPlus, ChartLine, Check, CheckCircle2, CircleDashed, ClipboardCheck, Clock, CopyMinus, Download, FileDown, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitFork, GitMerge, Globe, Layers, Library, ListChecks, ListTodo, Loader2, Mail, MessageSquareText, MinusCircle, Network, PauseCircle, PenLine, Play, Radar, Repeat, Scale, ScanSearch, ScanText, Send, ShieldAlert, ShieldCheck, Square, Stamp, Table, Tags, Timer, UserCheck, Workflow, XCircle, type LucideIcon,
 } from "lucide-react";
 import type { WorkflowRun, WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
@@ -10,13 +10,15 @@ import { categoryOf, nodeSpec, type NodeCategory } from "../registry";
 import { RUN_STATUS_LABEL } from "../types";
 
 export const ICONS: Record<string, LucideIcon> = {
-  Play, CalendarClock, FilePlus2, Gavel, Mail, Sparkles, ScanSearch, Tags, AlignLeft, PenLine, ClipboardCheck, BookOpenCheck, Library, FileSearch, Scale, Globe, GitBranch, Repeat, GitMerge, UserCheck, Timer, ListTodo, CalendarPlus, FileOutput, BellRing, Download, Stamp,
+  Play, CalendarClock, FilePlus2, Gavel, Mail, MessageSquareText, ScanSearch, Tags, AlignLeft, PenLine, ClipboardCheck, BookOpenCheck, Library, FileSearch, Scale, Globe, GitBranch, Repeat, GitMerge, UserCheck, Timer, ListTodo, CalendarPlus, FileOutput, BellRing, Download, Stamp,
   // Integrity nodes: verify against sources, deduplicate, trust review.
   ShieldCheck, CopyMinus, ShieldAlert,
+  // Intelligence, stewardship, data and agent nodes.
+  Radar, ScanText, Layers, Network, ChartLine, Send, ListChecks, Table, FileDown, Workflow, GitFork, Briefcase,
 };
 
 export function iconFor(type: string): LucideIcon {
-  return ICONS[nodeSpec(type)?.icon ?? ""] ?? Sparkles;
+  return ICONS[nodeSpec(type)?.icon ?? ""] ?? Square;
 }
 
 /** Tone classes per category, using design tokens only. */
@@ -26,6 +28,7 @@ export const CATEGORY_TONE: Record<NodeCategory, { bg: string; text: string; bor
   data: { bg: "bg-info/12", text: "text-info", border: "border-info/40", solid: "bg-info text-primary-foreground", ring: "ring-info/40" },
   logic: { bg: "bg-warning/18", text: "text-warning-foreground dark:text-warning", border: "border-warning/50", solid: "bg-warning text-warning-foreground", ring: "ring-warning/40" },
   action: { bg: "bg-chart-5/12", text: "text-chart-5", border: "border-chart-5/40", solid: "bg-chart-5 text-primary-foreground", ring: "ring-chart-5/40" },
+  intel: { bg: "bg-chart-2/12", text: "text-chart-2", border: "border-chart-2/40", solid: "bg-chart-2 text-primary-foreground", ring: "ring-chart-2/40" },
 };
 
 export function toneFor(type: string) {
@@ -50,10 +53,11 @@ export function NodeTypeStrip({ types, max = 8, className }: { types: string[]; 
   );
 }
 
-export const CATEGORY_LABEL: Record<string, string> = { intake: "Intake", discovery: "Discovery", drafting: "Drafting", research: "Research", compliance: "Compliance", transactional: "Transactional", operations: "Operations" };
+export const CATEGORY_LABEL: Record<string, string> = { intake: "Intake", discovery: "Discovery", drafting: "Drafting", research: "Research", compliance: "Compliance", transactional: "Transactional", operations: "Operations", automation: "Automation" };
 
+/** Quiet category text (no pill): counts and labels are plain text in the Counsel style. */
 export function CategoryBadge({ category, className }: { category: string; className?: string }) {
-  return <Badge variant="muted" className={cn("uppercase tracking-wider text-[10px]", className)}>{CATEGORY_LABEL[category] ?? category}</Badge>;
+  return <span className={cn("text-[11px] text-muted-foreground", className)}>{CATEGORY_LABEL[category] ?? category}</span>;
 }
 
 const RUN_VARIANT: Record<WorkflowRun["status"], "success" | "destructive" | "warning" | "info" | "muted" | "secondary"> = { succeeded: "success", failed: "destructive", cancelled: "muted", waiting_approval: "warning", running: "info", queued: "secondary" };

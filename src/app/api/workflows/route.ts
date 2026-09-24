@@ -6,11 +6,11 @@ import { cloneWorkflow, createWorkflow, listWorkflows } from "@/modules/workflow
 
 export const runtime = "nodejs";
 
-/** GET /api/workflows?template=1|0&mine=1&category=&q=&status=&tag= */
+/** GET /api/workflows?template=1|0&system=1|0&mine=1&category=&q=&status=&tag= */
 export async function GET(req: Request) {
   bootstrap();
   const url = new URL(req.url);
-  const workflows = listWorkflows({ template: boolParam(url, "template"), mine: boolParam(url, "mine"), category: param(url, "category"), q: param(url, "q"), status: param(url, "status"), tag: param(url, "tag"), limit: Number(param(url, "limit") ?? 500) });
+  const workflows = listWorkflows({ template: boolParam(url, "template"), system: boolParam(url, "system"), mine: boolParam(url, "mine"), category: param(url, "category"), q: param(url, "q"), status: param(url, "status"), tag: param(url, "tag"), limit: Number(param(url, "limit") ?? 500) });
   return Response.json({ workflows });
 }
 

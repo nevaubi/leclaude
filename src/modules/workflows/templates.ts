@@ -3,12 +3,21 @@
  * (positions are computed by autoLayout at seed time) so the seed, the service
  * and the tests can all import it.
  */
-import type { Workflow, WorkflowEdge, WorkflowNode, WorkflowNodeType } from "@/lib/types/domain";
+import type { Workflow, WorkflowEdge, WorkflowFrontend, WorkflowNode, WorkflowNodeType } from "@/lib/types/domain";
 import { autoLayout } from "./graph";
 import { defaultConfigFor, type AnyNodeType } from "./registry";
 import { PEOPLE } from "@/lib/seed/ids";
 
 const P = PEOPLE;
+
+/**
+ * Deliverable step configuration: format, label and folder come from the front
+ * end (inputs.output_format / output_label / output_folder) with the template's
+ * own defaults; an empty label falls back to the front end's defaultLabel.
+ */
+const OUT = (format: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({ format: `{{inputs.output_format | default:"${format}"}}`, label: "{{inputs.output_label | default:\"\"}}", content: "", rows: "", libraryFolderId: "{{inputs.output_folder | default:\"\"}}", matterId: "{{inputs.matter}}", addToLibrary: true, tags: ["workflow"], ...extra });
+const DOC_ACCEPT = [".docx", ".pdf", ".txt", ".md"];
+const TRANSCRIPT_ACCEPT = [".txt", ".pdf", ".docx", ".md"];
 
 function N(id: string, type: AnyNodeType, label: string, config: Record<string, unknown> = {}): WorkflowNode {
   return { id, type: type as WorkflowNodeType, label, position: { x: 0, y: 0 }, config: { ...defaultConfigFor(type), ...config } };
@@ -35,6 +44,9 @@ export const WORKFLOW_TEMPLATE_IDS = {
   meetConfer: "wf_tpl_meet_confer",
   pagaChecklist: "wf_tpl_paga_checklist",
   regulatoryWatch: "wf_tpl_regulatory_watch",
+  depoDesignations: "wf_tpl_depo_designations",
+  productionQc: "wf_tpl_production_qc",
+  judgeProfile: "wf_tpl_judge_profile",
 } as const;
 
 const NO_RESEARCH = { web: false, legal: false, internal: false };
@@ -96,7 +108,7 @@ const TEMPLATES: TemplateDef[] = [
         brief: "Draft an NDA review memo for {{matter.name}} ({{matter.client}}). Our client is the {{inputs.our_side}}{{inputs.counterparty | default:\"\"}}.\n\nRisk classification: {{steps.classify.output.label | upper}} ({{steps.classify.output.confidence}}) — {{steps.classify.output.rationale}}\n\nExtracted terms:\n{{steps.extract.output | json}}\n\nStructure: (1) Bottom line with the recommendation (sign / sign with edits / do not sign); (2) Deal terms table (Term | As drafted | Firm position | Recommended edit); (3) Issues, worst first, each with the clause quote, why it matters for a {{inputs.our_side}}, and proposed replacement language; (4) Items needing client input. Cite the clause numbers from the agreement.",
         context: "Agreement text:\n{{inputs.nda_text | truncate:60000}}",
       }),
-      N("save", "action.save_document", "Save memo to matter", { kind: "word", title: "NDA review — {{inputs.counterparty | default:\"counterparty\"}} — {{now | date:short}}", content: "{{steps.draft.output.text}}", matterId: "{{inputs.matter}}", tags: ["NDA", "review", "workflow"] }),
+      N("save", "output.file", "Save the memo", OUT("docx", { content: "{{steps.draft.output.text}}", tags: ["NDA", "review", "workflow"] })),
       N("route", "logic.branch", "Route by risk", { rules: [{ id: "high", label: "High risk", logic: "all", conditions: [{ left: "{{steps.classify.output.label}}", op: "equals", right: "high" }] }, { id: "medium", label: "Medium risk", logic: "all", conditions: [{ left: "{{steps.classify.output.label}}", op: "equals", right: "medium" }] }], elseLabel: "Low risk" }),
       N("task_partner", "action.create_task", "Partner review (urgent)", { title: "NDA review: {{inputs.counterparty | default:\"counterparty\"}} — HIGH risk, partner sign-off needed", description: "{{steps.classify.output.rationale}}\n\nMemo: {{steps.save.output.href}}", assigneeId: P.danielOkafor, priority: "urgent", dueRule: "+1bd", matterId: "{{inputs.matter}}", tags: ["NDA", "review"] }),
       N("task_associate", "action.create_task", "Associate markup", { title: "NDA markup: {{inputs.counterparty | default:\"counterparty\"}} ({{steps.classify.output.label}} risk)", description: "Turn the issues memo into a redline. {{steps.classify.output.rationale}}\n\nMemo: {{steps.save.output.href}}", assigneeId: P.samuelChen, priority: "high", dueRule: "+3bd", matterId: "{{inputs.matter}}", tags: ["NDA", "markup"] }),
@@ -143,7 +155,7 @@ const TEMPLATES: TemplateDef[] = [
         context: "Page:line digest:\n{{steps.digest.output.text}}",
       }),
       N("review", "logic.review", "Trust review", { steps: "extract, verify, memo", approverId: P.elenaMarsh, title: "Deposition digest needs a look", message: "Some of the AI digest for {{inputs.witness}} did not verify against the transcript. Approve to save and circulate anyway, or reject to stop." }),
-      N("save", "action.save_document", "Save digest", { kind: "word", title: "Deposition digest — {{inputs.witness}} — {{now | date:short}}", content: "{{steps.memo.output.text}}", matterId: "{{inputs.matter}}", tags: ["deposition", "digest"] }),
+      N("save", "output.file", "Save digest", OUT("docx", { content: "{{steps.memo.output.text}}", tags: ["deposition", "digest"] })),
       N("notify", "action.notify", "Notify case team", { recipientIds: [P.jordanWhitfield, P.priyaRaman, P.elenaMarsh], kind: "update", message: "Deposition digest for **{{inputs.witness}}** is ready on {{matter.shortName}} (verification: {{steps.verify.output.status}}).\n\nTop admissions:\n{{steps.extract.output.key_admissions | slice:0,3 | bullets}}\n\n{{steps.save.output.href}}", matterId: "{{inputs.matter}}" }),
       N("task", "action.create_task", "Attorney review", { title: "Review deposition digest: {{inputs.witness}}", description: "Check page:line cites against the certified transcript and confirm the contradictions list before it goes into the outline. Unresolved cites: {{steps.verify.output.unresolvedCites | join:\", \" | default:\"none\"}}\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "high", dueRule: "+3bd", matterId: "{{inputs.matter}}", tags: ["deposition"] }),
     ],
@@ -215,8 +227,8 @@ const TEMPLATES: TemplateDef[] = [
         output: "json", modelTier: "fast", research: NO_RESEARCH,
         jsonSchema: JSON.stringify({ type: "object", properties: { rows: { type: "array", items: { type: "object", properties: { clause: { type: "string" }, as_drafted: { type: "string" }, location: { type: "string" }, risk: { type: "string", enum: ["Low", "Medium", "High"] }, issue: { type: "string" }, recommended_action: { type: "string" } }, required: ["clause", "as_drafted", "location", "risk", "issue", "recommended_action"] } } }, required: ["rows"] }),
       }),
-      N("workbook", "action.save_document", "Save review workbook", { kind: "sheet", content: "", title: "Clause review — {{inputs.contract_name}}", rows: "{{steps.rows.output.rows}}", matterId: "{{inputs.matter}}", tags: ["diligence", "clause-review"] }),
-      N("export", "action.export", "Export CSV", { format: "csv", filename: "clause-review-{{inputs.contract_name}}", source: "{{steps.rows.output.rows}}", matterId: "{{inputs.matter}}", addToLibrary: true }),
+      N("workbook", "output.file", "Save review workbook", OUT("xlsx", { rows: "{{steps.rows.output.rows}}", tags: ["diligence", "clause-review"] })),
+      N("export", "output.file", "Export CSV", { format: "csv", label: "clause-review-{{inputs.contract_name}}", content: "", rows: "{{steps.rows.output.rows}}", libraryFolderId: "{{inputs.output_folder | default:\"\"}}", matterId: "{{inputs.matter}}", addToLibrary: true, tags: ["diligence", "csv"] }),
       N("task", "action.create_task", "Add to diligence tracker", { title: "Diligence: fold {{inputs.contract_name}} review into the tracker ({{steps.rows.output.rows | where:risk,High | length}} high-risk items)", description: "Workbook: {{steps.workbook.output.href}}\nCSV: {{steps.export.output.url}}", assigneeId: P.samuelChen, priority: "medium", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["diligence"] }),
     ],
     edges: [E("start", "extract"), E("extract", "rows"), E("rows", "workbook"), E("rows", "export"), E("workbook", "task"), E("export", "task")],
@@ -247,7 +259,7 @@ const TEMPLATES: TemplateDef[] = [
       N("check", "ai.verify", "Verify entry against document", { output: "{{steps.describe.output}}", sources: "Bates {{loop.item.bates}} · {{loop.item.date}} · {{loop.item.type}}\nFrom: {{loop.item.from}}\nTo: {{loop.item.to | join:\"; \"}}\nSubject: {{loop.item.subject}}\nCustodian: {{loop.item.custodian}}\n\n{{loop.item.passage}}", stepId: "describe", mode: "structured", modelTier: "fast" }),
       N("dedupe", "data.dedupe", "Drop repeated entries", { items: "{{steps.entries.output.results | pluck:steps.describe}}", collection: "self", keyFields: "bates", matterId: "{{inputs.matter}}" }),
       N("review", "logic.review", "Trust review", { steps: "describe, check", approverId: P.elenaMarsh, title: "Privilege log entries need a look", message: "Some AI-drafted privilege log entries for {{inputs.custodian | default:\"all custodians\"}} did not verify against the documents. Approve to save the log for paralegal QC, or reject to stop." }),
-      N("log", "action.save_document", "Save privilege log", { kind: "sheet", content: "", title: "Privilege log — {{inputs.custodian | default:\"all custodians\"}} — {{now | date:short}}", rows: "{{steps.dedupe.output.items}}", matterId: "{{inputs.matter}}", tags: ["privilege-log"] }),
+      N("log", "output.file", "Save privilege log", OUT("xlsx", { rows: "{{steps.dedupe.output.items}}", tags: ["privilege-log"] })),
       N("qc", "action.create_task", "Paralegal QC", { title: "QC privilege log ({{steps.dedupe.output.kept}} entries) — {{inputs.custodian | default:\"all custodians\"}}", description: "Check every description is privilege-safe and consistent with the CMO 26 Ex. B format; confirm attorney names and dates. Entries dropped as duplicates: {{steps.dedupe.output.dropped}}.\n\n{{steps.log.output.href}}", assigneeId: P.mariaLopez, priority: "high", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["privilege"] }),
     ],
     edges: [E("start", "search"), E("search", "entries"), E("entries", "describe", "each"), E("describe", "check"), E("check", "entries", undefined, "loop-back"), E("entries", "dedupe", "done"), E("dedupe", "review"), E("review", "log", "approved"), E("log", "qc")],
@@ -282,7 +294,7 @@ const TEMPLATES: TemplateDef[] = [
         brief: "Prepare the chronology memo for \"{{inputs.topic}}\" in {{matter.name}}. Sort by date. After the table add: Key inflection points (3–5 bullets), Gaps in the record, Documents to collect next. Keep any [VERIFY] marks.\n\nEvents (verified: {{steps.verify.output.status}}; {{steps.dedupe.output.dropped}} already on the timeline):\n{{steps.dedupe.output.items | table:date,event,actors,source,significance}}\n\nGaps noted during extraction:\n{{steps.events.output.gaps | bullets}}",
       }),
       N("review", "logic.review", "Trust review", { steps: "events, verify, memo", approverId: P.elenaMarsh, title: "Chronology needs a look", message: "Some extracted events for \"{{inputs.topic}}\" did not verify against the documents. Approve to save the memo and open the merge task, or reject to stop." }),
-      N("save", "action.save_document", "Save chronology", { kind: "word", title: "Chronology — {{inputs.topic}} — {{now | date:short}}", content: "{{steps.memo.output.text}}", matterId: "{{inputs.matter}}", tags: ["chronology"] }),
+      N("save", "output.file", "Save chronology", OUT("docx", { content: "{{steps.memo.output.text}}", tags: ["chronology"] })),
       N("task", "action.create_task", "Verify and merge into timeline", { title: "Chronology: verify {{steps.dedupe.output.kept}} events for \"{{inputs.topic}}\" and merge into the matter timeline", description: "Verification: {{steps.verify.output.status}} ({{steps.verify.output.unsupported}} unsupported). Unresolved cites: {{steps.verify.output.unresolvedCites | join:\", \" | default:\"none\"}}\n\nGaps flagged:\n{{steps.events.output.gaps | bullets}}\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "medium", dueRule: "+5bd", matterId: "{{inputs.matter}}", tags: ["chronology"] }),
     ],
     edges: [E("start", "search"), E("search", "events"), E("events", "verify"), E("verify", "dedupe"), E("dedupe", "memo"), E("memo", "review"), E("review", "save", "approved"), E("save", "task")],
@@ -306,7 +318,7 @@ const TEMPLATES: TemplateDef[] = [
       N("cites", "data.legal_search", "Resolve every citation", { source: "verify_citations", text: "{{steps.research.output.text}}" }),
       N("verify", "ai.verify", "Verify memo against authorities", { output: "{{steps.research.output.text}}", sources: "Citation check:\n{{steps.cites.output.text}}\n\nAuthorities the agent read:\n{{steps.research.output.citations | json}}", stepId: "research", mode: "claims", maxClaims: 30, modelTier: "fast" }),
       N("review", "logic.review", "Trust review", { steps: "research, verify", approverId: P.elenaMarsh, title: "Research memo needs a look before saving", message: "The memo has unresolved citations or claims the sources do not support ({{steps.cites.output.unresolvedCount}} unresolved cite(s)). Approve to save it for partner review anyway, or reject to stop." }),
-      N("save", "action.save_document", "Save memo", { kind: "word", title: "Research memo — {{inputs.question | truncate:60}}", content: "{{steps.verify.output.corrected}}", matterId: "{{inputs.matter}}", tags: ["research", "memo"] }),
+      N("save", "output.file", "Save memo", OUT("docx", { content: "{{steps.verify.output.corrected}}", tags: ["research", "memo"] })),
       N("approval", "logic.approval", "Partner review", { approverId: P.jordanWhitfield, title: "Approve research memo", message: "A research memo is ready for {{matter.shortName}}.\n\n**Question:** {{inputs.question}}\n\n**Verification:** {{steps.verify.output.status}} — {{steps.verify.output.supported}} supported, {{steps.verify.output.unsupported}} unsupported, {{steps.verify.output.contradicted}} contradicted; {{steps.cites.output.unresolvedCount}} unresolved citation(s).\n\n**Bottom line (excerpt):**\n{{steps.research.output.text | truncate:1800}}\n\nFull memo: {{steps.save.output.href}}\n\nApprove to circulate, or reject with comments to send it back for revision.", timeoutHours: 48 }),
       N("task_circulate", "action.create_task", "Circulate memo", { title: "Circulate approved research memo: {{inputs.question | truncate:70}}", description: "Approved by {{steps.approval.output.decidedByName}}{{steps.approval.output.comment | default:\"\"}}.\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "medium", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["research"] }),
       N("task_revise", "action.create_task", "Revise memo", { title: "Revise research memo per partner comments: {{inputs.question | truncate:60}}", description: "Comments from {{steps.approval.output.decidedByName}}:\n{{steps.approval.output.comment}}\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "high", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["research", "revision"] }),
@@ -332,7 +344,7 @@ const TEMPLATES: TemplateDef[] = [
         kind: "report", tone: "plain", audience: "client", modelTier: "primary", research: INTERNAL_ONLY,
         brief: "Draft the {{inputs.period | lower}} status report for {{matter.client}} on {{matter.name}} ({{matter.caption | default:matter.shortName}}). Stage: {{matter.stage}}.\n\nHighlights from the team: {{inputs.highlights | default:\"none provided\"}}\n\nKey dates:\n{{matter.keyDates | table:label,date}}\n\nUpcoming events:\n{{matter.upcomingEvents | table:startsAt,title,kind,ruleSource}}\n\nOpen tasks (internal — summarize, do not list verbatim):\n{{matter.openTasks | table:title,status,priority,dueAt}}\n\nRecent internal updates:\n{{matter.recentUpdates | table:createdAt,author,body}}\n\nWrite for a general counsel: no internal task names, no privileged strategy detail, clear 'Decisions needed from you' section, and a 30-day look-ahead.",
       }),
-      N("save", "action.save_document", "Save report", { kind: "word", title: "{{inputs.period}} status report — {{matter.shortName}} — {{now | date:short}}", content: "{{steps.draft.output.text}}", matterId: "{{inputs.matter}}", tags: ["client-report"] }),
+      N("save", "output.file", "Save report", OUT("docx", { content: "{{steps.draft.output.text}}", tags: ["client-report"] })),
       N("approval", "logic.approval", "Lead attorney approval", { approverId: P.jordanWhitfield, title: "Approve client status report", message: "{{inputs.period}} status report for {{matter.client}} ({{matter.shortName}}) is ready.\n\n{{steps.draft.output.text | truncate:2000}}\n\nFull report: {{steps.save.output.href}}", timeoutHours: 24 }),
       N("send", "action.create_task", "Send to client", { title: "Send {{inputs.period | lower}} status report to {{matter.client}}", description: "Approved by {{steps.approval.output.decidedByName}}. {{steps.save.output.href}}", assigneeId: P.mariaLopez, priority: "medium", dueRule: "+1bd", matterId: "{{inputs.matter}}", tags: ["client"] }),
       N("post", "action.notify", "Post to team", { recipientIds: [P.jordanWhitfield, P.priyaRaman], kind: "update", message: "{{inputs.period}} client status report for {{matter.shortName}} approved and queued for sending. {{steps.save.output.href}}", matterId: "{{inputs.matter}}" }),
@@ -398,7 +410,7 @@ const TEMPLATES: TemplateDef[] = [
         prompt: "Brief: {{inputs.brief_name}} ({{matter.name}})\n\nVerification results:\n{{steps.verify.output.text}}\n\nRaw results:\n{{steps.verify.output.results | json}}\n\nBrief text:\n{{inputs.brief_text | truncate:80000}}",
         output: "text", modelTier: "primary", research: NO_RESEARCH,
       }),
-      N("save", "action.save_document", "Save report", { kind: "word", title: "Cite-check — {{inputs.brief_name}} — {{now | date:short}}", content: "{{steps.report.output.text}}", matterId: "{{inputs.matter}}", tags: ["cite-check"] }),
+      N("save", "output.file", "Save report", OUT("docx", { content: "{{steps.report.output.text}}", tags: ["cite-check"] })),
       N("any_bad", "logic.branch", "Unresolved cites?", { rules: [{ id: "bad", label: "Unresolved", logic: "all", conditions: [{ left: "{{steps.verify.output.unresolvedCount}}", op: "gt", right: "0" }] }], elseLabel: "All resolved" }),
       N("fix", "action.create_task", "Fix citations", { title: "Fix {{steps.verify.output.unresolvedCount}} unresolved citation(s) in {{inputs.brief_name}}", description: "{{steps.verify.output.unresolved | pluck:citation | bullets}}\n\nReport: {{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "urgent", dueRule: "+1bd", matterId: "{{inputs.matter}}", tags: ["cite-check"] }),
       N("clean", "action.notify", "All clear", { recipientIds: [P.danielOkafor, P.elenaMarsh], kind: "update", message: "Cite-check of **{{inputs.brief_name}}**: all {{steps.verify.output.total}} citations resolved. Report: {{steps.save.output.href}}", matterId: "{{inputs.matter}}" }),
@@ -428,7 +440,7 @@ const TEMPLATES: TemplateDef[] = [
         brief: "Draft a meet-and-confer letter in {{matter.name}} ({{matter.caption}}) to {{inputs.opposing_counsel}} from Jordan Whitfield.\n\nDispute: {{inputs.dispute}}\n\nRequested relief: {{inputs.relief}}\n\nRequest a written response by {{inputs.response_deadline | date:long}} and reserve the right to seek relief under FRCP 37(a)(1) and Local Civ. Rule 7.02 (D.S.C.) if applicable to this court. Keep the tone firm and courteous; recite the prior conferrals with dates; cite the case management orders by number.",
         context: "Firm precedents and clauses:\n{{steps.precedents.output.text | truncate:20000}}",
       }),
-      N("save", "action.save_document", "Save letter", { kind: "word", title: "Meet-and-confer letter — {{inputs.opposing_counsel | truncate:40}} — {{now | date:short}}", content: "{{steps.draft.output.text}}", matterId: "{{inputs.matter}}", tags: ["meet-and-confer", "letter"] }),
+      N("save", "output.file", "Save letter", OUT("docx", { content: "{{steps.draft.output.text}}", tags: ["meet-and-confer", "letter"] })),
       N("deadline", "action.create_event", "Calendar response deadline", { title: "Meet-and-confer response due — {{inputs.opposing_counsel | truncate:40}}", kind: "deadline", startsAt: "{{inputs.response_deadline}} 17:00", durationMinutes: 0, notes: "{{inputs.dispute | truncate:500}}", ruleSource: "FRCP 37(a)(1); Local Civ. Rule 7.02", attendeeIds: [P.jordanWhitfield, P.mariaLopez], matterId: "{{inputs.matter}}" }),
       N("send", "action.create_task", "Finalize and send", { title: "Finalize and send meet-and-confer letter to {{inputs.opposing_counsel | truncate:40}}", description: "Response requested by {{inputs.response_deadline | date:long}}.\n{{steps.save.output.href}}", assigneeId: P.jordanWhitfield, priority: "high", dueRule: "+1bd", matterId: "{{inputs.matter}}", tags: ["meet-and-confer"] }),
     ],
@@ -476,7 +488,7 @@ const TEMPLATES: TemplateDef[] = [
         kind: "checklist", tone: "plain", audience: "team", modelTier: "fast", research: NO_RESEARCH,
         brief: "Write the PAGA notice response checklist for {{inputs.employer}} ({{matter.name}}). Group by phase: (1) Immediate (litigation hold, payroll and timekeeping data pull, insurance notice); (2) Evaluation (exposure model, cure eligibility per section, early evaluation conference decision); (3) Cure and response (cure notice content, LWDA submission, employee communications); (4) Calendar. Include the strategy note.\n\nWork items:\n{{steps.plan.output.items | table:section,action,curable,cure_window,due_rule,owner_role}}\n\nStrategy note: {{steps.plan.output.strategy_note}}",
       }),
-      N("save", "action.save_document", "Save checklist", { kind: "word", title: "PAGA response checklist — {{inputs.employer}} — {{now | date:short}}", content: "{{steps.checklist.output.text}}", matterId: "{{inputs.matter}}", tags: ["PAGA", "checklist"] }),
+      N("save", "output.file", "Save checklist", OUT("docx", { content: "{{steps.checklist.output.text}}", tags: ["PAGA", "checklist"] })),
       N("notify", "action.notify", "Notify team", { recipientIds: [P.samuelChen, P.jordanWhitfield], kind: "update", message: "PAGA notice parsed for **{{inputs.employer}}**: {{steps.plan.output.items | length}} work items opened; LWDA window calendared for {{steps.cure_deadline.output.startsAt | date:long}}.\n\nChecklist: {{steps.save.output.href}}", matterId: "{{inputs.matter}}" }),
     ],
     edges: [E("start", "extract"), E("extract", "plan"), E("plan", "each"), E("each", "task", "each"), E("task", "each", undefined, "loop-back"), E("each", "cure_deadline", "done"), E("each", "checklist", "done"), E("checklist", "save"), E("cure_deadline", "notify"), E("save", "notify")],
@@ -500,17 +512,314 @@ const TEMPLATES: TemplateDef[] = [
       N("any", "logic.branch", "Anything published?", { rules: [{ id: "yes", label: "New documents", logic: "all", conditions: [{ left: "{{steps.fr.output.results | length}}", op: "gt", right: "0" }] }], elseLabel: "Quiet week" }),
       N("summary", "ai.summarize", "Summarize for the matter", { source: "Matter: {{matter.name}} — {{matter.description}}\n\nFederal Register documents this week:\n{{steps.fr.output.text}}", style: "executive", length: "medium", focus: "what changed, comment deadlines, effective dates, and consequences for {{matter.client}}", modelTier: "primary" }),
       N("post", "action.notify", "Post regulatory update", { recipientIds: [P.jordanWhitfield, P.priyaRaman, P.aishaKhan], kind: "announcement", message: "**Regulatory watch — {{inputs.topic}} ({{now | date:short}})**\n\n{{steps.summary.output.text | truncate:2500}}", matterId: "{{inputs.matter}}" }),
-      N("file", "action.export", "File the digest", { format: "markdown", filename: "regulatory-watch-{{inputs.topic | truncate:20}}-{{now | date:date}}", source: "# Regulatory watch — {{inputs.topic}} — {{now | date:long}}\n\n{{steps.summary.output.text}}\n\n## Documents\n\n{{steps.fr.output.text}}", matterId: "{{inputs.matter}}", addToLibrary: true }),
+      N("file", "output.file", "File the digest", OUT("md", { content: "# Regulatory watch — {{inputs.topic}} — {{now | date:long}}\n\n{{steps.summary.output.text}}\n\n## Documents\n\n{{steps.fr.output.text}}", tags: ["regulatory", "watch"] })),
       N("quiet", "action.notify", "Quiet week", { recipientIds: [P.aishaKhan], kind: "update", message: "Regulatory watch — {{inputs.topic}}: no Federal Register documents in the last 7 days.", matterId: "{{inputs.matter}}" }),
     ],
     edges: [E("schedule", "fr"), E("fr", "any"), E("any", "summary", "yes"), E("summary", "post"), E("summary", "file"), E("any", "quiet", "else")],
   },
+
+  // 14 ───────────────────────── Deposition designations ─────────────────────────
+  {
+    id: WORKFLOW_TEMPLATE_IDS.depoDesignations,
+    name: "Deposition designations",
+    description: "From a transcript, propose page:line designations for trial or a motion — affirmative, impeachment and completeness — with the objection risk for each, verify every cite against the transcript and save the designation table for the team to finalize.",
+    category: "discovery",
+    tags: ["deposition", "designations", "trial", "FRCP 32"],
+    inputs: [
+      { key: "transcript_text", label: "Transcript (upload or paste)", type: "file", required: true },
+      { key: "witness", label: "Witness", type: "text", required: true, placeholder: "Gregory Hale, Director EHS" },
+      { key: "matter", label: "Matter", type: "matter", required: true },
+      { key: "side", label: "Designating for", type: "select", required: true, options: ["Plaintiff", "Defendant"] },
+      { key: "themes", label: "Themes to cover", type: "textarea", placeholder: "Knowledge of the 2016 EHS memo; § 8(e) decision; what Hale told Pryce" },
+    ],
+    nodes: [
+      N("start", "trigger.manual", "Run with transcript"),
+      N("rows", "ai.prompt", "Propose designations", {
+        instructions: "You prepare deposition designations for trial and motion practice. From the transcript, propose designations as page:line ranges (page and line numbers exactly as they appear in the transcript; never invent them). Each designation covers one complete question-and-answer exchange or a tight run of them; add the questions needed for the answers to make sense (FRE 106 completeness). Classify the purpose (affirmative, impeachment, completeness), summarize the testimony in one sentence, tie it to a theme, and rate the objection risk (low / medium / high) with the likely basis (hearsay, foundation, speculation, form, relevance, privilege, FRCP 32(a)(1) use limits). Note where the other side will likely counter-designate. Return JSON only.",
+        prompt: "Witness: {{inputs.witness}} · Designating for the {{inputs.side}} in {{matter.name}}\nThemes: {{inputs.themes | default:\"the witness's knowledge, decisions and communications relevant to liability\"}}\n\nTranscript:\n{{inputs.transcript_text | truncate:90000}}",
+        output: "json", modelTier: "primary", research: NO_RESEARCH,
+        jsonSchema: JSON.stringify({ type: "object", properties: { designations: { type: "array", items: { type: "object", properties: { page_from: { type: "integer" }, line_from: { type: "integer" }, page_to: { type: "integer" }, line_to: { type: "integer" }, cite: { type: "string" }, summary: { type: "string" }, theme: { type: "string" }, purpose: { type: "string", enum: ["affirmative", "impeachment", "completeness"] }, objection_risk: { type: "string", enum: ["low", "medium", "high"] }, objection_basis: { type: "string" }, counter_designation_risk: { type: "string" } }, required: ["page_from", "line_from", "page_to", "line_to", "cite", "summary", "theme", "purpose", "objection_risk", "objection_basis", "counter_designation_risk"] } }, coverage_gaps: { type: "array", items: { type: "string" } } }, required: ["designations", "coverage_gaps"] }),
+      }),
+      N("verify", "ai.verify", "Verify cites against the transcript", { output: "{{steps.rows.output.designations}}", sources: "{{inputs.transcript_text | truncate:90000}}", stepId: "rows", mode: "structured", modelTier: "fast" }),
+      N("review", "logic.review", "Trust review", { steps: "rows, verify", approverId: P.elenaMarsh, title: "Designations need a look", message: "Some proposed designations for {{inputs.witness}} did not verify against the transcript. Approve to save the table anyway, or reject to stop." }),
+      N("sheet", "output.file", "Save designation table", OUT("xlsx", { rows: "{{steps.verify.output.corrected}}", tags: ["deposition", "designations"] })),
+      N("task", "action.create_task", "Finalize designations", { title: "Finalize {{inputs.witness}} designations ({{steps.rows.output.designations | length}} proposed, {{steps.rows.output.designations | where:objection_risk,high | length}} high objection risk)", description: "Check every page:line against the certified transcript, decide the counter-designation strategy and prepare the exchange under the pretrial order.\n\nCoverage gaps noted:\n{{steps.rows.output.coverage_gaps | bullets}}\n\nTable: {{steps.sheet.output.href}}", assigneeId: P.elenaMarsh, priority: "high", dueRule: "+3bd", matterId: "{{inputs.matter}}", tags: ["deposition", "designations"] }),
+      N("notify", "action.notify", "Notify case team", { recipientIds: [P.jordanWhitfield, P.priyaRaman], kind: "update", message: "Proposed designations for **{{inputs.witness}}** ({{inputs.side}}) are ready on {{matter.shortName}}: {{steps.rows.output.designations | length}} ranges, verification {{steps.verify.output.status}}. {{steps.sheet.output.href}}", matterId: "{{inputs.matter}}" }),
+    ],
+    edges: [E("start", "rows"), E("rows", "verify"), E("verify", "review"), E("review", "sheet", "approved"), E("sheet", "task"), E("sheet", "notify")],
+  },
+
+  // 15 ───────────────────────── Production QC ─────────────────────────
+  {
+    id: WORKFLOW_TEMPLATE_IDS.productionQc,
+    name: "Production QC",
+    description: "Before a production goes out: pull the documents under a Bates prefix, check for Bates gaps, privilege inconsistencies, hot documents coded non-responsive, custodian coverage and date-range problems, verify the findings and save a QC report with a fix-it task.",
+    category: "discovery",
+    tags: ["production", "QC", "Bates", "privilege", "e-discovery"],
+    inputs: [
+      { key: "matter", label: "Matter", type: "matter", required: true },
+      { key: "bates_prefix", label: "Bates prefix", type: "text", required: true, placeholder: "MFC-" },
+      { key: "volume", label: "Production volume", type: "text", required: true, placeholder: "VOL003" },
+      { key: "load_file", label: "Load file / index (optional)", type: "file" },
+      { key: "checks", label: "Checks", type: "select", options: ["Bates gaps", "Privilege consistency", "Hot documents coded non-responsive", "Custodian coverage", "Date range sanity"] },
+    ],
+    nodes: [
+      N("start", "trigger.manual", "Run before the production"),
+      N("docs", "data.query", "Documents under the prefix", { source: "ediscovery", q: "", filters: { batesPrefix: "{{inputs.bates_prefix}}" }, matterId: "{{inputs.matter}}", since: "", limit: 500, sort: "date", direction: "asc" }),
+      N("priv", "data.query", "Documents coded privileged", { source: "ediscovery", q: "", filters: { batesPrefix: "{{inputs.bates_prefix}}", privileged: "true" }, matterId: "{{inputs.matter}}", since: "", limit: 200, sort: "date", direction: "asc" }),
+      N("qc", "ai.prompt", "Run the QC checks", {
+        instructions: "You are a litigation support QC reviewer. Using the document rows (Bates, date, custodian, type, subject, coding), the privileged set and the load file if given, run the requested checks and list every finding: Bates gaps or duplicates in the numbering; documents coded privileged that appear in the production set (or privileged families split); documents coded hot but not responsive; custodians with no documents in the volume although they appear in the matter; dates outside the collection window or missing. Each finding names the Bates number(s), the check, a severity (low / medium / high), the issue and the fix. Do not invent documents. Return JSON only.",
+        prompt: "Matter: {{matter.name}} · Prefix {{inputs.bates_prefix}} · Volume {{inputs.volume}}\nChecks requested: {{inputs.checks | default:\"all\"}}\n\nProduction set ({{steps.docs.output.count}} of {{steps.docs.output.total}} documents):\n{{steps.docs.output.rows | table:bates,date,custodian,type,subject,coding}}\n\nCoded privileged ({{steps.priv.output.count}}):\n{{steps.priv.output.rows | table:bates,date,custodian,subject}}\n\nLoad file / index:\n{{inputs.load_file | default:\"(none)\" | truncate:20000}}",
+        output: "json", modelTier: "fast", research: NO_RESEARCH,
+        jsonSchema: JSON.stringify({ type: "object", properties: { findings: { type: "array", items: { type: "object", properties: { bates: { type: "string" }, check: { type: "string" }, severity: { type: "string", enum: ["low", "medium", "high"] }, issue: { type: "string" }, action: { type: "string" } }, required: ["bates", "check", "severity", "issue", "action"] } }, summary: { type: "string" }, documents_checked: { type: "integer" } }, required: ["findings", "summary", "documents_checked"] }),
+      }),
+      N("verify", "ai.verify", "Verify findings against the rows", { output: "{{steps.qc.output.findings}}", sources: "{{steps.docs.output.text}}\n\n{{steps.priv.output.text}}", stepId: "qc", mode: "structured", modelTier: "fast" }),
+      N("any", "logic.branch", "Any findings?", { rules: [{ id: "issues", label: "Findings", logic: "all", conditions: [{ left: "{{steps.qc.output.findings | length}}", op: "gt", right: "0" }] }], elseLabel: "Clean" }),
+      N("report", "output.file", "Save QC report", OUT("xlsx", { rows: "{{steps.verify.output.corrected}}", tags: ["production", "qc"] })),
+      N("fix", "action.create_task", "Fix QC findings", { title: "Production {{inputs.volume}}: fix {{steps.qc.output.findings | length}} QC finding(s) before release ({{steps.qc.output.findings | where:severity,high | length}} high)", description: "{{steps.qc.output.summary}}\n\nReport: {{steps.report.output.href}}", assigneeId: P.mariaLopez, priority: "urgent", dueRule: "+1bd", matterId: "{{inputs.matter}}", tags: ["production", "qc"] }),
+      N("clean", "action.notify", "Clean", { recipientIds: [P.mariaLopez, P.jordanWhitfield], kind: "update", message: "Production **{{inputs.volume}}** ({{inputs.bates_prefix}}) passed QC: {{steps.docs.output.count}} documents checked, no findings.", matterId: "{{inputs.matter}}" }),
+    ],
+    edges: [E("start", "docs"), E("start", "priv"), E("docs", "qc"), E("priv", "qc"), E("qc", "verify"), E("verify", "any"), E("any", "report", "issues"), E("report", "fix"), E("any", "clean", "else")],
+  },
+
+  // 16 ───────────────────────── Judge profile memo ─────────────────────────
+  {
+    id: WORKFLOW_TEMPLATE_IDS.judgeProfile,
+    name: "Judge profile memo",
+    description: "Build a partner-ready profile of a judge from the intelligence store (opinions, dockets, the judge record), agentic research on notable rulings and tendencies, verify the claims and save the memo to the matter.",
+    category: "research",
+    tags: ["judge", "profile", "research", "memo"],
+    inputs: [
+      { key: "judge", label: "Judge", type: "text", required: true, placeholder: "Richard M. Gergel" },
+      { key: "court", label: "Court", type: "text", placeholder: "D.S.C." },
+      { key: "matter", label: "Matter", type: "matter", required: true },
+      { key: "focus", label: "Focus", type: "textarea", placeholder: "Daubert practice, bellwether selection, summary judgment in MDL 2873" },
+    ],
+    nodes: [
+      N("start", "trigger.manual", "Run with judge"),
+      N("entity", "data.query", "Judge record", { source: "intel_entities", q: "{{inputs.judge}}", filters: { type: "judge" }, matterId: "", since: "", limit: 3, sort: "updated", direction: "desc" }),
+      N("docs", "data.query", "Opinions and dockets", { source: "intel_documents", q: "{{inputs.judge}}", filters: { kinds: "opinion, docket, docket_entry, judge" }, matterId: "", since: "-730d", limit: 80, sort: "date", direction: "desc" }),
+      N("profile", "intel.analyze", "Profile from the store", { analysis: "profiles", scope: { matterId: "", kinds: ["opinion", "docket", "docket_entry", "judge"], entityIds: "{{steps.entity.output.ids}}", court: "", jurisdiction: "", dateFrom: "-730d", dateTo: "", q: "{{inputs.judge}}" }, title: "Judge profile — {{inputs.judge}}", maxDocs: 400, onError: "continue" }),
+      N("research", "ai.research", "Research rulings and tendencies", { question: "Profile Judge {{inputs.judge}}{{inputs.court | default:\"\" | replace:D.S.C., (D.S.C.)}}: background and appointment, notable rulings on {{inputs.focus | default:\"dispositive motions, Daubert and class certification\"}}, case-management tendencies, treatment of MDL leadership and bellwethers, and reversal history. Cite every ruling.", jurisdiction: "", depth: "standard", sources: { web: true, legal: true, internal: true }, instructions: "Read the opinions you rely on. Separate what the record shows from reputation. Never characterize a ruling you have not read." }),
+      N("memo", "ai.draft", "Draft the profile memo", {
+        kind: "memo", tone: "neutral", audience: "partner", modelTier: "primary", research: NO_RESEARCH,
+        brief: "Draft a judge profile memo on Judge {{inputs.judge}} for {{matter.name}}. Sections: Snapshot (court, appointment, prior practice); How the court runs (scheduling, page limits, oral argument, discovery disputes); Rulings that matter for us ({{inputs.focus | default:\"dispositive motions, Daubert, class certification\"}}) as a table: Ruling | Date | Holding | Why it matters; Tendencies with the evidence for each; Practical guidance for briefing and argument; Open questions. Cite opinions and docket entries; keep any [VERIFY] marks.\n\nProfile from the intelligence store:\n{{steps.profile.output.text | default:\"(no store profile yet)\" | truncate:6000}}\n\nResearch findings:\n{{steps.research.output.text}}",
+        context: "Recent opinions and dockets in the store:\n{{steps.docs.output.text | truncate:8000}}",
+      }),
+      N("verify", "ai.verify", "Verify memo against authorities", { output: "{{steps.memo.output.text}}", sources: "Research citations:\n{{steps.research.output.citations | json}}\n\nStore documents:\n{{steps.docs.output.text | truncate:20000}}", stepId: "memo", mode: "claims", maxClaims: 30, modelTier: "fast" }),
+      N("review", "logic.review", "Trust review", { steps: "memo, verify", approverId: P.danielOkafor, title: "Judge profile needs a look", message: "Some claims in the profile of Judge {{inputs.judge}} did not verify against the authorities. Approve to save it anyway, or reject to stop." }),
+      N("save", "output.file", "Save memo", OUT("docx", { content: "{{steps.verify.output.corrected}}", tags: ["judge", "profile"] })),
+      N("task", "action.create_task", "Read the profile", { title: "Judge profile memo ready — {{inputs.judge}}", description: "Verification: {{steps.verify.output.status}} ({{steps.verify.output.unsupported}} unsupported claim(s)).\n\n{{steps.save.output.href}}", assigneeId: P.jordanWhitfield, priority: "medium", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["judge", "research"] }),
+    ],
+    edges: [E("start", "entity"), E("entity", "docs"), E("docs", "profile"), E("profile", "research"), E("research", "memo"), E("memo", "verify"), E("verify", "review"), E("review", "save", "approved"), E("save", "task")],
+  },
 ];
 
-/** Templates with positions computed by the layered layout. */
+// ─────────────────────────── Front ends ───────────────────────────
+
+const F = {
+  matter: (): WorkflowFrontend["fields"][number] => ({ key: "matter", label: "Matter", type: "matter", required: true, help: "Sets the run's matter; documents are filed under it." }),
+};
+
+/**
+ * The one-page start form each template ships with. Field keys match the
+ * template's inputs; the output section (format, label, folder) feeds the
+ * template's output.file step. See src/modules/workflows/frontend.ts.
+ */
+export const TEMPLATE_FRONTENDS: Record<string, WorkflowFrontend> = {
+  [WORKFLOW_TEMPLATE_IDS.ndaIntake]: {
+    title: "Review an NDA",
+    intro: "Upload the agreement and say which side the client is on. The review extracts the terms, scores the risk against firm positions, drafts the issues memo and routes it to the right person.",
+    fields: [
+      { key: "nda_text", label: "NDA", type: "file", required: true, accept: DOC_ACCEPT, help: "Word, PDF or text; the agreement text is extracted for the review." },
+      F.matter(),
+      { key: "our_side", label: "Our client is the", type: "select", required: true, options: ["Receiving Party", "Disclosing Party", "Mutual"] },
+      { key: "counterparty", label: "Counterparty", type: "text", placeholder: "Bluewater Analytics, Inc." },
+    ],
+    submitLabel: "Review the NDA",
+    output: { formats: ["docx", "pdf", "md"], defaultFormat: "docx", defaultLabel: "NDA review — {{inputs.counterparty | default:\"counterparty\"}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.depoDigest]: {
+    title: "Digest a deposition",
+    intro: "Upload the rough transcript. The digest pulls admissions, harmful testimony, contradictions and exhibits with page:line cites, verifies them against the transcript and files the memo.",
+    fields: [
+      { key: "transcript_text", label: "Transcript", type: "file", required: true, accept: TRANSCRIPT_ACCEPT, help: "Rough or certified transcript as text, PDF or Word." },
+      { key: "witness", label: "Witness", type: "text", required: true, placeholder: "Gregory Hale, Director EHS" },
+      F.matter(),
+      { key: "focus", label: "Themes to focus on", type: "textarea", placeholder: "2016 EHS memo; TSCA § 8(e) decision; what Hale told Pryce in August 2016" },
+    ],
+    submitLabel: "Build the digest",
+    output: { formats: ["docx", "pdf", "md"], defaultFormat: "docx", defaultLabel: "Deposition digest — {{inputs.witness}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.docketMonitor]: {
+    title: "Check the dockets",
+    intro: "Runs every morning on its schedule; start it now to sweep the last day of docket activity for a matter.",
+    fields: [
+      { key: "docket_query", label: "Docket search", type: "text", required: true, placeholder: "Meridian Fluorochem AFFF" },
+      { key: "courts", label: "Courts", type: "text", placeholder: "dsc", help: "CourtListener court ids, space separated." },
+      F.matter(),
+    ],
+    submitLabel: "Check dockets now",
+  },
+  [WORKFLOW_TEMPLATE_IDS.clauseWorkbook]: {
+    title: "Extract contract clauses",
+    intro: "Upload one contract. The commercial and risk terms are extracted into typed fields and turned into a clause-by-clause review table for the diligence tracker.",
+    fields: [
+      { key: "contract_text", label: "Contract", type: "file", required: true, accept: DOC_ACCEPT },
+      { key: "contract_name", label: "Contract name", type: "text", required: true, placeholder: "Aurora Health MSA (2023)" },
+      F.matter(),
+    ],
+    submitLabel: "Extract clauses",
+    output: { formats: ["xlsx", "csv"], defaultFormat: "xlsx", defaultLabel: "Clause review — {{inputs.contract_name}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.privilegeLog]: {
+    title: "Build a privilege log",
+    intro: "Drafts a privilege-safe description and basis for every document coded privileged (optionally one custodian), verifies each entry and saves the log for paralegal QC.",
+    fields: [
+      F.matter(),
+      { key: "custodian", label: "Custodian", type: "text", placeholder: "Kaine", help: "Leave empty for all custodians." },
+      { key: "limit", label: "Max documents", type: "number", placeholder: "25" },
+    ],
+    submitLabel: "Build the log",
+    output: { formats: ["xlsx", "csv"], defaultFormat: "xlsx", defaultLabel: "Privilege log — {{inputs.custodian | default:\"all custodians\"}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.chronology]: {
+    title: "Build a chronology",
+    intro: "Searches the review set on a topic, extracts dated events with Bates cites, drops what is already on the matter timeline and drafts the chronology memo.",
+    fields: [
+      F.matter(),
+      { key: "topic", label: "Topic", type: "text", required: true, placeholder: "TSCA § 8(e) substantial risk decision 2016" },
+      { key: "date_after", label: "Documents after", type: "date" },
+      { key: "date_before", label: "Documents before", type: "date" },
+    ],
+    submitLabel: "Build the chronology",
+    output: { formats: ["docx", "pdf", "md"], defaultFormat: "docx", defaultLabel: "Chronology — {{inputs.topic}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.researchMemo]: {
+    title: "Research a question",
+    intro: "Agentic research with verified citations, saved as a memo and held for partner approval before it circulates.",
+    fields: [
+      { key: "question", label: "Research question", type: "textarea", required: true, placeholder: "Under Illinois law, does a consequential-damages waiver bar lost-profit claims where the breach was willful?" },
+      { key: "jurisdiction", label: "Jurisdiction", type: "select", options: ["Any", "7th-circuit", "4th-circuit", "9th-circuit", "11th-circuit", "california-state", "new-york-state", "delaware", "illinois-state", "federal-appellate", "scotus"], default: "Any" },
+      F.matter(),
+    ],
+    submitLabel: "Start the research",
+    output: { formats: ["docx", "pdf", "md"], defaultFormat: "docx", defaultLabel: "Research memo — {{inputs.question | truncate:60}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.clientStatus]: {
+    title: "Draft a client status report",
+    intro: "Assembles open tasks, deadlines, team updates and key dates into a client-ready report and routes it to the lead attorney.",
+    fields: [
+      F.matter(),
+      { key: "period", label: "Reporting period", type: "select", required: true, options: ["Weekly", "Biweekly", "Monthly"], default: "Weekly" },
+      { key: "highlights", label: "Highlights to include", type: "textarea", placeholder: "Tier 2 production on track; Hale Vol. II completed; expert rebuttal drafts due Nov 6" },
+    ],
+    submitLabel: "Draft the report",
+    output: { formats: ["docx", "pdf"], defaultFormat: "docx", defaultLabel: "{{inputs.period}} status report — {{matter.shortName}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.matterIntake]: {
+    title: "Open a new matter",
+    intro: "Runs the conflicts search, assesses the result and either opens the file (engagement letter, intake meeting, opening tasks) or escalates a potential conflict.",
+    fields: [
+      { key: "client_name", label: "Client", type: "text", required: true, placeholder: "Harborline Technologies, Inc." },
+      { key: "adverse_parties", label: "Adverse and related parties", type: "textarea", required: true, placeholder: "Bluewater Analytics, Inc.; Snowfield Reseller LLC; Aurora Health" },
+      { key: "matter_name", label: "Matter name", type: "text", required: true },
+      { key: "practice_area", label: "Practice area", type: "select", required: true, options: ["Litigation", "Products Liability", "Commercial", "Corporate / M&A", "Employment", "Regulatory", "IP", "Real Estate"] },
+      { key: "summary", label: "Matter summary", type: "textarea", required: true },
+    ],
+    submitLabel: "Run intake",
+  },
+  [WORKFLOW_TEMPLATE_IDS.citeCheck]: {
+    title: "Cite-check a brief",
+    intro: "Every citation is resolved against CourtListener; the report lists unresolved and suspicious cites and opens a fix-it task when anything fails.",
+    fields: [
+      { key: "brief_text", label: "Brief", type: "file", required: true, accept: DOC_ACCEPT },
+      { key: "brief_name", label: "Brief", type: "text", required: true, placeholder: "MSJ opposition v3" },
+      F.matter(),
+    ],
+    submitLabel: "Check the citations",
+    output: { formats: ["docx", "pdf", "md"], defaultFormat: "docx", defaultLabel: "Cite-check — {{inputs.brief_name}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.meetConfer]: {
+    title: "Draft a meet-and-confer letter",
+    intro: "Pulls the firm's precedents, drafts the letter with the dispute facts and requested relief, files it and calendars the response deadline.",
+    fields: [
+      F.matter(),
+      { key: "opposing_counsel", label: "Addressee", type: "text", required: true, placeholder: "Rebecca Klein, Klein & Associates" },
+      { key: "dispute", label: "Dispute summary", type: "textarea", required: true },
+      { key: "relief", label: "What we are asking for", type: "textarea", required: true },
+      { key: "response_deadline", label: "Response deadline", type: "date", required: true },
+    ],
+    submitLabel: "Draft the letter",
+    output: { formats: ["docx", "pdf"], defaultFormat: "docx", defaultLabel: "Meet-and-confer letter — {{inputs.opposing_counsel | truncate:40}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.pagaChecklist]: {
+    title: "Respond to a PAGA notice",
+    intro: "Parses the LWDA notice, opens a work item per allegation with cure deadlines, calendars the 33-day window and drafts the response checklist.",
+    fields: [
+      { key: "notice_text", label: "PAGA notice", type: "file", required: true, accept: DOC_ACCEPT },
+      F.matter(),
+      { key: "employer", label: "Employer", type: "text", required: true, placeholder: "Sterling Medical Group, P.C." },
+    ],
+    submitLabel: "Parse the notice",
+    output: { formats: ["docx", "pdf", "md"], defaultFormat: "docx", defaultLabel: "PAGA response checklist — {{inputs.employer}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.regulatoryWatch]: {
+    title: "Sweep the Federal Register",
+    intro: "Runs every Monday on its schedule; start it now for the last seven days on a topic and agency.",
+    fields: [
+      { key: "topic", label: "Topic", type: "text", required: true, placeholder: "PFAS OR PFOA OR PFOS" },
+      { key: "agency", label: "Agency slug", type: "text", placeholder: "environmental-protection-agency" },
+      F.matter(),
+    ],
+    submitLabel: "Sweep now",
+    output: { formats: ["md", "docx", "pdf"], defaultFormat: "md", defaultLabel: "Regulatory watch — {{inputs.topic | truncate:20}} — {{now | date:date}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.depoDesignations]: {
+    title: "Designate a deposition",
+    intro: "Upload the transcript and say which side you designate for. Proposed page:line ranges are verified against the transcript and saved as a designation table for the team to finalize.",
+    fields: [
+      { key: "transcript_text", label: "Transcript", type: "file", required: true, accept: TRANSCRIPT_ACCEPT, help: "Page and line numbers are read from the transcript as uploaded." },
+      { key: "witness", label: "Witness", type: "text", required: true, placeholder: "Gregory Hale, Director EHS" },
+      F.matter(),
+      { key: "side", label: "Designating for", type: "select", required: true, options: ["Plaintiff", "Defendant"], default: "Defendant" },
+      { key: "themes", label: "Themes to cover", type: "textarea", placeholder: "Knowledge of the 2016 EHS memo; § 8(e) decision; what Hale told Pryce" },
+    ],
+    submitLabel: "Propose designations",
+    output: { formats: ["xlsx", "csv"], defaultFormat: "xlsx", defaultLabel: "Designations — {{inputs.witness}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.productionQc]: {
+    title: "QC a production",
+    intro: "Checks the documents under a Bates prefix for gaps, privilege inconsistencies, hot documents coded non-responsive, custodian coverage and date problems, then saves the report and opens the fix-it task.",
+    fields: [
+      F.matter(),
+      { key: "bates_prefix", label: "Bates prefix", type: "bates-prefix", required: true, placeholder: "MFC-" },
+      { key: "volume", label: "Production volume", type: "text", required: true, placeholder: "VOL003" },
+      { key: "load_file", label: "Load file or index", type: "file", accept: [".dat", ".csv", ".txt", ".opt", ".xlsx"], help: "Optional; the vendor's DAT/OPT or a CSV index is checked against the review set." },
+      { key: "checks", label: "Checks", type: "multiselect", options: ["Bates gaps", "Privilege consistency", "Hot documents coded non-responsive", "Custodian coverage", "Date range sanity"], default: ["Bates gaps", "Privilege consistency", "Hot documents coded non-responsive"] },
+    ],
+    submitLabel: "Run QC",
+    output: { formats: ["xlsx", "csv"], defaultFormat: "xlsx", defaultLabel: "Production QC — {{inputs.volume | default:\"volume\"}} — {{now | date:short}}" },
+  },
+  [WORKFLOW_TEMPLATE_IDS.judgeProfile]: {
+    title: "Profile a judge",
+    intro: "Builds a partner-ready profile from the intelligence store and agentic research on notable rulings and tendencies, verifies the claims and saves the memo to the matter.",
+    fields: [
+      { key: "judge", label: "Judge", type: "text", required: true, placeholder: "Richard M. Gergel" },
+      { key: "court", label: "Court", type: "text", placeholder: "D.S.C." },
+      F.matter(),
+      { key: "focus", label: "Focus", type: "textarea", placeholder: "Daubert practice, bellwether selection, summary judgment in MDL 2873" },
+    ],
+    submitLabel: "Build the profile",
+    output: { formats: ["docx", "pdf", "md"], defaultFormat: "docx", defaultLabel: "Judge profile — {{inputs.judge}} — {{now | date:short}}" },
+  },
+};
+
+/** Templates with positions computed by the layered layout and their front ends attached. */
 export function buildTemplates(): Workflow[] {
   return TEMPLATES.map((t) => ({
     ...t,
+    frontend: TEMPLATE_FRONTENDS[t.id],
     nodes: autoLayout(t.nodes, t.edges),
     status: "active",
     isTemplate: true,

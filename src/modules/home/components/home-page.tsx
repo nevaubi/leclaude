@@ -24,6 +24,8 @@ import { MattersFocus, MattersOverview } from "./matters-overview";
 import { AssistantDock } from "./assistant-dock";
 import { TodaySpine } from "./today-spine";
 import { ForYouSection } from "./for-you";
+import { MatterWatchSection } from "./insights-matter-watch";
+import { UpcomingPrepSection } from "./insights-upcoming";
 
 /** Home page shortcuts, listed in the `?` help dialog. */
 export const HOME_SHORTCUTS: ShortcutGroup[] = [
@@ -123,6 +125,8 @@ function Overview() {
     <div className="@container mx-auto w-full max-w-[1480px] space-y-3 p-3 pb-6">
       <TodaySpine />
       <ForYouSection />
+      <UpcomingPrepSection />
+      <MatterWatchSection />
       <div className="grid gap-3 @5xl:grid-cols-[minmax(0,8fr)_minmax(0,4fr)]">
         <MattersOverview />
         <DailyBriefCard />

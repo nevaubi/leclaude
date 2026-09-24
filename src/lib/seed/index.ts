@@ -8,6 +8,7 @@ import { seedLibrary } from "@/modules/library/seed";
 import { seedOffice } from "@/modules/office/shared/seed";
 import { seedSearch } from "@/modules/search/seed";
 import { seedIntel } from "@/modules/intel/seed";
+import { seedIntelAnalysis } from "@/modules/intel/analysis/seed";
 
 /**
  * Seed registry. Bump SEED_VERSION when seed content changes materially; the
@@ -26,6 +27,7 @@ const SEEDERS: { name: string; run: Seeder }[] = [
   { name: "office", run: seedOffice },
   { name: "search", run: seedSearch },
   { name: "intel", run: seedIntel },
+  { name: "intel-analysis", run: seedIntelAnalysis },
 ];
 
 let seeding = false;

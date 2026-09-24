@@ -54,6 +54,9 @@ export interface WorkflowMeta {
   people: { id: string; name: string; title?: string; role: string }[];
   matters: { id: string; name: string; shortName: string; client: string; status: string; practiceArea: string }[];
   scheduleDescriptions: Record<string, string>;
+  workflows?: { id: string; name: string; status: string; system?: boolean; hasFrontend?: boolean }[];
+  intelSources?: { id: string; name: string; adapter: string; kind?: string; enabled?: boolean }[];
+  agents?: { id: string; label: string; hint: string }[];
 }
 
 let metaCache: WorkflowMeta | null = null;
@@ -92,6 +95,8 @@ function applyEvent(run: WorkflowRunRecord | null, ev: RunEvent): WorkflowRunRec
     case "artifact": return { ...run, artifacts: [...(run.artifacts ?? []).filter((a) => !(a.id === ev.artifact.id && a.kind === ev.artifact.kind)), ev.artifact] };
     case "approval.requested": return { ...run, approvals: [...(run.approvals ?? []).filter((a) => a.nodeId !== ev.approval.nodeId), ev.approval], status: "waiting_approval" };
     case "run.done": return { ...run, status: ev.status };
+    case "handoff": return { ...run, handoffs: [...(run.handoffs ?? []), ev.handoff] };
+    case "output": return { ...run, deliverables: [...(run.deliverables ?? []).filter((d) => d.id !== ev.output.id), ev.output] };
     default: return run;
   }
 }

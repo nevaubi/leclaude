@@ -10,9 +10,10 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
   const { tab } = await searchParams;
   ensureScheduler();
   const templates = listWorkflows({ template: true });
-  const mine = listWorkflows({ template: false });
+  const mine = listWorkflows({ template: false, system: false });
+  const system = listWorkflows({ template: false, system: true });
   const stats = workflowStats();
   const recentRuns = listRuns({ limit: 8 }).runs;
-  const initialTab = tab === "templates" || tab === "mine" || tab === "runs" ? tab : undefined;
-  return <WorkflowsGallery templates={templates} mine={mine} stats={stats} recentRuns={recentRuns} initialTab={initialTab} />;
+  const initialTab = tab === "templates" || tab === "mine" || tab === "runs" || tab === "system" ? tab : undefined;
+  return <WorkflowsGallery templates={templates} mine={mine} system={system} stats={stats} recentRuns={recentRuns} initialTab={initialTab} />;
 }
