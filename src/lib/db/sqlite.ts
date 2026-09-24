@@ -1,5 +1,6 @@
 import "server-only";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -13,10 +14,29 @@ function loadDatabaseSync(): typeof DatabaseSync {
   return mod.DatabaseSync;
 }
 
+let resolvedDataDir: string | null = null;
+
+/**
+ * Directory for the SQLite database and uploads. Defaults to ./data; when that
+ * location is not writable (serverless hosts such as Vercel mount the bundle
+ * read-only) it falls back to a temp directory, which is ephemeral: set
+ * LECLAUDE_DATA_DIR to a persistent volume for real deployments.
+ */
 export function dataDir() {
-  const dir = process.env.LECLAUDE_DATA_DIR?.trim() || path.join(process.cwd(), "data");
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  if (resolvedDataDir) return resolvedDataDir;
+  const candidates = [process.env.LECLAUDE_DATA_DIR?.trim() || path.join(process.cwd(), "data"), path.join(os.tmpdir(), "leclaude-data")];
+  for (const dir of candidates) {
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.accessSync(dir, fs.constants.W_OK);
+      if (dir !== candidates[0]) console.warn(`[leclaude] ${candidates[0]} is not writable; using ephemeral data directory ${dir}. Set LECLAUDE_DATA_DIR to a persistent path.`);
+      resolvedDataDir = dir;
+      return dir;
+    } catch {
+      /* try next candidate */
+    }
+  }
+  throw new Error("No writable data directory. Set LECLAUDE_DATA_DIR to a writable path.");
 }
 
 const SCHEMA = `
