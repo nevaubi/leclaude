@@ -39,6 +39,9 @@ const ARTIFACT_ICON: Record<RunArtifact["kind"], React.ComponentType<{ className
 export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, detailLink = true, className, wide }: RunPanelProps) {
   const { run, connected, error, noApiKey, progress, loading, resting, reconnect } = useRunStream(runId, initialRun);
   const now = useNow(Boolean(run && (run.status === "running" || run.status === "queued")));
+  // Live durations depend on the clock, which differs between the server render and hydration; show them only after mount.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
   const [busy, setBusy] = React.useState<string | null>(null);
   const pendingApprovalRef = React.useRef<Pick<Approval, "kind" | "reasons"> | null>(null);
 
@@ -75,7 +78,8 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
     );
   }
 
-  const durationMs = run.durationMs ?? (run.finishedAt ? new Date(run.finishedAt).getTime() : now) - new Date(run.startedAt).getTime();
+  const startedMs = new Date(run.startedAt).getTime();
+  const durationMs = run.durationMs ?? (run.finishedAt ? new Date(run.finishedAt).getTime() - startedMs : mounted ? now - startedMs : null);
   const pendingApproval = run.status === "waiting_approval" ? (run.approvals ?? []).find((a) => a.decidedAt == null) : undefined;
   pendingApprovalRef.current = pendingApproval ?? null;
   const steps = plan ? orderedRows(plan, run) : run.steps.map((s) => ({ id: s.nodeId, depth: 0, loopId: null as string | null }));

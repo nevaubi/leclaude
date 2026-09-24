@@ -291,13 +291,17 @@ function toSummary(v: VerificationResult, sources: ResearchSource[]): Verificati
   };
 }
 
+/** Ordinary legal words that read better lower-cased mid-sentence (a capitalised first word that is not on this list is treated as a name or acronym). */
+const LOWERCASE_LEAD = new Set(["the", "a", "an", "government", "federal", "state", "court", "courts", "manufacturer", "manufacturers", "plaintiff", "plaintiffs", "defendant", "defendants", "removal", "preemption", "standard", "statute", "statutes", "regulation", "regulations", "consequential", "punitive", "strict", "comparative", "joint", "class", "expert", "discovery", "deposition", "privilege", "attorney", "work", "damages", "liability", "negligence", "breach", "contract", "warranty", "design", "failure", "product", "products", "jurisdiction", "venue", "choice", "forum", "collateral", "summary", "motion", "motions", "rule", "rules", "evidence", "testimony", "notice", "reporting", "liability"]);
+
 /** The proposition inside a question, for deterministic follow-ups ("Is X available in Y?" → "X available in Y"). */
 export function questionTopic(question: string): string {
   let t = question.replace(/\s+/g, " ").replace(/[?!.\s]+$/, "").trim();
   t = t.replace(/^(is|are|was|were|does|do|did|can|could|may|might|must|should|would|will|has|have|had)\s+(?:(?:a|an|the)\s+)?/i, "");
   t = t.replace(/^(what|which|when|how|whether|why|where|who)\s+(?:(?:is|are|does|do|did|can|must|should|would|will)\s+)?(?:(?:the|a|an)\s+)?/i, "");
   if (!t) return question.trim();
-  t = t.charAt(0).toLowerCase() + t.slice(1);
+  // Lower-case a leading ordinary word ("Removal…" → "removal…") but leave acronyms and case names alone ("TSCA", "PAGA", "Boyle v.").
+  if (/^[A-Z][a-z]+\s/.test(t) && !/^[A-Z][a-z]+\s+v\.\s/.test(t) && LOWERCASE_LEAD.has(t.split(" ")[0].toLowerCase())) t = t.charAt(0).toLowerCase() + t.slice(1);
   return t.length > 140 ? t.slice(0, 139).trimEnd() + "…" : t;
 }
 

@@ -145,7 +145,11 @@ export function ResearchPage(props: ResearchPageProps) {
   openThreadRef.current = openThread;
 
   React.useEffect(() => {
-    const action = urlAction({ hydrated, tool, urlQ, urlThread, handledQ: handledQRef.current, handledThread: handledThreadRef.current, activeThreadId: state.threadId });
+    // useSearchParams is the trigger, but window.location is the truth: the params lag one render behind
+    // history.replaceState, and acting on the lagging values re-opened the previous thread (ping-pong).
+    let q = urlQ, thread = urlThread;
+    try { const loc = new URLSearchParams(window.location.search); q = loc.get("q") ?? ""; thread = loc.get("thread") ?? ""; } catch { /* SSR */ }
+    const action = urlAction({ hydrated, tool, urlQ: q, urlThread: thread, handledQ: handledQRef.current, handledThread: handledThreadRef.current, activeThreadId: state.threadId });
     if (action.type === "openThread") { handledThreadRef.current = action.id; void openThreadRef.current(action.id); }
     else if (action.type === "ask") { handledQRef.current = action.q; askRef.current(action.q, undefined, { newThread: true }); }
   }, [hydrated, urlQ, urlThread, tool, state.threadId]);

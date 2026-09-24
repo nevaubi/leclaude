@@ -198,9 +198,9 @@ export function crossCheckCitations(text: string, evidence: { bates?: Iterable<s
       const a = `${Number(p1)}:${Number(l1)}`;
       cites.add(a);
       const okA = pages.has(Number(p1));
+      if (okA) resolved.add(a); else unresolved.add(a);
       let okB = true;
       if (p2) { const b = `${Number(p2)}:${Number(l2)}`; cites.add(b); okB = pages.has(Number(p2)); if (okB) resolved.add(b); else unresolved.add(b); }
-      if (okA) resolved.add(a); else unresolved.add(a);
       return okA && okB ? m : `${m} [VERIFY]`;
     });
   }

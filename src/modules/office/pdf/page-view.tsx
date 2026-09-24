@@ -25,6 +25,15 @@ export interface PageViewProps {
 const NOTE_PT = 20;
 const DRAW_TOOLS: Tool[] = ["rect", "ellipse", "redaction", "link", "text", "freehand", "note", "stamp", "signature"];
 
+/** A render that pdf.js cancelled (viewport changed, page unmounted) is expected; anything else is surfaced on the page and logged in development. */
+function reportRenderFailure(e: unknown, display: number, setRenderError: (m: string | null) => void) {
+  const name = (e as { name?: string } | null)?.name;
+  if (name === "RenderingCancelledException") return;
+  const message = e instanceof Error ? e.message : String(e);
+  if (process.env.NODE_ENV !== "production") console.warn(`[pdf] page ${display} did not render: ${message}`);
+  setRenderError(message);
+}
+
 export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAnnotation }: PageViewProps) {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -32,6 +41,8 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
   const [pdfPage, setPdfPage] = React.useState<PDFPageProxy | null>(null);
   const [viewport, setViewport] = React.useState<PageViewport | null>(null);
   const [rendered, setRendered] = React.useState(false);
+  /** Set when pdf.js could not paint this page (a cancelled render is not an error); shown instead of an endless skeleton. */
+  const [renderError, setRenderError] = React.useState<string | null>(null);
   const tool = usePdfStore((s) => s.tool);
   const darkInvert = usePdfStore((s) => s.darkInvert);
   const annotations = usePdfStore((s) => s.model.annotations);
@@ -70,11 +81,19 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
     canvas.style.height = `${viewport.height}px`;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const task = pdfPage.render({ canvas, canvasContext: ctx, viewport, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined });
     setRendered(false);
-    task.promise.then(() => { if (!cancelled) setRendered(true); }).catch(() => {});
-    return () => { cancelled = true; try { task.cancel(); } catch { /* ignore */ } };
-  }, [pdfPage, viewport]);
+    setRenderError(null);
+    let task: ReturnType<PDFPageProxy["render"]> | null = null;
+    try {
+      task = pdfPage.render({ canvas, canvasContext: ctx, viewport, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined });
+    } catch (e) {
+      // pdf.js throws synchronously when the canvas is still owned by a cancelled task; the next viewport/page change retries.
+      reportRenderFailure(e, display, setRenderError);
+      return;
+    }
+    task.promise.then(() => { if (!cancelled) setRendered(true); }).catch((e: unknown) => { if (!cancelled) reportRenderFailure(e, display, setRenderError); });
+    return () => { cancelled = true; try { task?.cancel(); } catch { /* ignore */ } };
+  }, [pdfPage, viewport, display]);
 
   // ---- text layer -----------------------------------------------------------------------
   React.useEffect(() => {
@@ -91,7 +110,7 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
       if (cancelled) return;
       const tl = new lib.TextLayer({ textContentSource: tc, container, viewport });
       layer = tl;
-      await tl.render().catch(() => {});
+      await tl.render().catch((e: unknown) => { if (!cancelled && process.env.NODE_ENV !== "production") console.warn(`[pdf] text layer for page ${display} failed: ${e instanceof Error ? e.message : String(e)}`); });
     })();
     return () => { cancelled = true; layer?.cancel(); };
   }, [pdfPage, viewport]);
@@ -202,7 +221,12 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
   return (
     <div ref={rootRef} className={cn("pdf-page relative select-text bg-paper shadow-[var(--paper-shadow)]", darkInvert && "pdf-page-invert", page.blank && "pdf-page-blank")} style={{ width, height }} data-page={display} data-source={page.index}>
       {!page.blank && <canvas ref={canvasRef} className={cn("pdf-canvas absolute left-0 top-0", !rendered && "opacity-0")} aria-label={`Page ${display}`} />}
-      {!rendered && !page.blank && <div className="absolute inset-0 animate-pulse bg-muted/40" />}
+      {!rendered && !page.blank && !renderError && <div className="absolute inset-0 animate-pulse bg-muted/40" />}
+      {renderError && !page.blank && (
+        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-xs text-muted-foreground" role="alert">
+          <span>This page could not be rendered.<br /><span className="font-mono text-[10.5px] opacity-80">{renderError}</span></span>
+        </div>
+      )}
       {page.blank && <div className="absolute inset-0 flex items-center justify-center text-xs uppercase tracking-wider text-muted-foreground/60">Blank page</div>}
       <div ref={textRef} className={cn("textLayer absolute left-0 top-0", isDrawing || tool === "hand" ? "pointer-events-none" : "")} style={{ width, height }} onMouseUp={commitSelection} />
       {viewport && (
