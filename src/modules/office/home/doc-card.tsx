@@ -33,23 +33,22 @@ export async function duplicateOfficeDoc(doc: OfficeDocSummary): Promise<OfficeD
   return ((await res.json()) as { doc: OfficeDocument }).doc;
 }
 
+/** Download the native file for a document through its export route (.docx / .xlsx / .pptx / .pdf). */
+/** Download the native file for a document through its export route (.docx / .xlsx / .pptx / .pdf). */
 export async function downloadOfficeDoc(doc: OfficeDocSummary) {
-  if (doc.kind === "word") {
-    const res = await fetch("/api/office/word/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ docId: doc.id, format: "docx" }) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({ error: res.statusText }))).error ?? "Export failed");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `${doc.title.replace(/[\\/:*?"<>|]+/g, "-")}.docx`; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    return;
-  }
-  const r = await fetch(`/api/office/docs/${doc.id}`);
-  if (!r.ok) throw new Error("Could not read the document");
-  const { doc: full } = (await r.json()) as { doc: OfficeDocument };
-  const blob = new Blob([JSON.stringify(full.content, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = `${doc.title.replace(/[\\/:*?"<>|]+/g, "-")}.${KIND_META[doc.kind].ext}.json`; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const routes: Record<OfficeDocSummary["kind"], { url: string; body: Record<string, unknown> }> = {
+    word: { url: "/api/office/word/export", body: { docId: doc.id, format: "docx" } },
+    sheet: { url: "/api/office/sheet/export", body: { docId: doc.id, format: "xlsx" } },
+    slides: { url: "/api/office/slides/export", body: { docId: doc.id, format: "pptx" } },
+    pdf: { url: "/api/office/pdf/export", body: { docId: doc.id, options: { flattenAnnotations: true, applyRedactions: true, bates: true, bookmarks: true } } },
+  };
+  const { url, body } = routes[doc.kind];
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({ error: res.statusText }))).error ?? "Export failed");
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = href; a.download = `${doc.title.replace(/[\\/:*?"<>|]+/g, "-")}.${KIND_META[doc.kind].ext}`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 2000);
 }
 
 function useRename(doc: OfficeDocSummary, actions: DocActions) {
@@ -81,7 +80,7 @@ function MenuItems({ doc, actions, onRename, Item, Sep }: { doc: OfficeDocSummar
       <Sep />
       <Item onClick={onRename}><Pencil /> Rename</Item>
       <Item onClick={() => void actions.duplicate(doc)}><Copy /> Duplicate</Item>
-      <Item onClick={() => downloadOfficeDoc(doc).catch((e: Error) => toast.error("Download failed", { description: e.message }))}><Download /> Download {doc.kind === "word" ? ".docx" : "JSON"}</Item>
+      <Item onClick={() => downloadOfficeDoc(doc).catch((e: Error) => toast.error("Download failed", { description: e.message }))}><Download /> Download .{KIND_META[doc.kind].ext}</Item>
       {doc.libraryItemId && <Item onClick={() => router.push(`/library?item=${doc.libraryItemId}`)}><Library /> Show in Library</Item>}
       <Sep />
       <Item destructive onClick={() => void actions.remove(doc)}><Trash2 /> Delete</Item>

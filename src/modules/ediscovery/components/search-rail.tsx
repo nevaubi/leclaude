@@ -8,20 +8,19 @@ import { Button } from "@/components/ui/button";
 import { SAVED_VIEWS, type FacetBucket, type SavedView, type SearchFilters, type SearchResponse } from "../types";
 import { useReviewStore } from "./store";
 import { useReview } from "./review-page";
-import { useStats } from "./use-review-data";
 import { SectionLabel, issueColorClasses } from "./shared";
 
 const VIEW_ICONS: Record<SavedView, React.ElementType> = { all: Files, needs_review: CircleDashed, hot: Flame, privileged: ShieldAlert, ai_responsive: Sparkles, recent: Clock };
 
 export function SearchRail({ response, loading }: { response: SearchResponse | null; loading: boolean }) {
-  const { matterId, issueCodes } = useReview();
+  const { issueCodes, viewCounts } = useReview();
   const view = useReviewStore((s) => s.view);
   const setView = useReviewStore((s) => s.setView);
   const filters = useReviewStore((s) => s.filters);
   const toggleFilter = useReviewStore((s) => s.toggleFilter);
   const clearFilters = useReviewStore((s) => s.clearFilters);
-  const stats = useStats(matterId);
-  const counts = React.useMemo(() => new Map(stats.data?.views.map((v) => [v.view, v.count]) ?? []), [stats.data]);
+  // Counts come from the page-level stats fetch so they refresh with the header after every coding change.
+  const counts = React.useMemo(() => new Map(viewCounts?.map((v) => [v.view, v.count]) ?? []), [viewCounts]);
   const activeCount = Object.values(filters).reduce((n, v) => n + (v?.length ?? 0), 0);
   const facets = response?.facets;
 

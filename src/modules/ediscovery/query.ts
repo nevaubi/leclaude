@@ -122,12 +122,13 @@ function tokenize(input: string, warnings: string[]): Token[] {
       i = j + 1;
       continue;
     }
-    // Bates range starting here?
+    // Bates range starting here? (bare, or after a `bates:` prefix — the range may contain spaces: "bates:MFC-0041877 to 0041880")
     const rest = s.slice(i);
-    const rm = rest.match(RANGE_RE);
+    const prefixed = rest.match(/^bates:\s*/i);
+    const rm = rest.slice(prefixed?.[0].length ?? 0).match(RANGE_RE);
     if (rm && parseBates(rm[1])) {
       const range = parseBatesRange(rm[0]);
-      if (range) { tokens.push({ t: "bates", ...range }); i += rm[0].length; continue; }
+      if (range) { tokens.push({ t: "bates", ...range }); i += (prefixed?.[0].length ?? 0) + rm[0].length; continue; }
     }
     // word / field
     let j = i;

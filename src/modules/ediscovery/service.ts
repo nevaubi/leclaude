@@ -31,6 +31,8 @@ import {
 export const CURRENT_USER_ID = "p_jwhitfield";
 /** Maximum number of documents returned by a semantic (hybrid) search. */
 export const SEMANTIC_K = 60;
+/** Hard cap on rows per search page (the grid is virtualised; the client pages in 500s and refreshes with everything loaded). */
+export const MAX_PAGE = 5000;
 const RECENT_KEY = (matterId: string) => `ediscovery:recent:${matterId}`;
 const RECENT_MAX = 25;
 
@@ -254,7 +256,7 @@ export async function searchDocuments(req: SearchRequest): Promise<SearchRespons
   const sort: SortKey = req.sort ?? (useSemantic ? "relevance" : "bates");
   const sorted = sortDocs(filtered, sort, req.dir);
   const offset = Math.max(0, req.offset ?? 0);
-  const limit = Math.min(500, Math.max(1, req.limit ?? 100));
+  const limit = Math.min(MAX_PAGE, Math.max(1, req.limit ?? 100));
   const page = sorted.slice(offset, offset + limit);
   return {
     hits: page.map((s) => toRow(s.doc, byId, threadSizes, { score: s.score, snippet: s.snippet })),
@@ -287,7 +289,7 @@ function stripTerms(parsed: ParsedQuery): ParsedQuery["ast"] {
 
 /** Ordered ids for keyboard navigation / auto-advance: same query, no paging. */
 export async function searchIds(req: SearchRequest): Promise<string[]> {
-  const res = await searchDocuments({ ...req, offset: 0, limit: 500 });
+  const res = await searchDocuments({ ...req, offset: 0, limit: MAX_PAGE });
   return res.hits.map((h) => h.id);
 }
 

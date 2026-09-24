@@ -54,31 +54,60 @@ export function useIssueCodes(matterId: string) {
   return useFetch<{ codes: IssueCode[] }>(`codes:${matterId}`, () => api(`/api/ediscovery/issue-codes?matter=${encodeURIComponent(matterId)}`));
 }
 
-/** Debounced search against POST /api/ediscovery/search; aborts stale requests. */
+/**
+ * Debounced search against POST /api/ediscovery/search; aborts stale requests.
+ * `loadMore()` appends the next page; `refresh()` refetches everything loaded so far
+ * (same query, larger limit) so facet counts and rows stay in sync after coding.
+ */
 export function useSearch(req: SearchRequest, opts: { debounceMs?: number } = {}) {
   const [data, setData] = React.useState<SearchResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
   const [error, setError] = React.useState<ApiError | null>(null);
   const [tick, setTick] = React.useState(0);
   const key = JSON.stringify(req);
   const abortRef = React.useRef<AbortController | null>(null);
+  const lastKeyRef = React.useRef<string | null>(null);
+  const loadedRef = React.useRef(0);
   React.useEffect(() => {
     const ctrl = new AbortController();
     abortRef.current?.abort();
     abortRef.current = ctrl;
     setLoading(true);
+    const base = JSON.parse(key) as SearchRequest;
+    // A refresh of the same query keeps every page loaded so far; a new query starts from the first page.
+    const limit = lastKeyRef.current === key ? Math.max(base.limit ?? 100, loadedRef.current) : (base.limit ?? 100);
+    lastKeyRef.current = key;
     const t = setTimeout(() => {
-      api<SearchResponse>("/api/ediscovery/search", { method: "POST", json: JSON.parse(key), signal: ctrl.signal })
-        .then((d) => { if (!ctrl.signal.aborted) { setData(d); setError(null); } })
+      api<SearchResponse>("/api/ediscovery/search", { method: "POST", json: { ...base, limit }, signal: ctrl.signal })
+        .then((d) => { if (!ctrl.signal.aborted) { loadedRef.current = d.hits.length; setData(d); setError(null); } })
         .catch((e) => { if (!ctrl.signal.aborted && e?.name !== "AbortError") setError(e instanceof ApiError ? e : new ApiError(String(e?.message ?? e), 0)); })
         .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
     }, opts.debounceMs ?? 120);
     return () => { clearTimeout(t); ctrl.abort(); };
   }, [key, tick, opts.debounceMs]);
   const refresh = React.useCallback(() => setTick((t) => t + 1), []);
+  const loadMore = React.useCallback(async () => {
+    const cur = data;
+    if (!cur || loadingMore || cur.hits.length >= cur.total) return;
+    setLoadingMore(true);
+    try {
+      const base = JSON.parse(key) as SearchRequest;
+      const page = await api<SearchResponse>("/api/ediscovery/search", { method: "POST", json: { ...base, offset: cur.hits.length, limit: base.limit ?? 100 } });
+      if (lastKeyRef.current !== key) return; // query changed meanwhile
+      setData((d) => {
+        if (!d) return d;
+        const seen = new Set(d.hits.map((h) => h.id));
+        const hits = [...d.hits, ...page.hits.filter((h) => !seen.has(h.id))];
+        loadedRef.current = hits.length;
+        return { ...d, hits, total: page.total, facets: page.facets, tookMs: page.tookMs };
+      });
+    } catch (e) { setError(e instanceof ApiError ? e : new ApiError(String((e as Error)?.message ?? e), 0)); }
+    finally { setLoadingMore(false); }
+  }, [data, key, loadingMore]);
   const patchRow = React.useCallback((id: string, patch: Partial<DocRow>) => setData((d) => (d ? { ...d, hits: d.hits.map((h) => (h.id === id ? { ...h, ...patch } : h)) } : d)), []);
   const patchRows = React.useCallback((ids: string[], fn: (row: DocRow) => DocRow) => { const set = new Set(ids); setData((d) => (d ? { ...d, hits: d.hits.map((h) => (set.has(h.id) ? fn(h) : h)) } : d)); }, []);
-  return { data, loading, error, refresh, patchRow, patchRows };
+  return { data, loading, loadingMore, error, refresh, loadMore, patchRow, patchRows };
 }
 
 export interface DocDetailResponse {

@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { REVIEW_TABS, type ReviewTab } from "../types";
+import { REVIEW_TABS, type ReviewTab, type SavedViewCounts } from "../types";
 import { DepositionsTab, CrossAnalysisTab, TimelineTab, PeopleGraphTab, ConflictsTab } from "../analysis";
 import { useReviewStore } from "./store";
 import { api, useIssueCodes, useStats } from "./use-review-data";
@@ -32,8 +32,12 @@ interface ReviewContextValue {
   reviewers: Reviewer[];
   currentUserId: string;
   issueCodes: IssueCode[];
+  /** Saved-view counts from the shared stats fetch (null until loaded). Refreshed together with the header stats after coding. */
+  viewCounts: SavedViewCounts[] | null;
   refreshIssueCodes: () => void;
   refreshStats: () => void;
+  /** Ask the review list (and its facets) to refetch, e.g. after batch prediction changed AI scores. */
+  refreshList: () => void;
   openDocument: (id: string) => void;
   setTab: (tab: ReviewTab) => void;
 }
@@ -123,10 +127,11 @@ export function ReviewPage(props: ReviewPageProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const refreshList = React.useCallback(() => useReviewStore.getState().bumpList(), []);
   const ctx = React.useMemo<ReviewContextValue>(() => ({
     matterId, matter, aiConfigured: props.aiConfigured, reviewers: props.reviewers, currentUserId: props.currentUserId,
-    issueCodes: codes.data?.codes ?? [], refreshIssueCodes: codes.refresh, refreshStats: stats.refresh, openDocument, setTab,
-  }), [matterId, matter, props.aiConfigured, props.reviewers, props.currentUserId, codes.data, codes.refresh, stats.refresh, openDocument, setTab]);
+    issueCodes: codes.data?.codes ?? [], viewCounts: stats.data?.views ?? null, refreshIssueCodes: codes.refresh, refreshStats: stats.refresh, refreshList, openDocument, setTab,
+  }), [matterId, matter, props.aiConfigured, props.reviewers, props.currentUserId, codes.data, stats.data, codes.refresh, stats.refresh, refreshList, openDocument, setTab]);
 
   const fullscreen = store.fullscreen && tab === "review" && !!store.openDocId;
 

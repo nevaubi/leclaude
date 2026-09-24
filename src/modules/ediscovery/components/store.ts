@@ -59,6 +59,9 @@ interface ReviewState {
   setAutoAdvance: (v: boolean) => void;
   railCollapsed: boolean;
   setRailCollapsed: (v: boolean) => void;
+  /** Incremented to ask the review list to refetch (facets, AI scores) without changing the query. */
+  listTick: number;
+  bumpList: () => void;
   reset: () => void;
 }
 
@@ -111,6 +114,8 @@ export const useReviewStore = create<ReviewState>()(
       setAutoAdvance: (autoAdvance) => set({ autoAdvance }),
       railCollapsed: false,
       setRailCollapsed: (railCollapsed) => set({ railCollapsed }),
+      listTick: 0,
+      bumpList: () => set((s) => ({ listTick: s.listTick + 1 })),
       reset: () => set({ q: "", semantic: false, view: "all", filters: {}, sort: undefined, dir: undefined, selected: [], activeId: null, openDocId: null }),
     }),
     { name: "leclaude:ediscovery:review", partialize: (s) => ({ density: s.density, columnWidths: s.columnWidths, autoAdvance: s.autoAdvance, codingPanelOpen: s.codingPanelOpen, railCollapsed: s.railCollapsed }) },

@@ -190,7 +190,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     setTrackChangesState(tc);
     (editor.storage as unknown as { trackChanges: TrackChangesStorage }).trackChanges.enabled = tc;
     loadContent(editor, (doc.content as PMNode) ?? emptyDoc());
-    editor.setEditable(true);
+    editor.setEditable(true, false);
     setTitle(doc.title);
     setReady(true);
     scheduleDerived(editor);
@@ -201,7 +201,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
 
   const docTitle = doc?.title;
   React.useEffect(() => { if (docTitle && document.activeElement?.getAttribute("data-title-input") !== "1") setTitle(docTitle); }, [docTitle]);
-  React.useEffect(() => { editor?.setEditable(view === "edit"); }, [view, editor]);
+  React.useEffect(() => { editor?.setEditable(view === "edit", false); }, [view, editor]);
   // Development hook for browser automation / debugging (never in production builds).
   React.useEffect(() => { if (process.env.NODE_ENV !== "production" && editor) (window as unknown as { __leclaudeWordEditor?: Editor; __leclaudeWordApply?: unknown }).__leclaudeWordEditor = editor; }, [editor]);
 
@@ -456,8 +456,8 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
           <Tip label="Version history"><Button variant="ghost" size="sm" onClick={() => setVersionsOpen(true)} disabled={!ready}><History className="size-4" /> Versions</Button></Tip>
           <Tip label="Track changes" shortcut="⌘⇧E"><Button variant={trackChanges ? "secondary" : "ghost"} size="sm" onClick={() => setTrackChanges(!trackChanges)} aria-pressed={trackChanges}><PenLine className={cn("size-4", trackChanges && "text-primary")} /> Track changes</Button></Tip>
           <div className="flex h-8 items-center rounded-md border p-0.5">
-            <Tip label="Edit"><button onClick={() => setView("edit")} aria-pressed={view === "edit"} className={cn("rounded px-1.5 py-1 cursor-pointer", view === "edit" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}><PenLine className="size-3.5" /></button></Tip>
-            <Tip label="Preview (changes accepted)"><button onClick={() => setView("preview")} aria-pressed={view === "preview"} className={cn("rounded px-1.5 py-1 cursor-pointer", view === "preview" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}><Eye className="size-3.5" /></button></Tip>
+            <Tip label="Edit"><button onClick={() => setView("edit")} aria-label="Edit view" aria-pressed={view === "edit"} className={cn("rounded px-1.5 py-1 cursor-pointer", view === "edit" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}><PenLine className="size-3.5" /></button></Tip>
+            <Tip label="Preview (changes accepted)"><button onClick={() => setView("preview")} aria-label="Preview with changes accepted" aria-pressed={view === "preview"} className={cn("rounded px-1.5 py-1 cursor-pointer", view === "preview" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}><Eye className="size-3.5" /></button></Tip>
           </div>
           <Tip label="Comments" shortcut="⌘⇧C to add"><Button variant={commentsOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setCommentsOpen((v) => !v)} aria-pressed={commentsOpen} aria-label="Toggle comments"><MessageSquare className="size-4" />{comments.filter((c) => !c.resolved).length > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-[9px] leading-3 text-primary-foreground tabular">{comments.filter((c) => !c.resolved).length}</span>}</Button></Tip>
           <Tip label="Drafting assistant" shortcut="⌘/"><Button variant={agentOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setAgentOpen((v) => !v)} aria-pressed={agentOpen} aria-label="Toggle assistant"><Sparkles className={cn("size-4", agentOpen && "text-primary")} /></Button></Tip>

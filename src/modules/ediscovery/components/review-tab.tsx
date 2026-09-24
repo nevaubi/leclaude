@@ -43,11 +43,22 @@ export function ReviewTab() {
     if (!s.activeId || !ids.includes(s.activeId)) useReviewStore.getState().setActiveId(hits[0].id);
   }, [hits, ids, s.activeId]);
 
+  // Coding changes: patch rows optimistically, then refetch so facet counts (status / issues / views) catch up.
+  const refreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefresh = React.useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => { refreshTimer.current = null; search.refresh(); }, 400);
+  }, [search]);
+  React.useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
+  const listTick = useReviewStore((st) => st.listTick);
+  const firstTick = React.useRef(true);
+  React.useEffect(() => { if (firstTick.current) { firstTick.current = false; return; } search.refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [listTick]);
+
   const listApi = React.useMemo<ReviewListApi>(() => ({
     ids,
-    patchCoding: (docIds, coding) => { search.patchRows(docIds, (r) => ({ ...r, coding })); refreshStats(); },
+    patchCoding: (docIds, coding) => { search.patchRows(docIds, (r) => ({ ...r, coding })); refreshStats(); scheduleRefresh(); },
     refresh: () => { search.refresh(); refreshStats(); },
-  }), [ids, search, refreshStats]);
+  }), [ids, search, refreshStats, scheduleRefresh]);
 
   const move = React.useCallback((delta: number) => {
     const st = useReviewStore.getState();
@@ -94,6 +105,7 @@ export function ReviewTab() {
         return { ...r, coding };
       });
       refreshStats();
+      scheduleRefresh();
       toast.success(`Coded ${selected.length} document${selected.length === 1 ? "" : "s"}`);
     } catch (e) { toast.error("Bulk coding failed", { description: (e as Error).message }); }
   };
@@ -120,8 +132,8 @@ export function ReviewTab() {
           {!fullscreen && (
             <ResizablePanel defaultSize={s.openDocId ? "52" : "100"} minSize={360} className="flex min-w-0 flex-col">
               <SearchBox response={search.data} loading={search.loading} />
-              <BulkBar total={hits.length} onCode={bulk} />
-              <DocTable hits={hits} loading={search.loading && !search.data} total={search.data?.total ?? 0} totalWorkspace={search.data?.totalWorkspace ?? 0} tookMs={search.data?.tookMs} semantic={!!search.data?.semantic} />
+              <BulkBar hits={hits} onCode={bulk} />
+              <DocTable hits={hits} loading={search.loading && !search.data} total={search.data?.total ?? 0} totalWorkspace={search.data?.totalWorkspace ?? 0} tookMs={search.data?.tookMs} semantic={!!search.data?.semantic} onLoadMore={search.loadMore} loadingMore={search.loadingMore} />
             </ResizablePanel>
           )}
           {s.openDocId && (

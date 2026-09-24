@@ -13,7 +13,7 @@ import { DEFAULT_COLUMNS, useReviewStore, type ColumnDef } from "./store";
 import { useReview } from "./review-page";
 import { CodingBadges, IssueChip, TypeIcon, formatShortDate } from "./shared";
 
-export function DocTable({ hits, loading, total, totalWorkspace, tookMs, semantic }: { hits: DocRow[]; loading: boolean; total: number; totalWorkspace: number; tookMs?: number; semantic: boolean }) {
+export function DocTable({ hits, loading, total, totalWorkspace, tookMs, semantic, onLoadMore, loadingMore }: { hits: DocRow[]; loading: boolean; total: number; totalWorkspace: number; tookMs?: number; semantic: boolean; onLoadMore?: () => void; loadingMore?: boolean }) {
   const { issueCodes } = useReview();
   const density = useReviewStore((s) => s.density);
   const columnWidths = useReviewStore((s) => s.columnWidths);

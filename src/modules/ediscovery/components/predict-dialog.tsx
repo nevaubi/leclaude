@@ -17,7 +17,7 @@ import { NoKeyCallout } from "./shared";
 type Scope = "unscored" | "all_unreviewed" | "selected";
 
 export function PredictDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { matterId, aiConfigured, refreshStats } = useReview();
+  const { matterId, aiConfigured, refreshStats, refreshList } = useReview();
   const selected = useReviewStore((s) => s.selected);
   const [scope, setScope] = React.useState<Scope>("unscored");
   const [state, setState] = React.useState<{ status: "idle" | "running" | "done" | "error"; done: number; total: number; scored: number; feed: PredictProgressEvent[]; summary?: PredictProgressEvent["summary"]; error?: string; noKey?: boolean }>({ status: "idle", done: 0, total: 0, scored: 0, feed: [] });
@@ -45,8 +45,9 @@ export function PredictDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       }, ctrl.signal);
       setState((s) => (s.status === "running" ? { ...s, status: "done" } : s));
       refreshStats();
+      refreshList();
     } catch (e) {
-      if ((e as Error).name === "AbortError") { setState((s) => ({ ...s, status: "done" })); return; }
+      if ((e as Error).name === "AbortError") { setState((s) => ({ ...s, status: "done" })); refreshStats(); refreshList(); return; }
       const err = e as Error & { code?: string };
       setState((s) => ({ ...s, status: "error", error: err.message, noKey: err.code === "no_api_key" }));
       if (err.code !== "no_api_key") toast.error("Prediction failed", { description: err.message });
