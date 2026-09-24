@@ -48,7 +48,7 @@ export type SheetOp =
   | { type: "set_active_sheet"; sheet: string }
   | { type: "add_named_range"; name: string; ref: string }
   | { type: "remove_named_range"; name: string }
-  | { type: "add_validation"; sheet?: string; range: string; kind: DataValidation["kind"]; list?: string[]; min?: number; max?: number; message?: string }
+  | { type: "add_validation"; sheet?: string; range: string; kind: DataValidation["kind"]; list?: string[]; min?: number; max?: number; message?: string; id?: string }
   | { type: "remove_validation"; sheet?: string; id: string }
   | { type: "set_page_setup"; patch: Partial<PageSetup> }
   | { type: "build_table"; sheet?: string; anchor: string; headers: string[]; rows: CellValue[][]; style?: "professional" | "plain"; total_row?: boolean; number_format?: NumFmt }
@@ -505,7 +505,7 @@ export function applyOp(wbIn: Workbook, op: SheetOp): Workbook {
 
     case "add_validation": {
       const { sheet, range } = resolveRange(wb, op.range, getSheet(wb, op.sheet));
-      const v: DataValidation = { id: `dv_${nanoid(6)}`, range: rangeToA1(range), kind: op.kind, list: op.list, min: op.min, max: op.max, message: op.message, allowBlank: true };
+      const v: DataValidation = { id: op.id ?? `dv_${nanoid(6)}`, range: rangeToA1(range), kind: op.kind, list: op.list, min: op.min, max: op.max, message: op.message, allowBlank: true };
       return withSheet(wb, sheet, { ...sheet, validations: [...(sheet.validations ?? []), v] });
     }
     case "remove_validation": {

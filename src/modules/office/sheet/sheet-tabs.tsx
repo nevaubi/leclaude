@@ -62,7 +62,7 @@ export function SheetTabs() {
   return (
     <div className="flex h-8 shrink-0 items-end gap-1 border-t bg-muted/40 px-2">
       <Tip label="Add sheet"><button onClick={() => store.getState().apply({ type: "add_sheet", name: `Sheet${wb.sheets.length + 1}` })} className="mb-0.5 flex size-6 items-center justify-center rounded border bg-background text-muted-foreground hover:text-foreground cursor-pointer" aria-label="Add sheet"><Plus className="size-3.5" /></button></Tip>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext id="sheet-tabs" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={wb.sheets.map((s) => s.id)} strategy={horizontalListSortingStrategy}>
           <div className="flex min-w-0 items-end gap-0.5 overflow-x-auto scrollbar-none">
             {wb.sheets.map((s, i) => <Tab key={s.id} sheet={s} active={i === wb.activeSheet} onSelect={() => store.getState().setActiveSheet(i)} onRename={(name) => { try { store.getState().apply({ type: "rename_sheet", sheet: s.id, name }); } catch (e) { toast.error((e as Error).message); } }} />)}

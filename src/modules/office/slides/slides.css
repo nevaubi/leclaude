@@ -1,0 +1,58 @@
+/* Slides editor: canvas chrome, in-place text editor and print stylesheet. */
+
+.sl-viewport {
+  background:
+    radial-gradient(color-mix(in oklch, var(--foreground) 7%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
+    var(--muted);
+}
+.dark .sl-viewport {
+  background:
+    radial-gradient(color-mix(in oklch, var(--foreground) 9%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
+    color-mix(in oklch, var(--background) 80%, black);
+}
+
+.sl-stage { box-shadow: 0 2px 6px rgb(0 0 0 / 0.12), 0 24px 60px rgb(10 20 50 / 0.18); }
+
+.sl-hit { position: absolute; box-sizing: border-box; }
+.sl-hit:hover { outline: 1px solid color-mix(in oklch, var(--primary) 55%, transparent); outline-offset: -1px; }
+.sl-hit[data-locked="true"] { cursor: default; }
+
+.sl-handle { position: absolute; background: var(--background); border: 1.5px solid var(--primary); border-radius: 2px; box-sizing: border-box; box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); }
+.sl-handle[data-pos="n"], .sl-handle[data-pos="s"] { cursor: ns-resize; }
+.sl-handle[data-pos="e"], .sl-handle[data-pos="w"] { cursor: ew-resize; }
+.sl-handle[data-pos="nw"], .sl-handle[data-pos="se"] { cursor: nwse-resize; }
+.sl-handle[data-pos="ne"], .sl-handle[data-pos="sw"] { cursor: nesw-resize; }
+.sl-rotate { position: absolute; border-radius: 999px; background: var(--background); border: 1.5px solid var(--primary); cursor: grab; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: var(--primary); }
+
+.sl-text-editor { outline: none; caret-color: currentColor; }
+.sl-text-editor .sl-line { display: flex; min-height: 1em; }
+.sl-text-editor .sl-line[data-kind="bullet"]::before { content: "•"; flex: none; width: 1.1em; }
+.sl-text-editor .sl-line[data-kind="bullet"][data-indent="1"]::before, .sl-text-editor .sl-line[data-kind="bullet"][data-indent="3"]::before { content: "–"; }
+.sl-text-editor .sl-line[data-kind="number"]::before { content: counter(sl-num) "."; counter-increment: sl-num; flex: none; width: 1.6em; }
+.sl-text-editor .sl-line:not([data-kind="number"]) { counter-reset: sl-num; }
+.sl-text-editor .sl-line[data-indent="1"] { padding-left: 28px; }
+.sl-text-editor .sl-line[data-indent="2"] { padding-left: 56px; }
+.sl-text-editor .sl-line[data-indent="3"] { padding-left: 84px; }
+.sl-text-editor .sl-line[data-indent="4"] { padding-left: 112px; }
+.sl-text-editor b, .sl-text-editor strong { font-weight: 700; }
+.sl-text-editor i, .sl-text-editor em { font-style: italic; }
+.sl-text-editor u { text-decoration: underline; }
+
+.sl-thumb { transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease; }
+.sl-thumb:hover { box-shadow: 0 2px 10px rgb(0 0 0 / 0.14); }
+
+.sl-notes textarea { resize: none; }
+
+.sl-presenter { background: #000; }
+
+/* Print-to-PDF: one slide per landscape page (13.333in × 7.5in = 1280×720 CSS px). */
+#slides-print { display: none; }
+@media print {
+  @page { size: 13.333in 7.5in; margin: 0; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  body > *:not(#slides-print) { display: none !important; }
+  #slides-print { display: block !important; position: static; }
+  .sl-print-page { width: 13.333in; height: 7.5in; overflow: hidden; page-break-after: always; break-after: page; }
+  .sl-print-page:last-child { page-break-after: auto; break-after: auto; }
+  .sl-print-page > div { transform-origin: 0 0; }
+}

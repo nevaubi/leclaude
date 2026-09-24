@@ -100,7 +100,10 @@ export function formatNumber(n: number, fmt: NumFmt | undefined): string {
   if (isDateFormat(fmt)) return formatDatePattern(serialToDate(n), fmt);
   const sections = fmt.split(";");
   if (sections.length > 1) {
-    if (n < 0 && sections[1]) return formatNumberSection(-n, sections[1]).replace(/^-/, "");
+    if (n < 0 && sections[1]) {
+      const body = formatNumberSection(-n, sections[1]);
+      return sections[1].includes("(") && sections[1].includes(")") ? `(${body})` : sections[1].trim().startsWith("-") ? `-${body}` : body;
+    }
     if (n === 0 && sections[2]) return sections[2].replace(/[#0.,]+/, "0");
     return formatNumberSection(n, sections[0]);
   }

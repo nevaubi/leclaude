@@ -9,6 +9,7 @@
  * sort_/merge_/clear_/build_/transcribe_; read tools start with get_/find_/
  * describe_/validate_).
  */
+import { nanoid } from "nanoid";
 import { colToLetter, letterToCol, parseA1, rangeSize, rangeToA1, toA1 } from "./a1";
 import { defineTool, type ToolDef } from "@/lib/ai/tools";
 import type { OfficeAgentContext } from "@/modules/office/shared/route-factory";
@@ -395,7 +396,7 @@ export function sheetAgentTools(ctx: Ctx): ToolDef<never, unknown>[] {
     name: "add_conditional_format",
     description: "Highlight cells matching a rule (gt/lt/between/eq/contains/dueBefore/top/blank/duplicate) with a style, e.g. overdue dates: rule {kind:'dueBefore', date:'today'} style {fill:'#FDE2E1', color:'#9F1239'}.",
     parameters: { type: "object", properties: { range: { type: "string" }, rule: RULE_SCHEMA, style: STYLE_SCHEMA, sheet: { type: "string" } }, required: ["range", "rule", "style"] },
-    execute: ({ range, rule, style, sheet }) => edit({ type: "conditional_format", sheet: sheetOf(sheet).id, range, rule: toRule(rule), style: cleanStyle(style) as CellStyle }, { summary: `${JSON.stringify(rule)} → ${JSON.stringify(style)}` }),
+    execute: ({ range, rule, style, sheet }) => edit({ type: "conditional_format", sheet: sheetOf(sheet).id, range, rule: toRule(rule), style: cleanStyle(style) as CellStyle, id: `cf_${nanoid(6)}` }, { summary: `${JSON.stringify(rule)} → ${JSON.stringify(style)}` }),
   });
 
   const add_chart = defineTool<{ type: ChartType; title: string; range: string; category_range?: string; sheet?: string; position?: { x?: number; y?: number; w?: number; h?: number }; has_header?: boolean; stacked?: boolean }>({
@@ -403,14 +404,14 @@ export function sheetAgentTools(ctx: Ctx): ToolDef<never, unknown>[] {
     description: "Add a chart (bar, line, pie, area, scatter) from a data range (one or more numeric columns, header row first) with an optional category (label) range such as the first column. Position is in pixels from the grid origin; default places it to the right of the data.",
     parameters: { type: "object", properties: { type: { type: "string", enum: ["bar", "line", "pie", "area", "scatter"] }, title: { type: "string" }, range: { type: "string" }, category_range: { type: "string" }, sheet: { type: "string" }, position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" }, w: { type: "number" }, h: { type: "number" } }, required: [] }, has_header: { type: "boolean" }, stacked: { type: "boolean" } }, required: ["type", "title", "range"] },
     label: (a) => `Adding ${a.type} chart`,
-    execute: ({ type, title, range, category_range, sheet, position, has_header, stacked }) => edit({ type: "add_chart", sheet: sheetOf(sheet).id, chart: { type, title, range, categoryRange: category_range, hasHeader: has_header ?? true, stacked, position: position ?? undefined } }, { title: `Add ${type} chart "${title}"`, summary: `data ${range}${category_range ? `, categories ${category_range}` : ""}` }),
+    execute: ({ type, title, range, category_range, sheet, position, has_header, stacked }) => edit({ type: "add_chart", sheet: sheetOf(sheet).id, chart: { id: `ch_${nanoid(6)}`, type, title, range, categoryRange: category_range, hasHeader: has_header ?? true, stacked, position: position ?? undefined } }, { title: `Add ${type} chart "${title}"`, summary: `data ${range}${category_range ? `, categories ${category_range}` : ""}` }),
   });
 
   const add_sheet = defineTool<{ name: string }>({
     name: "add_sheet",
     description: "Add a new worksheet and make it active.",
     parameters: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
-    execute: ({ name }) => edit({ type: "add_sheet", name }),
+    execute: ({ name }) => edit({ type: "add_sheet", name, id: `sh_${nanoid(6)}` }),
   });
 
   const set_sheet_name = defineTool<{ name: string; sheet?: string }>({
@@ -482,7 +483,7 @@ export function sheetAgentTools(ctx: Ctx): ToolDef<never, unknown>[] {
     name: "add_validation",
     description: "Add data validation to a range: a dropdown list (kind 'list' with list values), or number/date bounds.",
     parameters: { type: "object", properties: { range: { type: "string" }, kind: { type: "string", enum: ["list", "number", "date"] }, list: { type: "array", items: { type: "string" } }, min: { type: "number" }, max: { type: "number" }, message: { type: "string" }, sheet: { type: "string" } }, required: ["range", "kind"] },
-    execute: ({ range, kind, list, min, max, message, sheet }) => edit({ type: "add_validation", sheet: sheetOf(sheet).id, range, kind, list, min, max, message }),
+    execute: ({ range, kind, list, min, max, message, sheet }) => edit({ type: "add_validation", sheet: sheetOf(sheet).id, range, kind, list, min, max, message, id: `dv_${nanoid(6)}` }),
   });
 
   const set_row_height = defineTool<{ rows: number[]; height: number; sheet?: string }>({

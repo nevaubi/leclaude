@@ -68,6 +68,10 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
   const [extraCols, setExtraCols] = React.useState(0);
   const [resizing, setResizing] = React.useState<{ axis: "col" | "row"; index: number; start: number; size: number; current: number } | null>(null);
   const [fill, setFill] = React.useState<{ source: RangeRef; target: RangeRef | null } | null>(null);
+  const fillRef = React.useRef(fill);
+  fillRef.current = fill;
+  const resizingRef = React.useRef(resizing);
+  resizingRef.current = resizing;
   const [filterUI, setFilterUI] = React.useState<{ col: number; x: number; y: number } | null>(null);
   const [validationUI, setValidationUI] = React.useState<{ ref: string; v: DataValidation } | null>(null);
   const [acIndex, setAcIndex] = React.useState(0);
@@ -122,9 +126,14 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
     return { xs, ys, pages: (xs.length + 1) * (ys.length + 1) };
   }, [workbook.pageSetup, sheet, colSize, rowSize, colStarts, rowStarts]);
 
+  const layoutRef = React.useRef("");
   React.useEffect(() => {
     const visible = rowItems.filter((r) => r.size > 0 && r.index >= fr);
-    onLayout?.({ firstRow: (visible[0]?.index ?? 0) + 1, lastRow: (visible[visible.length - 1]?.index ?? 0) + 1, pages: pageInfo.pages });
+    const info = { firstRow: (visible[0]?.index ?? 0) + 1, lastRow: (visible[visible.length - 1]?.index ?? 0) + 1, pages: pageInfo.pages };
+    const key = `${info.firstRow}-${info.lastRow}-${info.pages}`;
+    if (key === layoutRef.current) return;
+    layoutRef.current = key;
+    onLayout?.(info);
   }, [rowItems, fr, pageInfo.pages, onLayout]);
 
   // ---------------------------------------------------------------- geometry helpers
@@ -238,15 +247,14 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
       const d = dragRef.current;
       dragRef.current = null;
       if (d?.mode === "fill") {
-        setFill((f) => {
-          if (f?.target) {
-            const st = store.getState();
-            try { st.apply({ type: "autofill", sheet: sheet.id, source: rangeToA1(f.source), target: rangeToA1(f.target) }); } catch (err) { toast.error((err as Error).message); }
-            const all = normalizeRange({ start: { row: Math.min(f.source.start.row, f.target.start.row), col: Math.min(f.source.start.col, f.target.start.col) }, end: { row: Math.max(f.source.end.row, f.target.end.row), col: Math.max(f.source.end.col, f.target.end.col) } });
-            st.selectRange(all, { active: f.source.start });
-          }
-          return null;
-        });
+        const f = fillRef.current;
+        setFill(null);
+        if (f?.target) {
+          const st = store.getState();
+          try { st.apply({ type: "autofill", sheet: sheet.id, source: rangeToA1(f.source), target: rangeToA1(f.target) }); } catch (err) { toast.error((err as Error).message); }
+          const all = normalizeRange({ start: { row: Math.min(f.source.start.row, f.target.start.row), col: Math.min(f.source.start.col, f.target.start.col) }, end: { row: Math.max(f.source.end.row, f.target.end.row), col: Math.max(f.source.end.col, f.target.end.col) } });
+          st.selectRange(all, { active: f.source.start });
+        }
       }
       if (d?.mode === "refInsert") inputRef.current?.focus();
     };
@@ -282,14 +290,12 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
     if (!resizing) return;
     const onMove = (e: MouseEvent) => setResizing((r) => (r ? { ...r, current: Math.max(r.axis === "col" ? 24 : 16, r.size + ((r.axis === "col" ? e.clientX : e.clientY) - r.start)) } : r));
     const onUp = () => {
-      setResizing((r) => {
-        if (r) {
-          const st = store.getState();
-          if (r.axis === "col") { const sel = st.selection.ranges[0]; const cols = sel && sel.start.col <= r.index && sel.end.col >= r.index && sel.end.row - sel.start.row >= dims.rows - 2 ? Array.from({ length: sel.end.col - sel.start.col + 1 }, (_, i) => colToLetter(sel.start.col + i)) : [colToLetter(r.index)]; st.apply({ type: "set_column_width", sheet: sheet.id, columns: cols, width: r.current }); }
-          else st.apply({ type: "set_row_height", sheet: sheet.id, rows: [r.index], height: r.current });
-        }
-        return null;
-      });
+      const r = resizingRef.current;
+      setResizing(null);
+      if (!r) return;
+      const st = store.getState();
+      if (r.axis === "col") { const sel = st.selection.ranges[0]; const cols = sel && sel.start.col <= r.index && sel.end.col >= r.index && sel.end.row - sel.start.row >= dims.rows - 2 ? Array.from({ length: sel.end.col - sel.start.col + 1 }, (_, i) => colToLetter(sel.start.col + i)) : [colToLetter(r.index)]; st.apply({ type: "set_column_width", sheet: sheet.id, columns: cols, width: r.current }); }
+      else st.apply({ type: "set_row_height", sheet: sheet.id, rows: [r.index], height: r.current });
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -466,18 +472,18 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
     );
   };
 
+  const onFillStart = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); const p = selection.ranges[selection.ranges.length - 1]; if (!p) return; dragRef.current = { mode: "fill" }; setFill({ source: p, target: null }); };
   const visibleRows = rowItems.filter((r) => r.size > 0);
   const bodyRows = visibleRows.filter((r) => r.index >= fr);
   const bodyCols = colItems.filter((c) => c.index >= fc);
   const frozenRowIdx = Array.from({ length: fr }, (_, i) => i);
   const frozenColIdx = Array.from({ length: fc }, (_, i) => i);
 
-  const cellsLayer = React.useMemo(() => bodyRows.flatMap((r) => bodyCols.map((c) => renderCellDiv(r.index, c.index, c.start, r.start))), // eslint-disable-line react-hooks/exhaustive-deps
-    [sheet, computed, bodyRows, bodyCols, cfStyles, showFormulas, commentAnchors, selection.active, merges, colStarts, rowStarts, workbook.styles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const cellsLayer = React.useMemo(() => bodyRows.flatMap((r) => bodyCols.map((c) => renderCellDiv(r.index, c.index, c.start, r.start))), [sheet, computed, bodyRows, bodyCols, cfStyles, showFormulas, commentAnchors, selection.active, merges, colStarts, rowStarts, workbook.styles]);
 
   const editRect = editing ? cellRect(...(() => { const m = /^([A-Z]+)(\d+)$/.exec(editing.ref)!; return [Number(m[2]) - 1, colToLetterIndex(m[1])] as const; })()) : null;
   const primary = selection.ranges[selection.ranges.length - 1];
-  const activeRect = cellRect(selection.active.row, selection.active.col);
 
   return (
     <ContextMenu>
@@ -518,11 +524,11 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
                 <div className="sticky left-0 z-40 bg-background" style={{ width: ROW_HEADER_WIDTH + Wf, height: Hf, position: "sticky" }}>
                   {frozenRowIdx.map((r) => <RowHeader key={r} row={r} y={rowStarts[r]} h={rowSize(r)} selected={selection.ranges.some((x) => r >= x.start.row && r <= x.end.row)} full={selection.ranges.some((x) => r >= x.start.row && r <= x.end.row && x.end.col - x.start.col >= dims.cols - 2)} onMouseDown={onRowHeaderMouseDown} />)}
                   {frozenRowIdx.flatMap((r) => frozenColIdx.map((c) => renderCellDiv(r, c, ROW_HEADER_WIDTH + colStarts[c], rowStarts[r], `fz-${r}-${c}`)))}
-                  <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={-COL_HEADER_HEIGHT} clip={{ rows: [0, fr - 1], cols: [0, fc - 1] }} onFillStart={() => {}} />
+                  <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={-COL_HEADER_HEIGHT} clip={{ rows: [0, fr - 1], cols: [0, fc - 1] }} showHandle onFillStart={onFillStart} />
                 </div>
                 <div className="absolute top-0 left-0" style={{ marginTop: 0 }}>
                   {frozenRowIdx.flatMap((r) => bodyCols.map((c) => renderCellDiv(r, c.index, c.start, rowStarts[r], `fr-${r}-${c.index}`)))}
-                  <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={-COL_HEADER_HEIGHT} clip={{ rows: [0, fr - 1], cols: [fc, dims.cols - 1] }} onFillStart={() => {}} />
+                  <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={-COL_HEADER_HEIGHT} clip={{ rows: [0, fr - 1], cols: [fc, dims.cols - 1] }} showHandle onFillStart={onFillStart} />
                 </div>
               </div>
             )}
@@ -532,7 +538,7 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
               {bodyRows.map((r) => <RowHeader key={r.index} row={r.index} y={r.start - COL_HEADER_HEIGHT - Hf} h={r.size} selected={selection.ranges.some((x) => r.index >= x.start.row && r.index <= x.end.row)} full={selection.ranges.some((x) => r.index >= x.start.row && r.index <= x.end.row && x.end.col - x.start.col >= dims.cols - 2)} onMouseDown={onRowHeaderMouseDown} />)}
               {fc > 0 && <div className="absolute inset-y-0 border-r" style={{ left: ROW_HEADER_WIDTH + Wf - 1, width: 1, borderColor: "var(--sheet-border-strong)" }} />}
               {bodyRows.flatMap((r) => frozenColIdx.map((c) => renderCellDiv(r.index, c, ROW_HEADER_WIDTH + colStarts[c], r.start - COL_HEADER_HEIGHT - Hf, `fc-${r.index}-${c}`)))}
-              {fc > 0 && <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={-COL_HEADER_HEIGHT - Hf} clip={{ rows: [fr, dims.rows - 1], cols: [0, fc - 1] }} onFillStart={() => {}} />}
+              {fc > 0 && <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={-COL_HEADER_HEIGHT - Hf} clip={{ rows: [fr, dims.rows - 1], cols: [0, fc - 1] }} showHandle onFillStart={onFillStart} />}
             </div>
 
             {/* main cells layer */}
@@ -541,7 +547,7 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
                 {cellsLayer}
                 {pageBreaks && pageInfo.xs.map((x) => <div key={`px${x}`} className="absolute top-0 border-l border-dashed border-primary/60" style={{ left: ROW_HEADER_WIDTH + x, height: totalH + COL_HEADER_HEIGHT }} />)}
                 {pageBreaks && pageInfo.ys.map((y) => <div key={`py${y}`} className="absolute left-0 border-t border-dashed border-primary/60" style={{ top: COL_HEADER_HEIGHT + y, width: totalW + ROW_HEADER_WIDTH }} />)}
-                <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={0} clip={{ rows: [fr, dims.rows - 1], cols: [fc, dims.cols - 1] }} showHandle onFillStart={(e) => { e.preventDefault(); e.stopPropagation(); if (!primary) return; dragRef.current = { mode: "fill" }; setFill({ source: primary, target: null }); }} />
+                <SelectionLayer ranges={selection.ranges} active={selection.active} preview={preview?.sheetId === sheet.id ? preview.range : null} highlight={highlightRanges} clipboard={clipboard?.sheetId === sheet.id ? clipboard.range : null} fill={fill} rangeRect={rangeRect} cellRect={cellRect} offsetX={0} offsetY={0} clip={{ rows: [fr, dims.rows - 1], cols: [fc, dims.cols - 1] }} showHandle onFillStart={onFillStart} />
                 {sheet.charts.map((ch) => <ChartOverlay key={ch.id} chart={ch} sheet={sheet} workbook={workbook} computed={computed} offset={{ x: ROW_HEADER_WIDTH, y: COL_HEADER_HEIGHT }} onChange={(patch) => store.getState().apply({ type: "update_chart", sheet: sheet.id, id: ch.id, patch })} onRemove={() => store.getState().apply({ type: "remove_chart", sheet: sheet.id, id: ch.id })} onEdit={() => onEditChart?.(ch.id)} />)}
                 {editing && editRect && (
                   <div data-editor="1" className="absolute z-30" style={{ left: editRect.x, top: editRect.y, minWidth: editRect.w, minHeight: editRect.h }}>
