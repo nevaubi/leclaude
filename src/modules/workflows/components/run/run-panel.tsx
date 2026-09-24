@@ -18,7 +18,7 @@ import { apiJson, ApiError, useRunStream } from "../../hooks";
 import type { RunArtifact, WorkflowRunRecord } from "../../types";
 import { formatDuration, formatTokens, formatUsd, InlineAlert, NodeTypeIcon, RunStatusBadge, SectionLabel, StepStatusIcon, stepDuration, useNow } from "../shared";
 import { CopyButton, OutputViewer } from "./step-output";
-import { artifactProvenance, stepDotTone, stepSummary } from "./timeline-helpers";
+import { artifactProvenance, outputWithoutProvenance, stepDotTone, stepProvenance, stepSummary } from "./timeline-helpers";
 import { approvalVerbs, isTrustGate } from "./approval-helpers";
 
 export interface RunPanelProps {
@@ -184,7 +184,9 @@ function StepRow({ step, label, type, depth, progress, now, iterations, nodeMap,
   const spec = nodeSpec(type);
   const hasBody = step.output !== undefined || (step.logs?.length ?? 0) > 0 || step.error || (iterations?.length ?? 0) > 0;
   const dot = stepDotTone(step.status);
-  const stepProv = artifactProvenance({ kind: "document", id: step.nodeId, title: label, nodeId: step.nodeId, meta: (step as { meta?: Record<string, unknown> }).meta, provenance: (step as { provenance?: unknown }).provenance } as Parameters<typeof artifactProvenance>[0]);
+  // AI executors put provenance on the output (`_provenance`); verify steps under `provenance`; older records on the step itself.
+  const stepProv = stepProvenance(step as { output?: unknown; meta?: Record<string, unknown>; provenance?: unknown });
+  const shownOutput = outputWithoutProvenance(step.output);
   return (
     <li className="relative pl-6" style={{ marginLeft: depth * 16 }}>
       <span className="absolute left-[3px] top-[13px] flex size-3.5 items-center justify-center rounded-full bg-card"><StatusDot tone={dot.tone} pulse={dot.pulse} label={dot.label} /></span>
@@ -220,7 +222,14 @@ function StepRow({ step, label, type, depth, progress, now, iterations, nodeMap,
             {step.output !== undefined && (
               <div>
                 <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-muted-foreground"><span>Output</span><CopyButton value={step.output} /></div>
-                <OutputViewer value={step.output} defaultDepth={wide ? 2 : 1} className={cn("max-h-[420px] overflow-auto scrollbar-thin")} />
+                <OutputViewer value={shownOutput} defaultDepth={wide ? 2 : 1} className={cn("max-h-[420px] overflow-auto scrollbar-thin")} />
+                {stepProv && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                    <TrustBadge provenance={stepProv} />
+                    <span className="tabular">{stepProv.sources.length} source{stepProv.sources.length === 1 ? "" : "s"}</span>
+                    {stepProv.verification?.unresolvedCites?.length ? <span className="text-warning-foreground dark:text-warning">{stepProv.verification.unresolvedCites.length} cite{stepProv.verification.unresolvedCites.length === 1 ? "" : "s"} to verify</span> : null}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -246,12 +255,15 @@ function IterationRow({ iteration, nodeMap }: { iteration: NonNullable<WorkflowR
       {open && (
         <div className="space-y-1.5 border-t p-2">
           {iteration.error && <div className="text-[11px] text-destructive">{iteration.error}</div>}
-          {stepsArr.map((s) => (
-            <div key={s.nodeId} className="text-[11px]">
-              <div className="mb-0.5 flex items-center gap-1.5"><StepStatusIcon status={s.status} className="size-3" /><span className="font-medium">{nodeMap.get(s.nodeId)?.label ?? s.nodeId}</span>{s.error && <span className="text-destructive">— {s.error}</span>}</div>
-              {s.output !== undefined && <OutputViewer value={s.output} defaultDepth={0} className="max-h-60 overflow-auto scrollbar-thin" />}
-            </div>
-          ))}
+          {stepsArr.map((s) => {
+            const prov = stepProvenance(s as { output?: unknown; meta?: Record<string, unknown>; provenance?: unknown });
+            return (
+              <div key={s.nodeId} className="text-[11px]">
+                <div className="mb-0.5 flex items-center gap-1.5"><StepStatusIcon status={s.status} className="size-3" /><span className="font-medium">{nodeMap.get(s.nodeId)?.label ?? s.nodeId}</span>{prov && <TrustBadge provenance={prov} compact />}{s.error && <span className="text-destructive">— {s.error}</span>}</div>
+                {s.output !== undefined && <OutputViewer value={outputWithoutProvenance(s.output)} defaultDepth={0} className="max-h-60 overflow-auto scrollbar-thin" />}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

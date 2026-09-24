@@ -20,16 +20,45 @@ export function stepDotTone(status: WorkflowRunStep["status"]): { tone: DotTone;
   }
 }
 
+function looksLikeProvenance(p: unknown): p is Provenance {
+  if (!p || typeof p !== "object") return false;
+  const v = p as Partial<Provenance>;
+  return typeof v.model === "string" && typeof v.generatedAt === "string" && Array.isArray(v.sources);
+}
+
 /** Provenance carried by a run artifact (either top-level or under meta), when the integrity layer attached one. */
 export function artifactProvenance(a: RunArtifact | (RunArtifact & { provenance?: unknown })): Provenance | undefined {
   const candidates = [(a as { provenance?: unknown }).provenance, a.meta?.provenance];
-  for (const p of candidates) {
-    if (p && typeof p === "object") {
-      const v = p as Partial<Provenance>;
-      if (typeof v.model === "string" && typeof v.generatedAt === "string" && Array.isArray(v.sources)) return v as Provenance;
-    }
-  }
+  for (const p of candidates) if (looksLikeProvenance(p)) return p;
   return undefined;
+}
+
+/**
+ * Provenance of a run step wherever the engine records it: on the step itself
+ * (`provenance`, `meta.provenance`) or on its output — the executors attach
+ * `_provenance` to AI outputs and `provenance` to verify-step outputs
+ * (src/modules/workflows/executors.ts, stepProvenanceOf). TrustBadge renders
+ * from this so the same record is trusted the same way in the panel and the engine.
+ */
+export function stepProvenance(step: { output?: unknown; meta?: Record<string, unknown>; provenance?: unknown } | undefined): Provenance | undefined {
+  if (!step) return undefined;
+  const out = step.output && typeof step.output === "object" && !Array.isArray(step.output) ? (step.output as Record<string, unknown>) : undefined;
+  const candidates = [step.provenance, step.meta?.provenance, out?._provenance, out?.provenance];
+  for (const p of candidates) if (looksLikeProvenance(p)) return p;
+  return undefined;
+}
+
+/**
+ * A step output without its provenance blob (`_provenance` / `provenance`), so the
+ * JSON tree shows the step's actual result; the TrustBadge next to the row carries
+ * the provenance. Non-provenance fields that happen to use those names are kept.
+ */
+export function outputWithoutProvenance(output: unknown): unknown {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return output;
+  const o = output as Record<string, unknown>;
+  const drop = ["_provenance", "provenance"].filter((k) => looksLikeProvenance(o[k]));
+  if (!drop.length) return output;
+  return Object.fromEntries(Object.entries(o).filter(([k]) => !drop.includes(k)));
 }
 
 /** Steps grouped for the summary line: "3 of 7 done · 1 failed". */

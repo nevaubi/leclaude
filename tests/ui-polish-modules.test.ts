@@ -4,7 +4,7 @@ import { decisionBody, groupQueueByKind, isEndpointMissing, kindLabel, queueReas
 import { provenanceOf } from "@/modules/ediscovery/components/provenance-of";
 import { deadlineChip, deadlineLabel } from "@/modules/ediscovery/components/matter-header-helpers";
 import { CODING_COLUMN_MIN_WIDTH, codingColumnWidth } from "@/modules/ediscovery/components/viewer-layout";
-import { artifactProvenance, stepDotTone, stepSummary } from "@/modules/workflows/components/run/timeline-helpers";
+import { artifactProvenance, outputWithoutProvenance, stepDotTone, stepProvenance, stepSummary } from "@/modules/workflows/components/run/timeline-helpers";
 
 const item = (over: Partial<ReviewQueueItem> = {}): ReviewQueueItem => ({
   kind: "timeline.event", id: "tl_1", title: "Board briefed on PFOS persistence", matterId: "m_afff", surface: "ediscovery.timeline", confidence: 0.4,
@@ -109,5 +109,27 @@ describe("run timeline helpers", () => {
     expect(artifactProvenance({ kind: "document", id: "d1", title: "Memo", nodeId: "n1", provenance: prov })).toBe(prov);
     expect(artifactProvenance({ kind: "task", id: "t1", title: "Task", nodeId: "n1", meta: { provenance: { model: 1 } } })).toBeUndefined();
     expect(artifactProvenance({ kind: "task", id: "t1", title: "Task", nodeId: "n1" })).toBeUndefined();
+  });
+  it("reads step provenance where the executors put it: output._provenance (AI steps), output.provenance (verify steps), or the step itself", () => {
+    const prov = { model: "gpt-5.4", generatedAt: "2026-09-20T10:00:00Z", sources: [{ kind: "case-law" as const, cite: "Daubert v. Merrell Dow, 509 U.S. 579" }], surface: "workflow", confidence: 0.8 };
+    expect(stepProvenance({ output: { text: "memo", _provenance: prov } })).toBe(prov);
+    expect(stepProvenance({ output: { status: "verified", trusted: true, provenance: prov } })).toBe(prov);
+    expect(stepProvenance({ provenance: prov, output: { text: "x" } })).toBe(prov);
+    expect(stepProvenance({ meta: { provenance: prov } })).toBe(prov);
+    expect(stepProvenance({ output: { text: "no provenance here" } })).toBeUndefined();
+    expect(stepProvenance({ output: "plain string" })).toBeUndefined();
+    expect(stepProvenance({ output: { provenance: "not an object" } })).toBeUndefined();
+    expect(stepProvenance(undefined)).toBeUndefined();
+  });
+  it("strips only real provenance blobs from an output before it is shown as JSON", () => {
+    const prov = { model: "gpt-5.4", generatedAt: "2026-09-20T10:00:00Z", sources: [], surface: "workflow" };
+    expect(outputWithoutProvenance({ text: "memo", citations: [], _provenance: prov })).toEqual({ text: "memo", citations: [] });
+    expect(outputWithoutProvenance({ status: "verified", provenance: prov, trusted: true })).toEqual({ status: "verified", trusted: true });
+    const domain = { title: "Deed", provenance: "Recorded 1998, Book 12 Page 4" };
+    expect(outputWithoutProvenance(domain)).toBe(domain);
+    expect(outputWithoutProvenance("text")).toBe("text");
+    expect(outputWithoutProvenance(null)).toBeNull();
+    const arr = [1, 2];
+    expect(outputWithoutProvenance(arr)).toBe(arr);
   });
 });
