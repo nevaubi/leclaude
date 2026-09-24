@@ -6,6 +6,7 @@ import { listRuns, listSavedSearches } from "@/modules/search/service";
 import { listThreadSummaries } from "@/modules/search/engine/threads";
 import { ResearchPage } from "@/modules/search/components/research-page";
 import { Skeleton } from "@/components/ui/skeleton";
+import { currentUser } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Research" };
@@ -17,10 +18,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
   const saved = listSavedSearches();
   const runs = listRuns(30);
   const threads = listThreadSummaries(40);
-  const me = d.people.get("p_jwhitfield");
+  const me = currentUser((id) => d.people.get(id)?.name);
   return (
     <Suspense fallback={<SearchSkeleton />}>
-      <ResearchPage initialQuery={sp.q ?? ""} initialTool={sp.tool} initialThreadId={sp.thread} saved={saved} runs={runs} threads={threads} matters={matters} aiConfigured={aiConfig().hasKey} userName={me?.name ?? "Jordan Whitfield"} />
+      <ResearchPage initialQuery={sp.q ?? ""} initialTool={sp.tool} initialThreadId={sp.thread} saved={saved} runs={runs} threads={threads} matters={matters} aiConfigured={aiConfig().hasKey} userName={me.name} />
     </Suspense>
   );
 }

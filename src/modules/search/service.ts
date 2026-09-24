@@ -15,8 +15,9 @@ import { ASK_SOURCE_INSTRUCTIONS, EXPAND_QUERY_INSTRUCTIONS, HEADNOTE_INSTRUCTIO
 import { extractCitations, type ExtractedCitation } from "./citations";
 import { getCached, putCached } from "./engine/cache";
 import { ALL_SOURCES, DEFAULT_SETTINGS, type CitationCheck, type ReadRef, type ReadResult, type SavedSearch, type SearchHit, type SearchRun, type SearchRunRequest, type SearchSettings, type SearchSource, type SourceError } from "./types";
+import { currentUser } from "@/lib/current-user";
 
-export const CURRENT_USER = { id: "p_jwhitfield", name: "Jordan Whitfield" };
+export const CURRENT_USER = currentUser();
 
 export const savedSearches = () => db().collection<SavedSearch>("search_saved");
 export const searchRuns = () => db().collection<SearchRun>("search_runs");

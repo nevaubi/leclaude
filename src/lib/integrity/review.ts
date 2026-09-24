@@ -96,6 +96,7 @@ export function recordExists(kind: ProvenanceKind, id: string): boolean {
     case "library.summary":
     case "library.autotag":
     case "library.compare": return d.library.has(id.split(":")[0]);
+    case "intel.job": return d.collection<{ id: string }>("intel_jobs").has(id);
     case "research": return d.collection<{ id: string }>("search_runs").has(id);
     default: return true;
   }

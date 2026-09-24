@@ -4,8 +4,9 @@ import { db } from "@/lib/db";
 import type { SearchSettings } from "../types";
 import { compactSource, mergeSources } from "./sources";
 import type { ResearchMessage, ResearchPin, ResearchSource, ResearchThread } from "./types";
+import { currentUser } from "@/lib/current-user";
 
-const CURRENT_USER = { id: "p_jwhitfield", name: "Jordan Whitfield" };
+const CURRENT_USER = currentUser();
 const MAX_THREADS = 200;
 const MAX_SOURCES_PER_THREAD = 120;
 

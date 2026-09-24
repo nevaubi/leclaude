@@ -1,4 +1,5 @@
 import { MATTERS } from "@/lib/seed/ids";
+import { CURRENT_USER } from "@/lib/current-user";
 
 /** Stable ids for the system folders. Safe to import from client components. */
 export const LIBRARY_FOLDERS = {
@@ -42,4 +43,4 @@ export function isSystemFolder(id: string) {
 }
 
 /** Current user (the platform runs single-user in this build). */
-export const LIBRARY_USER = { id: "p_jwhitfield", name: "Jordan Whitfield" } as const;
+export const LIBRARY_USER = CURRENT_USER;
