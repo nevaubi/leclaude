@@ -216,9 +216,10 @@ export function SlideCanvas({ textEditorRef, onOpenElementEditor, slideNodeRef }
   };
 
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-hit-id]");
-    if (!hit || !slide) return;
-    const el = slide.elements.find((x) => x.id === hit.dataset.hitId);
+    if (!slide) return;
+    // Pointer capture retargets click events to the layer, so hit-test by coordinates instead of e.target.
+    const p = toSlide(e.clientX, e.clientY);
+    const el = [...slide.elements].sort((a, b) => b.z - a.z).find((x) => p.x >= x.x && p.x <= x.x + x.w && p.y >= x.y - (x.type === "line" ? 6 : 0) && p.y <= x.y + Math.max(12, x.h));
     if (!el || el.locked) return;
     e.preventDefault();
     if (el.type === "text" || el.type === "shape") { useSlidesStore.getState().pushHistory(); useSlidesStore.getState().setEditing(el.id); }
