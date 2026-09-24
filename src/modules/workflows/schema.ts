@@ -7,7 +7,7 @@ import type { Workflow, WorkflowEdge, WorkflowNode, WorkflowNodeType } from "@/l
 import { KNOWN_NODE_TYPES, defaultConfigFor, isTriggerType } from "./registry";
 import { validateWorkflow } from "./graph";
 
-export const workflowCategorySchema = z.enum(["intake", "discovery", "drafting", "research", "compliance", "transactional", "operations"]);
+export const workflowCategorySchema = z.enum(["intake", "discovery", "drafting", "research", "compliance", "transactional", "operations", "automation"]);
 
 export const workflowInputSchema = z.object({
   key: z.string().min(1).regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, "keys must be identifiers"),
@@ -80,7 +80,7 @@ export const GENERATED_WORKFLOW_JSON_SCHEMA: Record<string, unknown> = {
   properties: {
     name: { type: "string", description: "Short workflow name (≤ 8 words)" },
     description: { type: "string", description: "One or two sentences on what it does and when to use it" },
-    category: { type: "string", enum: ["intake", "discovery", "drafting", "research", "compliance", "transactional", "operations"] },
+    category: { type: "string", enum: ["intake", "discovery", "drafting", "research", "compliance", "transactional", "operations", "automation"] },
     tags: { type: "array", items: { type: "string" } },
     inputs: {
       type: "array",

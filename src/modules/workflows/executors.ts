@@ -1069,6 +1069,8 @@ const logicReview: Executor = async (x) => {
 };
 
 const notDirect = (what: string): Executor => async () => { throw new StepError(`${what} is executed by the engine, not as a plain step.`, "engine_only"); };
+/** Placeholder until the node type's executor lands (the registry does not expose the type yet, so no workflow can reach it). */
+const notImplemented = (type: string): Executor => async () => { throw new StepError(`Node type "${type}" is not available yet.`, "not_implemented"); };
 
 export const EXECUTORS: Record<AnyNodeType, Executor> = {
   "trigger.manual": trigger,
@@ -1101,6 +1103,19 @@ export const EXECUTORS: Record<AnyNodeType, Executor> = {
   "ai.verify": aiVerify,
   "data.dedupe": dataDedupe,
   "logic.review": logicReview,
+  "intel.fetch": notImplemented("intel.fetch"),
+  "intel.extract": notImplemented("intel.extract"),
+  "intel.index": notImplemented("intel.index"),
+  "intel.entities": notImplemented("intel.entities"),
+  "intel.analyze": notImplemented("intel.analyze"),
+  "intel.verify": notImplemented("intel.verify"),
+  "intel.publish": notImplemented("intel.publish"),
+  "review.auto": notImplemented("review.auto"),
+  "data.query": notImplemented("data.query"),
+  "output.file": notImplemented("output.file"),
+  "logic.schedule_after": notImplemented("logic.schedule_after"),
+  "ai.route": notImplemented("ai.route"),
+  "ai.agent": notImplemented("ai.agent"),
 };
 
 /** Plain-text digest helpers exposed to the engine for run outputs. */

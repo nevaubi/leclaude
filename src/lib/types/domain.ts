@@ -247,7 +247,9 @@ export type WorkflowNodeType =
   | "data.search_library" | "data.search_ediscovery" | "data.fetch_url" | "data.legal_search"
   | "ai.verify" | "data.dedupe"
   | "logic.branch" | "logic.loop" | "logic.merge" | "logic.approval" | "logic.delay" | "logic.review"
-  | "action.create_task" | "action.create_event" | "action.save_document" | "action.notify" | "action.export" | "action.update_coding";
+  | "action.create_task" | "action.create_event" | "action.save_document" | "action.notify" | "action.export" | "action.update_coding"
+  | "intel.fetch" | "intel.extract" | "intel.index" | "intel.entities" | "intel.analyze" | "intel.verify" | "intel.publish"
+  | "review.auto" | "data.query" | "output.file" | "logic.schedule_after" | "ai.route" | "ai.agent";
 
 export interface WorkflowNode {
   id: ID;
@@ -259,19 +261,77 @@ export interface WorkflowNode {
 
 export interface WorkflowEdge { id: ID; source: ID; target: ID; sourceHandle?: string; targetHandle?: string; label?: string }
 
+export type WorkflowCategory = "intake" | "discovery" | "drafting" | "research" | "compliance" | "transactional" | "operations" | "automation";
+
+/** Field of a workflow's one-page front end (the manual-start form). Values arrive as `inputs.<key>`. */
+export interface WorkflowFrontendField {
+  key: string;
+  label: string;
+  type:
+    | "file"
+    | "files"
+    | "text"
+    | "textarea"
+    | "select"
+    | "multiselect"
+    | "toggle"
+    | "date"
+    | "number"
+    | "matter"
+    | "person"
+    | "library-folder"
+    | "bates-prefix"
+    | "output-format"
+    | "label";
+  required?: boolean;
+  help?: string;
+  placeholder?: string;
+  options?: string[];
+  /** Accepted file extensions / MIME types for file fields. */
+  accept?: string[];
+  default?: unknown;
+  /** Group heading rendered above this field. */
+  group?: string;
+}
+
+/** The per-template front end: what a user fills in to start the workflow, and what happens with the output. */
+export interface WorkflowFrontend {
+  title: string;
+  intro?: string;
+  fields: WorkflowFrontendField[];
+  submitLabel?: string;
+  output?: {
+    formats?: ("docx" | "xlsx" | "pdf" | "csv" | "md" | "pptx")[];
+    defaultFormat?: "docx" | "xlsx" | "pdf" | "csv" | "md" | "pptx";
+    /** Template for the output label, e.g. "Privilege log — {{matter.shortName}} — {{now | date:date}}". */
+    defaultLabel?: string;
+    libraryFolderId?: ID;
+    notifyPeopleIds?: ID[];
+  };
+  after?: {
+    /** Workflows to start with this run's outputs as inputs. */
+    triggerWorkflowIds?: ID[];
+    createTask?: { title: string; assigneeId?: ID; dueRule?: string };
+  };
+}
+
 export interface Workflow {
   id: ID;
   name: string;
   description?: string;
-  category: "intake" | "discovery" | "drafting" | "research" | "compliance" | "transactional" | "operations";
+  category: WorkflowCategory;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   inputs?: { key: string; label: string; type: "text" | "textarea" | "file" | "matter" | "select" | "number" | "date"; required?: boolean; options?: string[]; placeholder?: string }[];
+  /** One-page start form and output settings (templates ship with one; users customize it). */
+  frontend?: WorkflowFrontend;
   status: "draft" | "active" | "archived";
   ownerId?: ID;
   createdAt: ISODate;
   updatedAt: ISODate;
   isTemplate?: boolean;
+  /** System workflows power the platform's own background automation (scheduled, shown under Automation). */
+  system?: boolean;
   runsCount?: number;
   lastRunAt?: ISODate;
   tags?: string[];
