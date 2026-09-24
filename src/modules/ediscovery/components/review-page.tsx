@@ -159,8 +159,8 @@ export function ReviewPage(props: ReviewPageProps) {
         {!props.aiConfigured && (
           <Tip label="AI analysis, batch prediction and privilege-log drafting need OPENAI_API_KEY"><Link href="/settings#ai" className="shrink-0"><Badge variant="warning" className="cursor-pointer"><KeyRound className="size-3" /> No OpenAI key</Badge></Link></Tip>
         )}
-        <Tip label="Score unreviewed documents for responsiveness (batch AI)"><Button variant="ghost" size="sm" onClick={() => setPredictOpen(true)}><Sparkles className="size-4" /> <span className="hidden lg:inline">AI predict</span></Button></Tip>
-        <Tip label="Rebuild the search index for this matter"><Button variant="ghost" size="sm" onClick={rebuildIndex} disabled={indexing}>{indexing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} <span className="hidden lg:inline">Reindex</span></Button></Tip>
+        <Tip label="Score unreviewed documents for responsiveness (batch AI)"><Button variant="ghost" size="sm" onClick={() => setPredictOpen(true)} aria-label="AI predict"><Sparkles className="size-4" /> <span className="hidden xl:inline">AI predict</span></Button></Tip>
+        <Tip label="Rebuild the search index for this matter"><Button variant="ghost" size="sm" onClick={rebuildIndex} disabled={indexing} aria-label="Reindex">{indexing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} <span className="hidden xl:inline">Reindex</span></Button></Tip>
         {tab === "review" && store.openDocId && (
           <Tip label={store.fullscreen ? "Exit full-screen viewer" : "Full-screen viewer"} shortcut="F"><Button variant="ghost" size="icon-sm" onClick={() => store.setFullscreen(!store.fullscreen)} aria-label="Toggle full screen">{store.fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button></Tip>
         )}

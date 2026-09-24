@@ -319,7 +319,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
                 <Input value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); stepFind(e.shiftKey ? -1 : 1); } if (e.key === "Escape") setFind(""); }} placeholder="Find in transcript" className="h-7 w-56 pl-7 pr-16 text-xs" aria-label="Find in transcript" />
                 {find && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10.5px] tabular text-muted-foreground">{findHits.length ? `${findPos + 1}/${findHits.length}` : "0/0"}</span>}
               </div>
-              <div className="ml-1 flex items-center gap-1">
+              <div className="ml-1 flex flex-wrap items-center gap-1">
                 <button type="button" onClick={() => setFlagFilter(null)} className={cn("h-6 rounded border px-2 text-[11px] transition-colors cursor-pointer", !flagFilter ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent")}>All</button>
                 {summaryCounts.map((f) => { const Icon = FLAG_STYLES[f.id].icon; return <button key={f.id} type="button" onClick={() => setFlagFilter(flagFilter === f.id ? null : f.id)} className={cn("inline-flex h-6 items-center gap-1 rounded border px-2 text-[11px] transition-colors cursor-pointer", flagFilter === f.id ? FLAG_STYLES[f.id].cls : "text-muted-foreground hover:bg-accent")}><Icon className="size-3" />{f.label} <span className="tabular">{f.count}</span></button>; })}
               </div>
@@ -346,9 +346,9 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
             </div>
           </div>
           <aside className="hidden w-[340px] shrink-0 flex-col border-l lg:flex">
-            <nav className="flex shrink-0 items-center gap-0.5 border-b px-1.5" aria-label="Deposition panels">
+            <nav className="flex shrink-0 items-center gap-0 overflow-x-auto border-b px-1 no-scrollbar" aria-label="Deposition panels">
               {([["digest", "Digest", Sparkles], ["designations", "Designations", Highlighter], ["objections", "Objections", Gavel], ["exhibits", "Exhibits", Paperclip], ["flags", "Flags", Flag]] as [SidePanel, string, React.ElementType][]).map(([id, label, Icon]) => (
-                <button key={id} type="button" onClick={() => setPanel(id)} className={cn("relative flex h-8 items-center gap-1 px-2 text-[11.5px] font-medium transition-colors cursor-pointer", panel === id ? "text-foreground" : "text-muted-foreground hover:text-foreground")} aria-current={panel === id ? "true" : undefined}>
+                <button key={id} type="button" onClick={() => setPanel(id)} className={cn("relative flex h-8 shrink-0 items-center gap-1 px-1.5 text-[11.5px] font-medium transition-colors cursor-pointer", panel === id ? "text-foreground" : "text-muted-foreground hover:text-foreground")} aria-current={panel === id ? "true" : undefined} title={label}>
                   <Icon className="size-3.5" />{label}
                   {panel === id && <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-primary" />}
                 </button>

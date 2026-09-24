@@ -25,6 +25,19 @@ export interface ReviewListApi {
 
 export const ReviewListContext = React.createContext<ReviewListApi>({ ids: [], patchCoding: () => {}, refresh: () => {} });
 
+/** True while the viewport is narrower than `px` (false during SSR and before mount). */
+export function useNarrowViewport(px: number) {
+  const [narrow, setNarrow] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${px - 1}px)`);
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [px]);
+  return narrow;
+}
+
 export function ReviewTab() {
   const { matterId, refreshStats } = useReview();
   const s = useReviewStore();
@@ -112,7 +125,10 @@ export function ReviewTab() {
   };
 
   const fullscreen = s.fullscreen && !!s.openDocId;
-  const railCollapsed = hydrated && s.railCollapsed;
+  // Below 1440px the rail (248px) plus list plus viewer plus coding panel do not fit, so the rail folds away
+  // automatically while a document is open (the user's persisted preference is left untouched).
+  const narrow = useNarrowViewport(1440);
+  const railCollapsed = hydrated && (s.railCollapsed || (narrow && !!s.openDocId));
 
   return (
     <ReviewListContext.Provider value={listApi}>
@@ -131,7 +147,7 @@ export function ReviewTab() {
         )}
         <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
           {!fullscreen && (
-            <ResizablePanel defaultSize={s.openDocId ? "52" : "100"} minSize={360} className="flex min-w-0 flex-col">
+            <ResizablePanel defaultSize={s.openDocId ? "44" : "100"} minSize={340} className="flex min-w-0 flex-col">
               <SearchBox response={search.data} loading={search.loading} />
               <BulkBar hits={hits} onCode={bulk} />
               <DocTable hits={hits} loading={search.loading && !search.data} total={search.data?.total ?? 0} totalWorkspace={search.data?.totalWorkspace ?? 0} tookMs={search.data?.tookMs} semantic={!!search.data?.semantic} onLoadMore={search.loadMore} loadingMore={search.loadingMore} />
@@ -140,7 +156,7 @@ export function ReviewTab() {
           {s.openDocId && (
             <>
               {!fullscreen && <ResizableHandle withHandle />}
-              <ResizablePanel defaultSize={fullscreen ? "100" : "48"} minSize={fullscreen ? undefined : 420} className="min-w-0">
+              <ResizablePanel defaultSize={fullscreen ? "100" : "56"} minSize={fullscreen ? undefined : 420} className="min-w-0">
                 <DocViewer docId={s.openDocId} terms={search.data?.parsed.terms ?? []} onNavigate={move} onClose={() => s.setOpenDocId(null)} index={ids.indexOf(s.openDocId)} count={ids.length} />
               </ResizablePanel>
             </>

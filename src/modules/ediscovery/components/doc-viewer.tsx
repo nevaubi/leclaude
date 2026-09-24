@@ -83,10 +83,25 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
   const thread = family?.thread ?? [];
   const threadIdx = thread.findIndex((t) => t.id === docId);
 
+  // Below ~640px the text column and the 264px coding panel cannot share the width: the panel then
+  // opens as an overlay (closed by default) so the document itself stays readable.
+  const sectionRef = React.useRef<HTMLElement>(null);
+  const [narrow, setNarrow] = React.useState(false);
+  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  React.useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => { for (const e of entries) setNarrow(e.contentRect.width < 640); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const codingVisible = narrow ? overlayOpen : codingOpen;
+  const toggleCoding = () => (narrow ? setOverlayOpen((v) => !v) : setCodingOpen(!codingOpen));
+
   return (
-    <section className="flex h-full min-h-0 flex-col bg-background" data-doc-viewer aria-label="Document viewer">
-      {/* header */}
-      <header className="flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
+    <section ref={sectionRef} className="flex h-full min-h-0 flex-col bg-background" data-doc-viewer aria-label="Document viewer">
+      {/* header (wraps when the pane is narrow so the thread controls never overlap the Bates number) */}
+      <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-1.5">
         <div className="flex items-center gap-0.5">
           <Tip label="Previous document" shortcut="["><Button variant="ghost" size="icon-xs" onClick={() => onNavigate(-1)} disabled={index <= 0} aria-label="Previous"><ChevronLeft className="size-4" /></Button></Tip>
           <span className="tabular text-[11px] text-muted-foreground">{index >= 0 ? index + 1 : "–"} / {count}</span>
@@ -94,17 +109,19 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
         </div>
         <div className="mx-1 h-4 w-px bg-border" />
         {doc ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex min-w-[160px] flex-1 items-center gap-2">
             <TypeIcon type={doc.type} />
             <span className="shrink-0 font-mono text-[12.5px] font-semibold tabular">{doc.bates}{doc.batesEnd && <span className="font-normal text-muted-foreground"> – {doc.batesEnd.slice(-4)}</span>}</span>
-            <span className="truncate text-[13px] font-medium" title={doc.subject}>{doc.subject}</span>
+            <span className="min-w-0 truncate text-[13px] font-medium" title={doc.subject}>{doc.subject}</span>
             {dirty && <Badge variant="warning" className="shrink-0">Unsaved</Badge>}
           </div>
         ) : <Skeleton className="h-4 flex-1" />}
-        <FamilyNav family={family} threadIdx={threadIdx} onOpen={setOpenDocId} />
-        <Tip label={codingOpen ? "Hide coding panel" : "Show coding panel"}><Button variant="ghost" size="icon-xs" onClick={() => setCodingOpen(!codingOpen)} aria-label="Toggle coding panel">{codingOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}</Button></Tip>
-        <Tip label={fullscreen ? "Exit full screen" : "Full screen"} shortcut="F"><Button variant="ghost" size="icon-xs" onClick={() => setFullscreen(!fullscreen)} aria-label="Toggle full screen">{fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button></Tip>
-        <Tip label="Close" shortcut="Esc"><Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Close viewer"><X className="size-4" /></Button></Tip>
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <FamilyNav family={family} threadIdx={threadIdx} onOpen={setOpenDocId} />
+          <Tip label={codingVisible ? "Hide coding panel" : "Show coding panel"}><Button variant="ghost" size="icon-xs" onClick={toggleCoding} aria-label="Toggle coding panel" aria-pressed={codingVisible}>{codingVisible ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}</Button></Tip>
+          <Tip label={fullscreen ? "Exit full screen" : "Full screen"} shortcut="F"><Button variant="ghost" size="icon-xs" onClick={() => setFullscreen(!fullscreen)} aria-label="Toggle full screen">{fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button></Tip>
+          <Tip label="Close" shortcut="Esc"><Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Close viewer"><X className="size-4" /></Button></Tip>
+        </div>
       </header>
       {/* tabs */}
       <div className="flex shrink-0 items-center border-b px-2" role="tablist">
@@ -119,7 +136,7 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
         {doc && <div className="ml-auto flex items-center gap-2 pr-1"><CodingBadges coding={draft ?? doc.coding} compact /></div>}
       </div>
       {/* body */}
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-hidden">
           {!detail.data ? (
             <div className="space-y-2 p-4">{Array.from({ length: 14 }).map((_, i) => <Skeleton key={i} className={cn("h-3.5", i % 4 === 3 ? "w-2/3" : "w-full")} />)}</div>
@@ -135,8 +152,11 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
             <AiTab detail={detail.data} analysis={detail.data.analysis} onAnalysis={(a) => detail.mutate((cur) => (cur ? { ...cur, analysis: a } : cur))} onApply={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))} />
           )}
         </div>
-        {codingOpen && draft && doc && (
-          <CodingPanel draft={draft} onChange={setDraft} onSave={() => save()} saving={saving} dirty={dirty} reviewedBy={detail.data?.reviewerName} reviewedAt={doc.coding.reviewedAt} />
+        {codingVisible && draft && doc && (
+          <CodingPanel draft={draft} onChange={setDraft} onSave={() => save()} saving={saving} dirty={dirty} reviewedBy={detail.data?.reviewerName} reviewedAt={doc.coding.reviewedAt} className={narrow ? "absolute inset-y-0 right-0 z-20 bg-card shadow-xl" : undefined} />
+        )}
+        {narrow && !overlayOpen && draft && doc && (
+          <Button variant="secondary" size="sm" className="absolute bottom-3 right-3 z-10 shadow-md" onClick={() => setOverlayOpen(true)}><PanelRightOpen className="size-4" /> Coding{dirty ? " · unsaved" : ""}</Button>
         )}
       </div>
     </section>
@@ -212,22 +232,22 @@ function TextView({ detail, terms }: { detail: DocDetailResponse; terms: string[
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b bg-muted/30 px-3 py-1">
-        <div className="relative w-56">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b bg-muted/30 px-3 py-1">
+        <div className="relative w-56 max-w-full">
           <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") setHitIdx((i) => (hitCount ? (i + (e.shiftKey ? -1 : 1) + hitCount) % hitCount : 0)); }} placeholder="Find in document" className="h-7 w-full rounded border border-input bg-background pl-7 pr-2 text-xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" aria-label="Find in document" />
         </div>
         {regex && <span className="tabular text-[11px] text-muted-foreground">{hitCount ? `${Math.min(hitIdx + 1, hitCount)} of ${hitCount} hits` : "no hits"}</span>}
         {hitCount > 0 && <span className="flex items-center"><Button variant="ghost" size="icon-xs" className="size-6" onClick={() => setHitIdx((i) => (i - 1 + hitCount) % hitCount)} aria-label="Previous hit"><ChevronLeft className="size-3.5" /></Button><Button variant="ghost" size="icon-xs" className="size-6" onClick={() => setHitIdx((i) => (i + 1) % hitCount)} aria-label="Next hit"><ChevronRight className="size-3.5" /></Button></span>}
         <div className="flex-1" />
-        <span className="hidden text-[11px] text-muted-foreground sm:inline">{(doc.pages ?? 1)} page{(doc.pages ?? 1) === 1 ? "" : "s"} · {doc.text.length.toLocaleString()} chars</span>
+        <span className="hidden whitespace-nowrap text-[11px] text-muted-foreground sm:inline">{(doc.pages ?? 1)} page{(doc.pages ?? 1) === 1 ? "" : "s"} · {doc.text.length.toLocaleString()} chars</span>
         <Tip label="Copy selection (or whole document) with a Bates cite"><Button variant="ghost" size="xs" onClick={copyWithCite}><ClipboardCopy className="size-3.5" /> Copy w/ cite</Button></Tip>
       </div>
       <div ref={containerRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin bg-muted/20 px-4 py-4 [&_mark]:rounded-sm [&_mark]:bg-warning/40 [&_mark]:px-px [&_mark]:text-foreground [&_mark[data-current=true]]:bg-chart-3 [&_mark[data-current=true]]:ring-2 [&_mark[data-current=true]]:ring-chart-3/50">
         {pages.map((page, i) => {
           const pageBates = start ? formatBates(start.prefix, start.number + i, start.width) : `${doc.bates} p.${i + 1}`;
           return (
-            <article key={i} data-page-bates={pageBates} className="paper mx-auto mb-4 max-w-[760px] rounded-md border px-8 py-6">
+            <article key={i} data-page-bates={pageBates} className="paper mx-auto mb-4 max-w-[760px] rounded-md border px-5 py-5 sm:px-8 sm:py-6">
               <div className="mb-3 flex items-center justify-between border-b pb-1.5 font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 <span>Page {i + 1} of {pages.length}</span>
                 <span>{pageBates}</span>

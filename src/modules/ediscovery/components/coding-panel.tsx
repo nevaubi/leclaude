@@ -15,7 +15,7 @@ import { useReviewStore } from "./store";
 import { useReview } from "./review-page";
 import { IssueChip, Kbd, issueColorClasses } from "./shared";
 
-export function CodingPanel({ draft, onChange, onSave, saving, dirty, reviewedBy, reviewedAt }: { draft: CodingDecision; onChange: (c: CodingDecision) => void; onSave: () => void; saving: boolean; dirty: boolean; reviewedBy?: string; reviewedAt?: string }) {
+export function CodingPanel({ draft, onChange, onSave, saving, dirty, reviewedBy, reviewedAt, className }: { draft: CodingDecision; onChange: (c: CodingDecision) => void; onSave: () => void; saving: boolean; dirty: boolean; reviewedBy?: string; reviewedAt?: string; className?: string }) {
   const { issueCodes, reviewers, currentUserId } = useReview();
   const autoAdvance = useReviewStore((s) => s.autoAdvance);
   const setAutoAdvance = useReviewStore((s) => s.setAutoAdvance);
@@ -24,7 +24,7 @@ export function CodingPanel({ draft, onChange, onSave, saving, dirty, reviewedBy
   const [issueOpen, setIssueOpen] = React.useState(false);
 
   return (
-    <aside className="flex w-[264px] shrink-0 flex-col border-l bg-card/50" aria-label="Coding panel">
+    <aside className={cn("flex w-[264px] shrink-0 flex-col border-l bg-card/50", className)} aria-label="Coding panel">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto scrollbar-thin p-3">
         <Field label="Responsive" shortcut="R / N">
           <div className="grid grid-cols-2 gap-1 rounded-md border p-0.5" role="radiogroup" aria-label="Responsive">
