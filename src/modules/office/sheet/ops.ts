@@ -79,7 +79,9 @@ function cellFromInput(wb: Workbook, sheet: Sheet, input: CellInput, parse: bool
     else next = { ...next, f: input.formula.startsWith("=") ? input.formula : `=${input.formula}` };
     if (next.f) { delete next.v; delete next.t; }
   }
-  if (input.value !== undefined) {
+  // A formula wins over a value sent alongside it (the grid editor sends both), otherwise the
+  // typed "=SUM(...)" would be stored back as plain text.
+  if (input.value !== undefined && !(input.formula && next.f)) {
     if (typeof input.value === "string" && parse) {
       const parsed = parseInput(input.value);
       next = { ...(next.s ? { s: next.s } : {}), ...parsed };

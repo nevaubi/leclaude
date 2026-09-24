@@ -5,7 +5,7 @@
  */
 import type { Editor } from "@tiptap/core";
 import { Fragment, type Node as PMNodeT } from "@tiptap/pm/model";
-import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import { Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { nanoid } from "nanoid";
 import type { OfficeComment } from "@/lib/types/domain";
 import type { EditProposal } from "@/modules/office/shared/types";
@@ -292,7 +292,9 @@ export async function applyProposal(p: EditProposal, ctx: ApplyContext): Promise
 export function revealPosition(editor: Editor, pos: number) {
   try {
     const clamped = Math.max(1, Math.min(pos + 1, editor.state.doc.content.size - 1));
-    editor.chain().setTextSelection(clamped).scrollIntoView().run();
+    // Selection.near finds the closest inline position (pos + 1 may sit on a block boundary, e.g. after wrapping in a blockquote).
+    const sel = Selection.near(editor.state.doc.resolve(clamped), 1);
+    editor.view.dispatch(editor.state.tr.setSelection(sel).scrollIntoView());
     const dom = editor.view.domAtPos(clamped).node as HTMLElement | Text;
     const el = dom instanceof HTMLElement ? dom : dom.parentElement;
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
