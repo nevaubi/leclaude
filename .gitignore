@@ -43,3 +43,6 @@ next-env.d.ts
 # LeClaude data
 /data
 /.vitest-data
+
+# keep the documented example env file
+!.env.example
