@@ -142,7 +142,7 @@ export function CiteChecker({ initialText, matterId }: { initialText?: string; m
       const j = (await res.json()) as { doc?: { id: string }; error?: string };
       if (!res.ok || !j.doc) throw new Error(j.error ?? res.statusText);
       toast.success("Opened in Word for review");
-      router.push(`/office/word/${j.doc.id}`);
+      router.push(`/office/word/${j.doc.id}?mode=review`);
     } catch (e) {
       toast.error("Could not create the Word document", { description: e instanceof Error ? e.message : String(e) });
     } finally { setSending(false); }

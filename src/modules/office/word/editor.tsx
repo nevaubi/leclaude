@@ -57,7 +57,7 @@ const SUGGESTIONS = {
   ask: ["Summarize the argument", "What authorities are cited?", "What is missing for a D.S.C. filing?"],
 };
 
-export interface WordEditorPageProps { id: string; templateId?: string | null; matterId?: string | null; matters: Matter[] }
+export interface WordEditorPageProps { id: string; templateId?: string | null; matterId?: string | null; matters: Matter[]; initialMode?: "draft" | "review" | "ask" }
 
 interface CursorInfo { paraIndex: number; paraId: string | null; total: number; headingId: string | null; headingText: string; selectionText: string; selectionBlockIds: string[]; sectionText: string; paraText: string }
 
@@ -86,7 +86,7 @@ function computeCursor(editor: Editor): CursorInfo {
   return { paraIndex, paraId, total, headingId, headingText, selectionText: empty ? "" : editor.state.doc.textBetween(from, to, "\n"), selectionBlockIds: Array.from(selIds), sectionText: sectionParts.join("\n").slice(0, 8000), paraText };
 }
 
-export function WordEditorPage({ id, templateId, matterId, matters }: WordEditorPageProps) {
+export function WordEditorPage({ id, templateId, matterId, matters, initialMode }: WordEditorPageProps) {
   const office = useOfficeDoc<PMNode>({ id, kind: "word", emptyContent: emptyDoc, templateId: templateId ?? null, matterId: matterId ?? null, autosaveMs: 1500 });
   const { doc, loading, error } = office;
   const [settings, setSettings] = React.useState<DocSettings>(DEFAULT_SETTINGS);
@@ -507,7 +507,7 @@ export function WordEditorPage({ id, templateId, matterId, matters }: WordEditor
             <>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={400} minSize={320} maxSize={640}>
-                <OfficeAgentPanel endpoint="/api/office/word/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled document"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => editor?.chain().focus().undo().run()} onLocate={onLocate} suggestions={SUGGESTIONS} onApplied={onApplied} extraContext={() => ({ cursorParagraph: cursor.paraIndex, currentSection: cursor.headingText, settings })} />
+                <OfficeAgentPanel endpoint="/api/office/word/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled document"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => editor?.chain().focus().undo().run()} onLocate={onLocate} suggestions={SUGGESTIONS} defaultMode={initialMode ?? "draft"} onApplied={onApplied} extraContext={() => ({ cursorParagraph: cursor.paraIndex, currentSection: cursor.headingText, settings })} />
               </ResizablePanel>
             </>
           )}
