@@ -33,13 +33,15 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
   const [jumpIndex, setJumpIndex] = React.useState<number | null>(null);
   const [q, setQ] = React.useState("");
   const [outlineOpen, setOutlineOpen] = React.useState(false);
-  const list = deps.data?.depositions ?? [];
+  const list = React.useMemo(() => deps.data?.depositions ?? [], [deps.data]);
 
   React.useEffect(() => {
     if (!selectedId && list.length) {
       const url = new URL(window.location.href);
       const fromUrl = url.searchParams.get("depo");
+      const qa = url.searchParams.get("qa");
       setSelectedId(fromUrl && list.some((d) => d.id === fromUrl) ? fromUrl : list.find((d) => d.status !== "scheduled")?.id ?? list[0].id);
+      if (fromUrl && qa && /^\d+$/.test(qa)) setJumpIndex(Number(qa));
     }
   }, [list, selectedId]);
 
@@ -48,7 +50,7 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
     const url = new URL(window.location.href);
     url.searchParams.set("depo", selectedId);
     window.history.replaceState(window.history.state, "", url.toString());
-    return () => { const u = new URL(window.location.href); u.searchParams.delete("depo"); window.history.replaceState(window.history.state, "", u.toString()); };
+    return () => { const u = new URL(window.location.href); u.searchParams.delete("depo"); u.searchParams.delete("qa"); window.history.replaceState(window.history.state, "", u.toString()); };
   }, [selectedId]);
 
   const openHit = (depositionId: string, index: number) => { setSelectedId(depositionId); setJumpIndex(index); };
@@ -59,7 +61,7 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         <div className="border-b p-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input id="depo-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search all transcripts…  (\" for phrase)" className="h-8 pl-7 pr-7 text-xs" aria-label="Search transcripts" />
+            <Input id="depo-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={'Search all transcripts…  (" for phrase)'} className="h-8 pl-7 pr-7 text-xs" aria-label="Search transcripts" />
             {q && <button type="button" onClick={() => setQ("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent cursor-pointer" aria-label="Clear"><X className="size-3.5" /></button>}
           </div>
         </div>

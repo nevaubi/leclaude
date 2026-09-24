@@ -171,7 +171,7 @@ export async function crossAnalysis(matterId: string, opts: { topic: string; wit
   const testimony = topic ? toExcerpt(searchLoose(focus, 60)) : toExcerpt(focus.flatMap((dep) => dep.transcript.map((qa, index) => ({ depositionId: dep.id, witnessName: dep.witnessName, index, page: qa.page, line: qa.line, field: "answer" as const, snippet: qa.answer, score: (qa.flags?.length ?? 0) + 1 }))).sort((a, b) => b.score - a.score));
   const otherTestimony = topic ? toExcerpt(searchLoose(others, 40)).slice(0, Math.ceil(k / 2)) : [];
 
-  let documents: CrossExcerpt[] = [];
+  const documents: CrossExcerpt[] = [];
   if (topic) {
     const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, topic, { k, perDoc: 1, filter: (meta) => meta.matterId === matterId });
     const terms = topic.split(/\s+/).filter((t) => t.length > 2);

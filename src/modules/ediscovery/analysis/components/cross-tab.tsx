@@ -16,7 +16,7 @@ import type { Conflict } from "@/lib/types/domain";
 import { type AnalysisTabProps, type CrossExcerpt, type FactMatrix } from "../types";
 import { highlightTerms } from "../transcript";
 import { AiButtonHint, AiLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, SeverityBadge, ConflictStatusBadge, kindLabel, formatShortDate } from "./shared";
-import { api, downloadFile, exportMarkdownToWord, isNoKey, useCross, useDepositions, useFactMatrices, useOverview } from "./use-analysis-data";
+import { api, downloadFile, exportMarkdownToWord, isNoKey, useCross, useDepositions, useFactMatrices, useOpenTestimony, useOverview } from "./use-analysis-data";
 
 function Highlighted({ text, re }: { text: string; re: RegExp | null }) {
   if (!re) return <>{text}</>;
@@ -37,6 +37,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
   const [matrixOpen, setMatrixOpen] = React.useState(false);
   const cross = useCross(matterId, topic, witnessId === "all" ? undefined : witnessId);
   const matrices = useFactMatrices(matterId);
+  const openTestimony = useOpenTestimony();
   const aiConfigured = !!overview.data?.aiConfigured;
   const re = React.useMemo(() => (topic ? highlightTerms(topic) : null), [topic]);
 
@@ -44,7 +45,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
   React.useEffect(() => { setSelected(new Set()); setCreated([]); }, [topic, witnessId]);
 
   const toggle = (key: string) => setSelected((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
-  const testimony = cross.data?.testimony ?? [];
+  const testimony = React.useMemo(() => cross.data?.testimony ?? [], [cross.data]);
   const byDeposition = React.useMemo(() => { const m = new Map<string, number[]>(); for (const t of testimony) if (selected.has(`${t.id}:${t.index}`)) m.set(t.id, [...(m.get(t.id) ?? []), t.index!]); return m; }, [testimony, selected]);
 
   const findContradictions = async () => {
@@ -100,7 +101,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
           <Pane title={<span className="flex items-center gap-1.5"><ScrollText className="size-3.5 text-chart-2" /> Testimony{witnessId !== "all" && witnesses.find((w) => w.id === witnessId) ? ` — ${witnesses.find((w) => w.id === witnessId)!.name}` : ""}</span>} count={testimony.length} actions={selected.size ? <Button size="xs" variant="ghost" onClick={() => setSelected(new Set())}>Clear {selected.size}</Button> : <span className="text-[10.5px] text-muted-foreground">select to focus the AI</span>}>
             {cross.loading && !cross.data ? <ExcerptSkeleton /> : !testimony.length ? <div className="p-4"><EmptyState icon={ScrollText} title="No testimony on this topic" description="Try a broader topic or another witness." /></div> : (
               <ul className="divide-y">
-                {testimony.map((t) => <TestimonyExcerpt key={`${t.id}:${t.index}`} t={t} re={re} checked={selected.has(`${t.id}:${t.index}`)} onToggle={() => toggle(`${t.id}:${t.index}`)} onOpen={() => window.dispatchEvent(new CustomEvent("ediscovery:open-testimony", { detail: { depositionId: t.id, index: t.index } }))} />)}
+                {testimony.map((t) => <TestimonyExcerpt key={`${t.id}:${t.index}`} t={t} re={re} checked={selected.has(`${t.id}:${t.index}`)} onToggle={() => toggle(`${t.id}:${t.index}`)} onOpen={() => openTestimony(t.id, t.index)} />)}
               </ul>
             )}
           </Pane>
@@ -129,7 +130,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
                   {(cross.data?.conflicts ?? []).filter((c) => !created.some((x) => x.id === c.id)).map((c) => <ConflictLine key={c.id} c={c} />)}
                   {(cross.data?.otherTestimony ?? []).map((t) => (
                     <div key={`${t.id}:${t.index}`} className="px-3 py-2">
-                      <div className="flex items-center gap-2"><CiteChip cite={t.cite} kind="deposition" onClick={() => window.dispatchEvent(new CustomEvent("ediscovery:open-testimony", { detail: { depositionId: t.id, index: t.index } }))} /><span className="text-[10.5px] text-muted-foreground">{t.label}</span>{t.flags?.map((f) => <FlagBadge key={f} flag={f} compact />)}</div>
+                      <div className="flex items-center gap-2"><CiteChip cite={t.cite} kind="deposition" onClick={() => openTestimony(t.id, t.index)} /><span className="text-[10.5px] text-muted-foreground">{t.label}</span>{t.flags?.map((f) => <FlagBadge key={f} flag={f} compact />)}</div>
                       <p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-foreground/85"><Highlighted text={t.text} re={re} /></p>
                     </div>
                   ))}

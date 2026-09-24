@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
 import type { Conflict, Deposition, Relationship, TimelineEvent } from "@/lib/types/domain";
 import { ApiError, api, useFetch } from "../../components/use-review-data";
+import { useReview } from "../../components/review-page";
 import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, ObjectionSummary, PersonDetail, TranscriptHit } from "../types";
 
 export { ApiError, api, useFetch };
@@ -92,6 +93,24 @@ export async function exportMarkdownToWord(opts: { title: string; markdown: stri
 
 export function isNoKey(e: unknown) {
   return e instanceof ApiError && (e.code === "no_api_key" || e.status === 503);
+}
+
+/** The review-page context when the tab is mounted inside it; null when rendered standalone. */
+export function useOptionalReview() {
+  try { return useReview(); } catch { return null; }
+}
+
+/** Navigate to a transcript position: writes ?depo=&qa= and switches to the Depositions tab. */
+export function useOpenTestimony() {
+  const review = useOptionalReview();
+  return React.useCallback((depositionId: string, index?: number) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("depo", depositionId);
+    if (index != null) url.searchParams.set("qa", String(index)); else url.searchParams.delete("qa");
+    window.history.replaceState(window.history.state, "", url.toString());
+    if (review) review.setTab("depositions");
+    else toast.info("Open the Depositions tab to read the transcript");
+  }, [review]);
 }
 
 /** Small helper for optimistic list patches. */
