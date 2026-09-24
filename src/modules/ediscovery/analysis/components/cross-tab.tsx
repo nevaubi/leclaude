@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Conflict } from "@/lib/types/domain";
 import { type AnalysisTabProps, type CrossExcerpt, type FactMatrix } from "../types";
 import { highlightTerms } from "../transcript";
-import { AiButtonHint, AiLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, kindLabel, formatShortDate } from "./shared";
+import { AiButtonHint, AiLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, TabHeader, kindLabel, formatShortDate } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useCross, useDepositions, useFactMatrices, useOpenTestimony, useOverview } from "./use-analysis-data";
 
 function Highlighted({ text, re }: { text: string; re: RegExp | null }) {
@@ -69,10 +69,21 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
-        <GitBranch className="size-4 text-muted-foreground" />
+      <TabHeader
+        icon={GitBranch}
+        title="Cross-analysis"
+        summary={topic ? `“${topic}” · ${testimony.length} testimony excerpt${testimony.length === 1 ? "" : "s"} · ${cross.data?.documents.length ?? 0} document passage${(cross.data?.documents.length ?? 0) === 1 ? "" : "s"}` : "Pick a witness and a topic"}
+        actions={
+          <>
+            <Tip label="Build a topics × sources matrix from the excerpts below"><Button size="sm" variant="outline" onClick={() => setMatrixOpen((v) => !v)} className={cn(matrixOpen && "bg-accent")} aria-pressed={matrixOpen}><Table2 className="size-4" /> <span className="hidden md:inline">Fact matrix</span> {matrices.data?.matrices.length ? <span className="rounded bg-muted px-1 text-[10px] tabular">{matrices.data.matrices.length}</span> : null}</Button></Tip>
+            <AiButtonHint configured={aiConfigured}>
+              <Button size="sm" onClick={findContradictions} disabled={finding || !testimony.length}>{finding ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} <span className="hidden md:inline">Find contradictions</span><span className="md:hidden">Contradictions</span>{selected.size ? ` (${selected.size})` : ""}</Button>
+            </AiButtonHint>
+          </>
+        }
+      >
         <Select value={witnessId} onValueChange={setWitnessId}>
-          <SelectTrigger size="sm" className="h-8 w-[220px]"><SelectValue placeholder="Witness" /></SelectTrigger>
+          <SelectTrigger size="sm" className="h-7 w-[200px]"><SelectValue placeholder="Witness" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all"><span className="flex items-center gap-2"><Users className="size-3.5 text-muted-foreground" /> All witnesses</span></SelectItem>
             {witnesses.map((w) => <SelectItem key={w.id} value={w.id}><span className="flex items-center gap-2"><PersonAvatar name={w.name} size="xs" />{w.name}</span></SelectItem>)}
@@ -80,17 +91,12 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
         </Select>
         <form className="relative" onSubmit={(e) => { e.preventDefault(); applyTopic(topicInput); }}>
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={topicInput} onChange={(e) => setTopicInput(e.target.value)} placeholder="Topic — e.g. MW-7 notification, 8(e) decision, MSDS language" className="h-8 w-[360px] pl-7 text-xs" aria-label="Topic" />
+          <Input value={topicInput} onChange={(e) => setTopicInput(e.target.value)} placeholder="Topic — e.g. MW-7 notification, 8(e) decision, MSDS language" className="h-7 w-[300px] max-w-[50vw] pl-7 text-xs" aria-label="Topic" />
         </form>
-        <div className="hidden items-center gap-1 overflow-x-auto no-scrollbar xl:flex">
-          {(overview.data?.topics ?? []).slice(0, 6).map((t) => <button key={t} type="button" onClick={() => applyTopic(t)} className={cn("h-6 shrink-0 rounded-full border px-2 text-[11px] transition-colors cursor-pointer", topic === t ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent")}>{t}</button>)}
+        <div className="hidden items-center gap-1 overflow-x-auto no-scrollbar lg:flex">
+          {(overview.data?.topics ?? []).slice(0, 6).map((t) => <button key={t} type="button" onClick={() => applyTopic(t)} className={cn("h-6 shrink-0 rounded-md border px-2 text-[11px] transition-colors cursor-pointer", topic === t ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent")}>{t}</button>)}
         </div>
-        <div className="flex-1" />
-        <Tip label="Build a topics × sources matrix from the excerpts below"><Button size="sm" variant="outline" onClick={() => setMatrixOpen((v) => !v)} className={cn(matrixOpen && "bg-accent")}><Table2 className="size-4" /> Fact matrix {matrices.data?.matrices.length ? <span className="rounded bg-muted px-1 text-[10px] tabular">{matrices.data.matrices.length}</span> : null}</Button></Tip>
-        <AiButtonHint configured={aiConfigured}>
-          <Button size="sm" onClick={findContradictions} disabled={finding || !testimony.length}>{finding ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Find contradictions{selected.size ? ` (${selected.size})` : ""}</Button>
-        </AiButtonHint>
-      </div>
+      </TabHeader>
 
       {(noKey || (!aiConfigured && !overview.loading)) && <div className="shrink-0 px-4 pt-3"><NoKeyCallout feature="Contradiction finding and fact matrices" compact /></div>}
 

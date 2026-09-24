@@ -1,20 +1,16 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Briefcase, ChevronDown, ChevronsDown, ChevronsUp, Download, FileImage, FileText, History, Keyboard, Loader2, MessageSquare, Minus, Play, Plus, Presentation, Printer, Save, Sparkles, StickyNote } from "lucide-react";
+import { AlertTriangle, ChevronsDown, ChevronsUp, FileImage, FileText, History, Keyboard, MessageSquare, Minus, Play, Plus, Presentation, Printer, Sparkles, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Matter, OfficeComment } from "@/lib/types/domain";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/ui/misc";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { TopbarSlot } from "@/components/shell/app-shell";
 import { OfficeAgentPanel, saveStateLabel, useOfficeDoc, type ApplyResult, type EditProposal, type OfficeScope } from "@/modules/office/shared";
+import { OfficeChrome, OfficeErrorState, OfficeStatusBar, StatusItem, ToolbarSkeleton, useNarrowViewport, type ChromeMenuEntry } from "@/modules/office/shared/office-chrome";
 import "./slides.css";
 import { SlideCanvas } from "./canvas";
 import { downloadOutline, downloadPptx, safeFilename, slideNodeToPng, downloadBlob } from "./client-utils";
@@ -52,6 +48,7 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
   const { doc, loading, error } = office;
   const officeRef = React.useRef(office);
   officeRef.current = office;
+  const narrow = useNarrowViewport();
   const store = useSlidesStore;
   const deck = useSlidesStore((s) => s.deck);
   const loaded = useSlidesStore((s) => s.loaded);
@@ -65,6 +62,7 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
   const [commentsOpen, setCommentsOpen] = React.useState(false);
   const [notesOpen, setNotesOpen] = React.useState(true);
   const [versionsOpen, setVersionsOpen] = React.useState(false);
+  const [versionCount, setVersionCount] = React.useState<number | undefined>(undefined);
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
   const [imageOpen, setImageOpen] = React.useState(false);
   const [dataEl, setDataEl] = React.useState<DeckElement | null>(null);
@@ -94,6 +92,17 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
   React.useEffect(() => () => { useSlidesStore.setState({ loaded: false }); }, []);
   const docTitle = doc?.title;
   React.useEffect(() => { if (docTitle && document.activeElement?.getAttribute("data-title-input") !== "1") setTitle(docTitle); }, [docTitle]);
+  // Narrow viewports start with the assistant closed and notes collapsed.
+  const autoCollapsed = React.useRef(false);
+  React.useEffect(() => { if (narrow && !autoCollapsed.current) { autoCollapsed.current = true; setAgentOpen(false); setNotesOpen(false); } }, [narrow]);
+  // "Versions (n)" in the assistant header; refreshed after each save.
+  const contentVersion = doc?.contentVersion;
+  React.useEffect(() => {
+    if (!ready || !doc?.id) return;
+    let alive = true;
+    officeRef.current.versions.list().then((v) => { if (alive) setVersionCount(v.length); }).catch(() => {});
+    return () => { alive = false; };
+  }, [ready, doc?.id, contentVersion]);
 
   // ---- autosave on every committed/transient change --------------------------------
   const lastTick = React.useRef(0);
@@ -202,64 +211,54 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
   const overflowCount = slide ? slide.elements.filter((e) => e.type === "text" && e.text?.trim() && estimateTextFit(e, deck.theme).overflow).length : 0;
   const zoomPct = zoom === "fit" ? null : Math.round(zoom * 100);
   const setZoomStep = (dir: 1 | -1) => { const cur = zoom === "fit" ? 0.75 : zoom; const idx = ZOOMS.findIndex((z) => z >= cur - 0.001); const next = ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, (idx < 0 ? 3 : idx) + dir))]; store.getState().setZoom(next); };
+  const openComments = comments.filter((c) => !c.resolved).length;
 
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center p-6">
-        <TopbarSlot><Link href="/library" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to Library</Link></TopbarSlot>
-        <EmptyState icon={AlertTriangle} title={error} description="The deck may have been deleted, or the link is wrong." action={<Button asChild variant="outline"><Link href="/office?kind=slides">Open decks</Link></Button>} />
-      </div>
-    );
-  }
+  const downloadEntries: ChromeMenuEntry[] = [
+    { label: "PowerPoint (.pptx)", icon: Presentation, onSelect: () => void doExport("pptx") },
+    { label: "PDF (print, one slide per page)", icon: Printer, shortcut: "⌘P", onSelect: () => void doExport("pdf") },
+    { label: "PNG of current slide", icon: FileImage, onSelect: () => void doExport("png") },
+    "separator",
+    { label: "Outline with notes (.txt)", icon: FileText, onSelect: () => void doExport("txt") },
+  ];
+  const moreEntries: ChromeMenuEntry[] = [
+    { label: "Version history", icon: History, onSelect: () => setVersionsOpen(true) },
+    { label: "Keyboard shortcuts", icon: Keyboard, shortcut: "?", onSelect: () => setShortcutsOpen(true) },
+  ];
+
+  if (error) return <OfficeErrorState kind="slides" error={error} description="The deck may have been deleted, or the link is wrong." />;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TopbarSlot>
-        <Tip label="Back to Library" shortcut="G L"><Link href="/library" className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" /> Library</Link></Tip>
-        <Badge variant="info" className="shrink-0 gap-1 font-mono"><Presentation className="size-3" /> PPTX</Badge>
-        {matter ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><button className="hidden max-w-[180px] shrink-0 items-center gap-1 truncate rounded-md border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground lg:flex cursor-pointer"><Briefcase className="size-3" /><span className="truncate">{matter.shortName}</span><ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">
-              <DropdownMenuLabel>Matter</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={matter.id} onValueChange={(v) => void office.save({ matterId: v })}>{matters.map((mm) => <DropdownMenuRadioItem key={mm.id} value={mm.id}><span className="truncate">{mm.shortName} <span className="text-muted-foreground">· {mm.client}</span></span></DropdownMenuRadioItem>)}</DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : ready ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><button className="hidden shrink-0 items-center gap-1 rounded-md border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground lg:flex cursor-pointer"><Briefcase className="size-3" /> Link matter</button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">{matters.map((mm) => <DropdownMenuItem key={mm.id} onClick={() => void office.save({ matterId: mm.id })}><span className="truncate">{mm.shortName} <span className="text-muted-foreground">· {mm.client}</span></span></DropdownMenuItem>)}</DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-        <input data-title-input="1" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => void commitTitle()} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} aria-label="Deck title" placeholder="Untitled deck" className="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold outline-none transition-colors hover:border-border focus:border-ring focus:bg-background" />
-        <span className={cn("hidden shrink-0 text-[11px] xl:inline", office.saveState === "error" ? "text-destructive" : office.saveState === "dirty" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")}>{saveLabel}</span>
-        <div className="flex shrink-0 items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5" disabled={!ready}>{exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem onClick={() => void doExport("pptx")}><Presentation /> PowerPoint (.pptx)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doExport("pdf")}><Printer /> PDF (print, one slide per page) <span className="ml-auto text-[10px] text-muted-foreground">⌘P</span></DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doExport("png")}><FileImage /> PNG of current slide</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => void doExport("txt")}><FileText /> Outline with notes (.txt)</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Tip label="Save" shortcut="⌘S"><Button variant="ghost" size="sm" onClick={() => void saveNow()} disabled={office.saveState === "saving" || !ready}><Save className="size-4" /> Save</Button></Tip>
-          <Tip label="Version history"><Button variant="ghost" size="sm" onClick={() => setVersionsOpen(true)} disabled={!ready}><History className="size-4" /> Versions</Button></Tip>
-          <Tip label="Comments" shortcut="⌘⇧M"><Button variant={commentsOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setCommentsOpen((v) => !v)} aria-pressed={commentsOpen} aria-label="Toggle comments" className="relative"><MessageSquare className="size-4" />{comments.filter((c) => !c.resolved).length > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-[9px] leading-3 text-primary-foreground tabular">{comments.filter((c) => !c.resolved).length}</span>}</Button></Tip>
-          <Tip label="Present from current slide" shortcut="⌘⇧P"><Button variant="default" size="sm" onClick={() => setPresenting(Math.max(0, slideIndex))} disabled={!ready || deck.slides.length === 0}><Play className="size-4" /> Present</Button></Tip>
-          <Tip label="Deck assistant" shortcut="⌘/"><Button variant={agentOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setAgentOpen((v) => !v)} aria-pressed={agentOpen} aria-label="Toggle assistant"><Sparkles className={cn("size-4", agentOpen && "text-primary")} /></Button></Tip>
-        </div>
-      </TopbarSlot>
+      <OfficeChrome
+        kind="slides"
+        title={title}
+        onTitleChange={setTitle}
+        onTitleCommit={commitTitle}
+        matter={matter}
+        matters={matters}
+        onMatterChange={(v) => void office.save({ matterId: v })}
+        saveState={office.saveState}
+        lastSavedAt={office.lastSavedAt}
+        onSave={() => void saveNow()}
+        ready={ready}
+        download={downloadEntries}
+        exporting={Boolean(exporting)}
+        more={moreEntries}
+        panels={[
+          { id: "comments", label: "Comments", icon: MessageSquare, shortcut: "⌘⇧M", active: commentsOpen, onToggle: () => setCommentsOpen((v) => !v), count: openComments },
+          { id: "assistant", label: "Deck assistant", icon: Sparkles, shortcut: "⌘/", active: agentOpen, onToggle: () => setAgentOpen((v) => !v) },
+        ]}
+        primary={<Tip label="Present from current slide" shortcut="⌘⇧P"><Button variant="outline" size="sm" onClick={() => setPresenting(Math.max(0, slideIndex))} disabled={!ready || deck.slides.length === 0} className="gap-1.5"><Play className="size-3.5" /> <span className="hidden md:inline">Present</span></Button></Tip>}
+      />
 
-      {ready ? <SlidesToolbar textEditorRef={textEditorRef} onInsertImage={() => setImageOpen(true)} onEditData={(el) => setDataEl(el)} /> : <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">{[24, 24, 80, 90, 110, 24, 24, 24, 24].map((w, i) => <Skeleton key={i} className="h-6" style={{ width: w }} />)}</div>}
+      {ready ? <SlidesToolbar textEditorRef={textEditorRef} onInsertImage={() => setImageOpen(true)} onEditData={(el) => setDataEl(el)} /> : <ToolbarSkeleton />}
 
       <div className="flex min-h-0 flex-1">
         {ready ? <ThumbnailRail commentCounts={commentCounts} /> : (
-          <div className="flex w-[232px] shrink-0 flex-col gap-2 border-r p-3">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="flex gap-2"><Skeleton className="h-4 w-5" /><Skeleton className="h-[95px] w-[168px]" /></div>)}</div>
+          <div className="flex w-[220px] shrink-0 flex-col gap-2 border-r p-3">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="flex gap-2"><Skeleton className="h-4 w-5" /><Skeleton className="h-[90px] w-[160px]" /></div>)}</div>
         )}
         <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
-          <ResizablePanel minSize={480}>
+          <ResizablePanel minSize={400}>
             <div className="flex h-full min-h-0">
               <div className="flex min-w-0 flex-1 flex-col">
                 {ready ? (
@@ -267,13 +266,13 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
                 ) : (
                   <div className="sl-viewport flex flex-1 items-center justify-center"><Skeleton className="aspect-video w-[70%] rounded" /></div>
                 )}
-                <div className={cn("sl-notes shrink-0 border-t bg-background transition-[height]", notesOpen ? "h-[132px]" : "h-8")}>
-                  <button onClick={() => setNotesOpen((v) => !v)} className="flex h-8 w-full items-center gap-2 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer">
+                <div className={cn("sl-notes shrink-0 border-t bg-background transition-[height]", notesOpen ? "h-[128px]" : "h-8")}>
+                  <button onClick={() => setNotesOpen((v) => !v)} className="flex h-8 w-full items-center gap-2 px-3 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={notesOpen}>
                     <StickyNote className="size-3.5" /> Speaker notes{slide?.notes.trim() ? <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] normal-case tracking-normal">{slide.notes.trim().split(/\s+/).length} words</span> : null}
                     <span className="ml-auto">{notesOpen ? <ChevronsDown className="size-3.5" /> : <ChevronsUp className="size-3.5" />}</span>
                   </button>
                   {notesOpen && slide && (
-                    <textarea value={slide.notes} onFocus={() => store.getState().pushHistory()} onChange={(e) => store.getState().setNotes(slide.id, e.target.value)} placeholder="Notes for the presenter: what to emphasize, which cite to read aloud, the transition to the next slide…" className="h-[100px] w-full resize-none bg-transparent px-3 pb-2 text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground/70 scrollbar-thin" spellCheck />
+                    <textarea value={slide.notes} onFocus={() => store.getState().pushHistory()} onChange={(e) => store.getState().setNotes(slide.id, e.target.value)} placeholder="Notes for the presenter: what to emphasize, which cite to read aloud, the transition to the next slide…" className="h-[96px] w-full resize-none bg-transparent px-3 pb-2 text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground/70 scrollbar-thin" spellCheck />
                   )}
                 </div>
               </div>
@@ -285,28 +284,32 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
           {agentOpen && (
             <>
               <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={400} minSize={320} maxSize={640}>
-                <OfficeAgentPanel endpoint="/api/office/slides/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled deck"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => store.getState().undo()} onLocate={onLocate} suggestions={SUGGESTIONS} onApplied={onApplied} title="Deck assistant" extraContext={() => ({ currentSlide: slideIndex + 1, slideCount: deck.slides.length, selectedElementIds: store.getState().selectedIds, zoom })} />
+              <ResizablePanel defaultSize={narrow ? 340 : 400} minSize={300} maxSize={640}>
+                <OfficeAgentPanel endpoint="/api/office/slides/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled deck"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => store.getState().undo()} onLocate={onLocate} suggestions={SUGGESTIONS} onApplied={onApplied} title="Deck assistant" extraContext={() => ({ currentSlide: slideIndex + 1, slideCount: deck.slides.length, selectedElementIds: store.getState().selectedIds, zoom })} onVersions={() => setVersionsOpen(true)} versionCount={versionCount} />
               </ResizablePanel>
             </>
           )}
         </ResizablePanelGroup>
       </div>
 
-      <div className="flex h-7 shrink-0 items-center gap-3 border-t bg-background px-3 text-[11px] text-muted-foreground">
-        <span className="tabular">{slide ? `Slide ${slideIndex + 1} of ${deck.slides.length}` : "No slide"}</span>
-        {slide && <span>{LAYOUT_LABEL[slide.layout]}{slide.hidden ? " · hidden" : ""} · {slide.elements.length} element{slide.elements.length === 1 ? "" : "s"}{selectedIds.length ? ` · ${selectedIds.length} selected` : ""}</span>}
-        {overflowCount > 0 && <span className="flex items-center gap-1 text-warning-foreground dark:text-warning"><AlertTriangle className="size-3" /> {overflowCount} text box{overflowCount === 1 ? "" : "es"} overflow</span>}
-        <span className="hidden md:inline">{deck.theme.name}</span>
-        <div className="flex-1" />
-        <span className="hidden lg:inline">{saveLabel}</span>
-        <Tip label="Keyboard shortcuts" shortcut="?"><button onClick={() => setShortcutsOpen(true)} className="rounded p-0.5 hover:text-foreground cursor-pointer" aria-label="Keyboard shortcuts"><Keyboard className="size-3.5" /></button></Tip>
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => setZoomStep(-1)} className="rounded p-0.5 hover:text-foreground cursor-pointer" aria-label="Zoom out"><Minus className="size-3.5" /></button>
-          <button onClick={() => store.getState().setZoom("fit")} className={cn("min-w-[44px] rounded px-1 text-center tabular hover:text-foreground cursor-pointer", zoom === "fit" && "text-foreground")}>{zoomPct ? `${zoomPct}%` : "Fit"}</button>
-          <button onClick={() => setZoomStep(1)} className="rounded p-0.5 hover:text-foreground cursor-pointer" aria-label="Zoom in"><Plus className="size-3.5" /></button>
-        </div>
-      </div>
+      <OfficeStatusBar
+        right={
+          <>
+            <StatusItem hide="lg" title="Save state">{saveLabel}</StatusItem>
+            <StatusItem onClick={() => setShortcutsOpen(true)} title="Keyboard shortcuts (?)"><Keyboard className="size-3.5" /></StatusItem>
+            <span className="flex h-7 items-center gap-0.5 px-1.5">
+              <button onClick={() => setZoomStep(-1)} className="rounded p-0.5 hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Zoom out"><Minus className="size-3.5" /></button>
+              <button onClick={() => store.getState().setZoom("fit")} className={cn("min-w-[44px] rounded px-1 text-center tabular hover:text-foreground cursor-pointer", zoom === "fit" && "text-foreground")} title="Fit to window">{zoomPct ? `${zoomPct}%` : "Fit"}</button>
+              <button onClick={() => setZoomStep(1)} className="rounded p-0.5 hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Zoom in"><Plus className="size-3.5" /></button>
+            </span>
+          </>
+        }
+      >
+        <StatusItem><span className="tabular">{slide ? `Slide ${slideIndex + 1} of ${deck.slides.length}` : "No slide"}</span></StatusItem>
+        {slide && <StatusItem hide="md">{LAYOUT_LABEL[slide.layout]}{slide.hidden ? " · hidden" : ""} · {slide.elements.length} element{slide.elements.length === 1 ? "" : "s"}{selectedIds.length ? ` · ${selectedIds.length} selected` : ""}</StatusItem>}
+        {overflowCount > 0 && <StatusItem className="text-warning-foreground dark:text-warning" title="Text boxes whose content overflows"><AlertTriangle className="size-3" /> {overflowCount} text box{overflowCount === 1 ? "" : "es"} overflow</StatusItem>}
+        <StatusItem hide="lg" title="Theme">{deck.theme.name}</StatusItem>
+      </OfficeStatusBar>
 
       <ImageDialog open={imageOpen} onOpenChange={setImageOpen} onInsert={onInsertImage} />
       <ChartSheet element={dataEl?.type === "chart" ? dataEl : null} open={dataEl?.type === "chart"} onOpenChange={(o) => { if (!o) setDataEl(null); }} onSave={(chart) => { if (dataEl) store.getState().updateElement(dataEl.id, { chart }); }} />

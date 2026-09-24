@@ -73,7 +73,7 @@ export function Toolbar() {
         <div className="flex-1" />
 
         {/* Search */}
-        <div className="relative w-full sm:w-72">
+        <div className="relative w-full sm:w-52 lg:w-64 xl:w-72">
           {searchLoading ? <Loader2 className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" /> : <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />}
           <Input ref={searchInputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); (e.target as HTMLInputElement).blur(); } }} placeholder={folderId ? "Search this folder and below…" : "Search the library…"} className="h-8 pl-8 pr-14 text-sm" aria-label="Search library" />
           <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
@@ -84,7 +84,7 @@ export function Toolbar() {
         {/* Filters + sort in one popover */}
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant={nFilters ? "secondary" : "outline"} size="sm" className="gap-1.5" aria-label="Filter and sort"><Filter className="size-3.5" /><span className="hidden md:inline">Filter</span>{nFilters > 0 && <Badge variant="default" className="ml-0.5 h-4 min-w-4 justify-center rounded-full px-1 text-[10px]">{nFilters}</Badge>}</Button>
+            <Button variant={nFilters ? "secondary" : "outline"} size="sm" className="gap-1.5" aria-label="Filter and sort"><Filter className="size-3.5" /><span className="hidden xl:inline">Filter</span>{nFilters > 0 && <Badge variant="default" className="ml-0.5 h-4 min-w-4 justify-center rounded-full px-1 text-[10px]">{nFilters}</Badge>}</Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-[360px] space-y-3 p-3">
             <div className="flex items-center justify-between"><div className="text-[12px] font-semibold">Sort</div><span className="text-[11px] text-muted-foreground">{SORT_LABEL[sort]} · {dir === "asc" ? "ascending" : "descending"}</span></div>
@@ -118,9 +118,9 @@ export function Toolbar() {
 
         {/* Upload + New */}
         <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void actions.upload(e.target.files); e.target.value = ""; }} />
-        <Tip label="Upload files into this folder" shortcut="U"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} aria-label="Upload"><Upload className="size-3.5" /> <span className="hidden lg:inline">Upload</span></Button></Tip>
+        <Tip label="Upload files into this folder" shortcut="U"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} aria-label="Upload"><Upload className="size-3.5" /> <span className="hidden xl:inline">Upload</span></Button></Tip>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button size="sm" className="gap-1"><FilePlus2 className="size-3.5" /> New <ChevronDown className="size-3.5 opacity-70" /></Button></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild><Button size="sm" className="gap-1" aria-label="New item"><FilePlus2 className="size-3.5" /> <span className="hidden lg:inline">New</span> <ChevronDown className="size-3.5 opacity-70" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>In {list?.folder?.name ?? "Library"}</DropdownMenuLabel>
             <DropdownMenuItem onClick={() => openDialog({ kind: "folder", parentId: folderId })}><FolderPlus /> Folder <span className="ml-auto text-[10px] text-muted-foreground">F</span></DropdownMenuItem>

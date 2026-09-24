@@ -160,7 +160,7 @@ function Topbar() {
                 {matters.map((m) => <SelectItem key={m.id} value={m.id}>{m.shortName} <span className="text-muted-foreground">· {m.caption ?? m.practiceArea}</span></SelectItem>)}
               </SelectContent>
             </Select>
-            <p className="mt-1 text-[11px] text-muted-foreground">Filters the spine, matters, news and the assistant's scope.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Filters the spine, matters, news and the assistant&apos;s scope.</p>
           </div>
           <div className="flex items-center justify-between border-t pt-2">
             <span className="text-[11px] text-muted-foreground">Data</span>

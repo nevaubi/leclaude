@@ -35,7 +35,7 @@ export function NodePalette({ onAdd, searchRef, className, defaultOpen = [] }: {
           <Input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search steps…  ( / )" className="h-8 pl-7 text-xs" aria-label="Search node types" onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }} />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin p-1.5" role="tree" aria-label="Step types">
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin p-1.5" aria-label="Step types">
         {groups.length === 0 && <div className="px-1 py-6 text-center text-xs text-muted-foreground">No steps match “{q}”.</div>}
         {groups.map((g) => (
           <PaletteGroup key={g.category} category={g.category} items={g.items} total={g.total} open={!!term || open.has(g.category)} onToggle={() => toggle(g.category)} onAdd={onAdd} hasTrigger={hasTrigger} />
@@ -50,8 +50,8 @@ function PaletteGroup({ category, items, total, open, onToggle, onAdd, hasTrigge
   const meta = CATEGORY_META[category];
   const tone = toneFor(`${category}.x`);
   return (
-    <div className="mb-0.5" role="treeitem" aria-expanded={open}>
-      <button type="button" onClick={onToggle} className="flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent/60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50" aria-label={`${meta.plural} (${items.length})`}>
+    <div className="mb-0.5">
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent/60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50" aria-label={`${meta.plural} (${items.length})`}>
         <ChevronRight className={cn("size-3.5 text-muted-foreground transition-transform", open && "rotate-90")} />
         <span className={cn("size-2 rounded-full", tone.bg.replace("/10", "").replace("/12", "").replace("/18", ""), tone.text.includes("primary") ? "bg-primary" : tone.text.includes("success") ? "bg-success" : tone.text.includes("info") ? "bg-info" : tone.text.includes("warning") ? "bg-warning" : "bg-chart-5")} aria-hidden />
         <span className="flex-1 text-[12px] font-medium">{meta.plural}</span>

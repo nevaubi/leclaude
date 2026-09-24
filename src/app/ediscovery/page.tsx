@@ -24,10 +24,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
   const linkedDoc = sp.doc ? d.edocs.get(sp.doc) ?? d.edocs.findOne((x) => x.bates.toLowerCase() === sp.doc!.toLowerCase()) : null;
   const requestedMatter = sp.matter ?? linkedDoc?.matterId;
   const matterId = requestedMatter && matters.some((m) => m.id === requestedMatter) ? requestedMatter : matters.find((m) => m.id === MATTERS.afff)?.id ?? matters[0]?.id ?? MATTERS.afff;
-  // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module, and
-  // `?view=privilege` (privilege-log tasks) opens the Codes & privilege tab on the log section.
+  // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module,
+  // `?view=privilege` (privilege-log tasks) opens the Codes & privilege tab on the log section and
+  // `?view=review` (Settings → Review queue) opens it on the "Needs review" queue.
   const requested = sp.tab ?? sp.view;
-  const codesSection = requested === "privilege" || requested === "production" || requested === "rules" ? requested : undefined;
+  const isCodesSection = (v: string | undefined): v is "privilege" | "production" | "rules" | "review" => v === "privilege" || v === "production" || v === "rules" || v === "review";
+  // `?view=` names the section when it is a Codes & privilege section (with or without `?tab=codes`).
+  const codesSection = isCodesSection(sp.view) ? sp.view : isCodesSection(requested) ? requested : undefined;
   const tab = (codesSection ? "codes" : REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
   const reviewers = d.people
     .find((p) => p.organization === "Seeger Weiss LLP" && (p.role === "attorney" || p.role === "paralegal" || p.role === "staff"))

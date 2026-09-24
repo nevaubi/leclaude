@@ -99,7 +99,10 @@ export function myTasksDue(input: SpineInput): { overdue: Task[]; dueToday: Task
 export function spineSummary(s: Pick<TodaySpine, "deadlines" | "todayEvents" | "overdueTasks" | "dueTodayTasks">): string {
   const parts: string[] = [];
   const next = s.deadlines[0];
-  if (next) parts.push(next.days === 0 ? `${next.title} is due today` : next.days === 1 ? `${next.title} is due tomorrow` : `next deadline in ${next.days} days`);
+  if (next) {
+    const verb = next.kind === "hearing" ? "is" : "is due";
+    parts.push(next.days === 0 ? `${next.title} ${verb} today` : next.days === 1 ? `${next.title} ${verb} tomorrow` : `next deadline in ${next.days} days`);
+  }
   parts.push(s.todayEvents.length ? `${s.todayEvents.length} event${s.todayEvents.length === 1 ? "" : "s"} today` : "no events today");
   if (s.overdueTasks.length) parts.push(`${s.overdueTasks.length} overdue task${s.overdueTasks.length === 1 ? "" : "s"}`);
   else if (s.dueTodayTasks.length) parts.push(`${s.dueTodayTasks.length} task${s.dueTodayTasks.length === 1 ? "" : "s"} due today`);

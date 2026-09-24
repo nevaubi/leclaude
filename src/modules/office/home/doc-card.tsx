@@ -2,10 +2,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, Download, ExternalLink, FolderOpen, History, Library, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Briefcase, Copy, Download, ExternalLink, FolderOpen, History, Library, MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatBytes } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { PersonAvatar } from "@/components/ui/avatar";
@@ -33,7 +32,6 @@ export async function duplicateOfficeDoc(doc: OfficeDocSummary): Promise<OfficeD
   return ((await res.json()) as { doc: OfficeDocument }).doc;
 }
 
-/** Download the native file for a document through its export route (.docx / .xlsx / .pptx / .pdf). */
 /** Download the native file for a document through its export route (.docx / .xlsx / .pptx / .pdf). */
 export async function downloadOfficeDoc(doc: OfficeDocSummary) {
   const routes: Record<OfficeDocSummary["kind"], { url: string; body: Record<string, unknown> }> = {
@@ -64,7 +62,7 @@ function useRename(doc: OfficeDocSummary, actions: DocActions) {
       onBlur={commit}
       onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") void commit(); if (e.key === "Escape") { setRenaming(false); setTitle(doc.title); } }}
       onClick={(e) => e.stopPropagation()}
-      className="w-full rounded border border-ring bg-background px-1 py-0.5 text-sm font-medium outline-none ring-2 ring-ring/30"
+      className="w-full rounded border border-ring bg-background px-1 py-0.5 text-[13px] font-medium outline-none ring-2 ring-ring/30"
       aria-label="Rename document"
     />
   ) : null;
@@ -78,7 +76,7 @@ function MenuItems({ doc, actions, onRename, Item, Sep }: { doc: OfficeDocSummar
       <Item onClick={() => router.push(docHref(doc))}><ExternalLink /> Open</Item>
       <Item onClick={() => window.open(docHref(doc), "_blank")}><ExternalLink /> Open in new tab</Item>
       <Sep />
-      <Item onClick={onRename}><Pencil /> Rename</Item>
+      <Item onClick={onRename}><Pencil /> Rename <kbd className="ml-auto">F2</kbd></Item>
       <Item onClick={() => void actions.duplicate(doc)}><Copy /> Duplicate</Item>
       <Item onClick={() => downloadOfficeDoc(doc).catch((e: Error) => toast.error("Download failed", { description: e.message }))}><Download /> Download .{KIND_META[doc.kind].ext}</Item>
       {doc.libraryItemId && <Item onClick={() => router.push(`/library?item=${doc.libraryItemId}`)}><Library /> Show in Library</Item>}
@@ -86,6 +84,11 @@ function MenuItems({ doc, actions, onRename, Item, Sep }: { doc: OfficeDocSummar
       <Item destructive onClick={() => void actions.remove(doc)}><Trash2 /> Delete</Item>
     </>
   );
+}
+
+/** Matter chip: quiet outline pill with the briefcase glyph. */
+export function MatterChip({ name, className }: { name: string; className?: string }) {
+  return <span className={cn("inline-flex h-5 max-w-full items-center gap-1 truncate rounded-full border px-2 text-[11px] text-muted-foreground", className)} title={name}><Briefcase className="size-3 shrink-0" /><span className="truncate">{name}</span></span>;
 }
 
 export function DocCard({ doc, actions }: { doc: OfficeDocSummary; actions: DocActions }) {
@@ -100,28 +103,28 @@ export function DocCard({ doc, actions }: { doc: OfficeDocSummary; actions: DocA
           tabIndex={0}
           onClick={() => { if (!renaming) router.push(docHref(doc)); }}
           onKeyDown={(e) => { if (e.key === "Enter" && !renaming) router.push(docHref(doc)); if (e.key === "F2") { e.preventDefault(); setRenaming(true); } }}
-          className="group flex h-[168px] cursor-pointer flex-col rounded-xl border bg-card p-3.5 shadow-xs outline-none transition-all hover:border-foreground/20 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring/60"
+          className="group flex h-[152px] cursor-pointer flex-col rounded-lg border bg-card p-3 outline-none transition-colors hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring/60"
         >
           <div className="flex items-start gap-2.5">
-            <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", KIND_BG[doc.kind], KIND_COLOR[doc.kind])}><Icon className="size-4" /></span>
+            <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md", KIND_BG[doc.kind], KIND_COLOR[doc.kind])}><Icon className="size-4" /></span>
             <div className="min-w-0 flex-1">
-              {input ?? <div className="line-clamp-2 text-sm font-medium leading-snug" title={doc.title}>{doc.title}</div>}
+              {input ?? <div className="line-clamp-2 text-[13px] font-medium leading-snug" title={doc.title}>{doc.title}</div>}
               <div className="mt-0.5 text-[11px] text-muted-foreground">{KIND_META[doc.kind].label}{doc.templateId ? " · from template" : ""}{doc.folderName ? ` · ${doc.folderName}` : ""}</div>
             </div>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100" onClick={(e) => e.stopPropagation()} aria-label="Actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" onClick={(e) => e.stopPropagation()} aria-label="Actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
                 <MenuItems doc={doc} actions={actions} onRename={() => setRenaming(true)} Item={DropdownMenuItem} Sep={DropdownMenuSeparator} />
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
-            {doc.matterShortName && <Badge variant="outline" className="max-w-[160px] truncate px-1.5 py-0 text-[10px]">{doc.matterShortName}</Badge>}
-            {(doc.tags ?? []).slice(0, 2).map((t) => <Badge key={t} variant="muted" className="px-1.5 py-0 text-[10px]">{t}</Badge>)}
+            {doc.matterShortName && <MatterChip name={doc.matterShortName} className="max-w-[170px]" />}
+            {(doc.tags ?? []).slice(0, 2).map((t) => <span key={t} className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] text-muted-foreground">{t}</span>)}
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1 tabular" title={`Content version ${doc.contentVersion}`}><History className="size-3" /> v{doc.contentVersion} · {doc.versionCount} saved</span>
+            <span className="inline-flex items-center gap-1 tabular" title={`Content version ${doc.contentVersion} · ${doc.versionCount} saved`}><History className="size-3" /> v{doc.contentVersion}</span>
             {doc.commentCount > 0 && <span className="inline-flex items-center gap-1 tabular"><MessageSquare className="size-3" /> {doc.commentCount}</span>}
             <span className="flex-1" />
             {doc.ownerName && <PersonAvatar name={doc.ownerName} size="xs" />}
@@ -129,10 +132,27 @@ export function DocCard({ doc, actions }: { doc: OfficeDocSummary; actions: DocA
           </div>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
+      <ContextMenuContent className="w-52">
         <MenuItems doc={doc} actions={actions} onRename={() => setRenaming(true)} Item={ContextMenuItem as unknown as typeof DropdownMenuItem} Sep={ContextMenuSeparator as unknown as typeof DropdownMenuSeparator} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/** Column template shared by the header row and the rows so the list lines up without a fixed min width. */
+export const DOC_ROW_GRID = "grid items-center gap-3 grid-cols-[minmax(0,1fr)_minmax(120px,180px)_96px_32px] lg:grid-cols-[minmax(0,1fr)_minmax(140px,200px)_minmax(120px,160px)_96px_72px_72px_32px]";
+
+export function DocRowHeader() {
+  return (
+    <div className={cn(DOC_ROW_GRID, "h-8 border-b bg-muted/40 px-3 text-[11px] font-medium text-muted-foreground")} role="row">
+      <span>Title</span>
+      <span>Matter</span>
+      <span className="hidden lg:block">Owner</span>
+      <span>Updated</span>
+      <span className="hidden lg:block">Versions</span>
+      <span className="hidden text-right lg:block">Size</span>
+      <span />
+    </div>
   );
 }
 
@@ -144,29 +164,33 @@ export function DocRow({ doc, actions }: { doc: OfficeDocSummary; actions: DocAc
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          role="link"
+          role="row"
           tabIndex={0}
           onClick={() => { if (!renaming) router.push(docHref(doc)); }}
           onKeyDown={(e) => { if (e.key === "Enter" && !renaming) router.push(docHref(doc)); if (e.key === "F2") { e.preventDefault(); setRenaming(true); } }}
-          className="group flex h-11 cursor-pointer items-center gap-3 border-b px-3 text-sm outline-none transition-colors hover:bg-accent/40 focus-visible:bg-accent/40"
+          className={cn(DOC_ROW_GRID, "group h-11 cursor-pointer border-b px-3 text-[13px] outline-none transition-colors last:border-b-0 hover:bg-accent/40 focus-visible:bg-accent/40")}
         >
-          <Icon className={cn("size-4 shrink-0", KIND_COLOR[doc.kind])} />
-          <div className="min-w-[240px] flex-1 truncate font-medium">{input ?? doc.title}</div>
-          <div className="w-[100px] text-xs text-muted-foreground">{KIND_META[doc.kind].label}</div>
-          <div className="w-[150px] truncate text-xs">{doc.matterShortName ?? <span className="text-muted-foreground">—</span>}</div>
-          <div className="flex w-[150px] items-center gap-1.5 truncate text-xs">{doc.ownerName ? <><PersonAvatar name={doc.ownerName} size="xs" /><span className="truncate">{doc.ownerName}</span></> : "—"}</div>
-          <div className="w-[110px] text-xs text-muted-foreground"><RelativeTime value={doc.updatedAt} /></div>
-          <div className="w-[90px] text-xs tabular text-muted-foreground">v{doc.contentVersion} · {doc.versionCount}</div>
-          <div className="w-[70px] text-right text-xs tabular text-muted-foreground">{doc.size ? formatBytes(doc.size) : "—"}</div>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md", KIND_BG[doc.kind], KIND_COLOR[doc.kind])} title={KIND_META[doc.kind].label}><Icon className="size-3.5" /></span>
+            <div className="min-w-0 flex-1">
+              {input ?? <div className="truncate font-medium" title={doc.title}>{doc.title}</div>}
+              <div className="truncate text-[11px] text-muted-foreground">{KIND_META[doc.kind].label}{doc.folderName ? ` · ${doc.folderName}` : ""}{doc.commentCount > 0 ? ` · ${doc.commentCount} comment${doc.commentCount === 1 ? "" : "s"}` : ""}</div>
+            </div>
+          </div>
+          <div className="min-w-0">{doc.matterShortName ? <MatterChip name={doc.matterShortName} /> : <span className="text-muted-foreground">—</span>}</div>
+          <div className="hidden min-w-0 items-center gap-1.5 truncate text-[12px] lg:flex">{doc.ownerName ? <><PersonAvatar name={doc.ownerName} size="xs" /><span className="truncate">{doc.ownerName}</span></> : <span className="text-muted-foreground">—</span>}</div>
+          <div className="text-[12px] text-muted-foreground"><RelativeTime value={doc.updatedAt} /></div>
+          <div className="hidden text-[12px] tabular text-muted-foreground lg:block" title={`Content version ${doc.contentVersion} · ${doc.versionCount} saved`}>v{doc.contentVersion} · {doc.versionCount}</div>
+          <div className="hidden text-right text-[12px] tabular text-muted-foreground lg:block">{doc.size ? formatBytes(doc.size) : "—"}</div>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100" onClick={(e) => e.stopPropagation()} aria-label="Actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-xs" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" onClick={(e) => e.stopPropagation()} aria-label="Actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
               <MenuItems doc={doc} actions={actions} onRename={() => setRenaming(true)} Item={DropdownMenuItem} Sep={DropdownMenuSeparator} />
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
+      <ContextMenuContent className="w-52">
         <MenuItems doc={doc} actions={actions} onRename={() => setRenaming(true)} Item={ContextMenuItem as unknown as typeof DropdownMenuItem} Sep={ContextMenuSeparator as unknown as typeof DropdownMenuSeparator} />
       </ContextMenuContent>
     </ContextMenu>

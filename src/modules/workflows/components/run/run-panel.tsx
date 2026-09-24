@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, BellRing, Calendar, Check, ChevronRight, Coins, ExternalLink, FileText, KeyRound, Library, ListTodo, Loader2, Paperclip, RotateCcw, Square, Stamp, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { ArrowUpRight, BellRing, Calendar, Check, ChevronRight, Coins, ExternalLink, FileText, KeyRound, Library, ListTodo, Loader2, Paperclip, RotateCcw, ShieldAlert, SkipForward, Square, Stamp, ThumbsDown, ThumbsUp, Unlock, X } from "lucide-react";
 import { toast } from "sonner";
 import type { WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ import type { RunArtifact, WorkflowRunRecord } from "../../types";
 import { formatDuration, formatTokens, formatUsd, InlineAlert, NodeTypeIcon, RunStatusBadge, SectionLabel, StepStatusIcon, stepDuration, useNow } from "../shared";
 import { CopyButton, OutputViewer } from "./step-output";
 import { artifactProvenance, stepDotTone, stepSummary } from "./timeline-helpers";
+import { approvalVerbs, isTrustGate } from "./approval-helpers";
 
 export interface RunPanelProps {
   runId: string;
@@ -39,6 +40,7 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
   const { run, connected, error, noApiKey, progress, loading, resting, reconnect } = useRunStream(runId, initialRun);
   const now = useNow(Boolean(run && (run.status === "running" || run.status === "queued")));
   const [busy, setBusy] = React.useState<string | null>(null);
+  const pendingApprovalRef = React.useRef<Pick<Approval, "kind" | "reasons"> | null>(null);
 
   React.useEffect(() => {
     if (!run || !onStepStatuses) return;
@@ -59,7 +61,8 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
   };
   const decide = async (approved: boolean, comment: string) => {
     setBusy("approve");
-    try { await apiJson(`/api/workflows/runs/${runId}/approve`, { method: "POST", body: JSON.stringify({ approved, comment }) }); toast.success(approved ? "Approved — resuming" : "Rejected"); reconnect(); } catch (e) { toast.error(e instanceof ApiError ? e.message : "Could not record the decision"); } finally { setBusy(null); }
+    const verbs = approvalVerbs(pendingApprovalRef.current ?? {});
+    try { await apiJson(`/api/workflows/runs/${runId}/approve`, { method: "POST", body: JSON.stringify({ approved, comment }) }); toast.success(approved ? verbs.approvedToast : verbs.rejectedToast); reconnect(); } catch (e) { toast.error(e instanceof ApiError ? e.message : "Could not record the decision"); } finally { setBusy(null); }
   };
 
   if (loading || !run) {
@@ -74,6 +77,7 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
 
   const durationMs = run.durationMs ?? (run.finishedAt ? new Date(run.finishedAt).getTime() : now) - new Date(run.startedAt).getTime();
   const pendingApproval = run.status === "waiting_approval" ? (run.approvals ?? []).find((a) => a.decidedAt == null) : undefined;
+  pendingApprovalRef.current = pendingApproval ?? null;
   const steps = plan ? orderedRows(plan, run) : run.steps.map((s) => ({ id: s.nodeId, depth: 0, loopId: null as string | null }));
 
   return (
@@ -105,7 +109,7 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
           <div className="p-3 pb-0"><InlineAlert tone={run.status === "cancelled" ? "info" : "destructive"} title={run.status === "cancelled" ? "Run cancelled" : "Run failed"}>{run.error}</InlineAlert></div>
         ) : null}
 
-        {pendingApproval && <ApprovalCard approval={pendingApproval} onDecide={decide} busy={busy === "approve"} />}
+        {pendingApproval && <ApprovalCard approval={pendingApproval} onDecide={decide} busy={busy === "approve"} nodeMap={nodeMap} />}
 
         <div className="p-3 space-y-2">
           <SectionLabel right={<span className="normal-case tracking-normal tabular">{stepSummary(run.steps)}</span>}>Steps</SectionLabel>
@@ -254,8 +258,49 @@ function IterationRow({ iteration, nodeMap }: { iteration: NonNullable<WorkflowR
   );
 }
 
-function ApprovalCard({ approval, onDecide, busy }: { approval: NonNullable<WorkflowRunRecord["approvals"]>[number]; onDecide: (approved: boolean, comment: string) => void; busy: boolean }) {
+type Approval = NonNullable<WorkflowRunRecord["approvals"]>[number];
+
+/**
+ * Approval card. A plain approval (logic.approval) asks a person to sign off on
+ * the message. A trust gate is different and looks different: the run stopped
+ * because an action would have used AI output that is unverified, below the
+ * confidence gate or contradicted. Approve lifts the gate for those steps;
+ * Reject skips the gated action and the run continues.
+ */
+function ApprovalCard({ approval, onDecide, busy, nodeMap }: { approval: Approval; onDecide: (approved: boolean, comment: string) => void; busy: boolean; nodeMap?: Map<string, { label: string; type: string }> }) {
   const [comment, setComment] = React.useState("");
+  const gate = isTrustGate(approval);
+  const reasons = approval.reasons ?? [];
+  const stepIds = approval.stepIds ?? [];
+  if (gate) {
+    return (
+      <div className="m-3 space-y-2 rounded-lg border border-warning/60 bg-warning/8 p-3" role="region" aria-label="Trust gate">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="size-4 text-warning" />
+          <div className="text-sm font-semibold">Trust gate: {approval.title}</div>
+          <span className="ml-auto text-[10.5px] text-muted-foreground">held <RelativeTime value={approval.requestedAt} /></span>
+        </div>
+        <p className="text-xs text-muted-foreground">An action step would have relied on AI output that is not yet trusted. Lift the gate to let it proceed with this output, or skip the action and let the run continue without it. Either decision is audited.</p>
+        {reasons.length > 0 && (
+          <ul className="space-y-1 rounded-md border bg-background p-2.5 text-xs">
+            {reasons.map((r, i) => <li key={i} className="flex items-start gap-2"><span className="mt-[5px] size-1.5 shrink-0 rounded-full bg-warning" />{r}</li>)}
+          </ul>
+        )}
+        {stepIds.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+            <span>Gated:</span>
+            {stepIds.map((id) => <span key={id} className="rounded border bg-card px-1.5 py-px font-mono text-[10.5px]">{nodeMap?.get(id)?.label ?? id}</span>)}
+          </div>
+        )}
+        {approval.message && <div className="max-h-48 overflow-y-auto rounded-md border bg-background p-2.5 scrollbar-thin"><Markdown compact>{approval.message}</Markdown></div>}
+        <Textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Why (optional) — kept in the audit log" rows={2} className="min-h-0 bg-background text-xs" />
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => onDecide(false, comment)} disabled={busy}><SkipForward className="size-3.5" /> Skip action</Button>
+          <Button variant="success" size="sm" onClick={() => onDecide(true, comment)} disabled={busy}>{busy ? <Loader2 className="size-3.5 animate-spin" /> : <Unlock className="size-3.5" />} Lift gate</Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="m-3 rounded-lg border border-warning/60 bg-warning/8 p-3 space-y-2">
       <div className="flex items-center gap-2">

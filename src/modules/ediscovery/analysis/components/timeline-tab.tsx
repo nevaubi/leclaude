@@ -241,7 +241,7 @@ function ExtractDialog({ open, onOpenChange, matterId, aiConfigured, onDone }: {
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [mode, setMode] = React.useState<"ai" | "metadata">(aiConfigured ? "ai" : "metadata");
   const [progress, setProgress] = React.useState<{ done: number; total: number } | null>(null);
-  const [result, setResult] = React.useState<{ added: TimelineEvent[]; merged: number; extracted: number; ai: boolean } | null>(null);
+  const [result, setResult] = React.useState<{ added: TimelineEvent[]; merged: number; extracted: number; ai: boolean; duplicates: number; needsReview: number } | null>(null);
   const [noKey, setNoKey] = React.useState(false);
   const [running, setRunning] = React.useState(false);
   React.useEffect(() => { setMode(aiConfigured ? "ai" : "metadata"); }, [aiConfigured]);
@@ -262,9 +262,16 @@ function ExtractDialog({ open, onOpenChange, matterId, aiConfigured, onDone }: {
     try {
       const res = await fetch("/api/ediscovery/analysis/timeline/extract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matterId, docIds: Array.from(selected), mode }) });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      await readSSE<{ type: string; done?: number; total?: number; added?: TimelineEvent[]; merged?: number; extracted?: number; ai?: boolean; code?: string; message?: string }>(res, (ev) => {
+      await readSSE<{ type: string; done?: number; total?: number; added?: TimelineEvent[]; merged?: number; extracted?: number; ai?: boolean; duplicates?: number; needsReview?: number; code?: string; message?: string }>(res, (ev) => {
         if (ev.type === "progress") setProgress({ done: ev.done ?? 0, total: ev.total ?? selected.size });
-        else if (ev.type === "done") { setResult({ added: ev.added ?? [], merged: ev.merged ?? 0, extracted: ev.extracted ?? 0, ai: !!ev.ai }); onDone(); }
+        else if (ev.type === "done") {
+          const summary = { added: ev.added ?? [], merged: ev.merged ?? 0, extracted: ev.extracted ?? 0, ai: !!ev.ai, duplicates: ev.duplicates ?? 0, needsReview: ev.needsReview ?? 0 };
+          setResult(summary);
+          onDone();
+          const parts = [`${summary.added.length} added`, summary.merged ? `${summary.merged} merged` : "", summary.duplicates ? `${summary.duplicates} duplicate${summary.duplicates === 1 ? "" : "s"} dropped` : ""].filter(Boolean).join(" · ");
+          if (summary.needsReview) toast.warning(`${summary.needsReview} event${summary.needsReview === 1 ? "" : "s"} need review`, { description: `${parts}. Low-confidence or unverified events are queued under Codes & privilege → Needs review.` });
+          else toast.success(summary.added.length ? "Events extracted" : "Nothing new to add", { description: parts });
+        }
         else if (ev.type === "error") { if (ev.code === "no_api_key") setNoKey(true); else toast.error("Extraction failed", { description: ev.message }); }
       });
     } catch (e) { toast.error("Extraction failed", { description: (e as Error).message }); }
@@ -293,7 +300,7 @@ function ExtractDialog({ open, onOpenChange, matterId, aiConfigured, onDone }: {
           )}
         </div>
         {progress && running && <div className="space-y-1"><Progress value={(progress.done / Math.max(1, progress.total)) * 100} /><div className="text-[11px] text-muted-foreground">{progress.done} of {progress.total} documents</div></div>}
-        {result && <div className="rounded-md border bg-success/5 p-2.5 text-xs"><div className="font-medium">{result.added.length} new event{result.added.length === 1 ? "" : "s"} added · {result.merged} merged into existing entries · {result.extracted} extracted{result.ai ? " by the model" : " from metadata"}</div>{result.added.slice(0, 6).map((e) => <div key={e.id} className="mt-1 flex gap-2 text-muted-foreground"><span className="font-mono tabular">{e.date}</span><span className="truncate">{e.title}</span></div>)}{result.added.length > 6 && <div className="mt-1 text-muted-foreground">…and {result.added.length - 6} more</div>}</div>}
+        {result && <div className="rounded-md border bg-success/5 p-2.5 text-xs"><div className="font-medium">{result.added.length} new event{result.added.length === 1 ? "" : "s"} added · {result.merged} merged into existing entries · {result.extracted} extracted{result.ai ? " by the model" : " from metadata"}{result.duplicates ? ` · ${result.duplicates} duplicate${result.duplicates === 1 ? "" : "s"} dropped` : ""}{result.needsReview ? ` · ${result.needsReview} held for review` : ""}</div>{result.added.slice(0, 6).map((e) => <div key={e.id} className="mt-1 flex gap-2 text-muted-foreground"><span className="font-mono tabular">{e.date}</span><span className="truncate">{e.title}</span></div>)}{result.added.length > 6 && <div className="mt-1 text-muted-foreground">…and {result.added.length - 6} more</div>}</div>}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>{result ? "Close" : "Cancel"}</Button>
           <Button onClick={run} disabled={running || !selected.size || (mode === "ai" && !aiConfigured)}>{running ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {mode === "ai" ? "Extract with AI" : "Add as events"} ({selected.size})</Button>

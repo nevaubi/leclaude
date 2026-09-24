@@ -1,24 +1,31 @@
 "use client";
 import * as React from "react";
-import { Sparkles, Loader2, RefreshCw, Wand2, FileSignature, ClipboardCopy, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, Wand2, FileSignature, ClipboardCopy, AlertTriangle, ShieldAlert, ShieldCheck, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScoreBar } from "@/components/ui/progress";
 import type { CodingDecision } from "@/lib/types/domain";
+import type { Provenance } from "@/lib/integrity/types";
+import { Tip } from "@/components/ui/tooltip";
 import type { AIAnalysis } from "../types";
 import { useReview } from "./review-page";
 import { ApiError, api, type DocDetailResponse } from "./use-review-data";
 import { IssueChip, NoKeyCallout, ProvenanceBadge } from "./shared";
 
-export function AiTab({ detail, analysis, onAnalysis, onApply }: { detail: DocDetailResponse; analysis: AIAnalysis | null; onAnalysis: (a: AIAnalysis) => void; onApply: (patch: Partial<CodingDecision>) => void }) {
-  const { aiConfigured, issueCodes } = useReview();
+/** POST /api/ediscovery/docs/[id]/apply-suggestion → the gate decides whether the suggestion becomes the coding. */
+export interface ApplySuggestionResult { applied: boolean; needsReview: boolean; reason?: string; doc: { id: string; coding: CodingDecision; aiProvenance: Provenance | null } }
+
+export function AiTab({ detail, analysis, onAnalysis, onApply, onApplied }: { detail: DocDetailResponse; analysis: AIAnalysis | null; onAnalysis: (a: AIAnalysis) => void; onApply: (patch: Partial<CodingDecision>) => void; onApplied?: (coding: CodingDecision, aiProvenance?: Provenance | null) => void }) {
+  const { aiConfigured, issueCodes, currentUserId } = useReview();
   const { doc } = detail;
   const [running, setRunning] = React.useState(false);
   const [noKey, setNoKey] = React.useState(!aiConfigured);
   const [privDraft, setPrivDraft] = React.useState<{ description: string; ai: boolean } | null>(null);
   const [privRunning, setPrivRunning] = React.useState(false);
+  const [applying, setApplying] = React.useState(false);
+  const [gate, setGate] = React.useState<{ reason?: string } | null>(null);
 
   const run = async (force = false) => {
     setRunning(true);
@@ -40,6 +47,30 @@ export function AiTab({ detail, analysis, onAnalysis, onApply }: { detail: DocDe
       setPrivDraft(r);
     } catch (e) { toast.error("Could not draft description", { description: (e as Error).message }); }
     finally { setPrivRunning(false); }
+  };
+
+  /**
+   * Applies the suggestion through the integrity gate: trusted suggestions (source-backed, verified, above the
+   * confidence gate) become the coding and are audited; untrusted ones come back with needsReview and a reason
+   * and are written into the notes with a NEEDS REVIEW marker instead. `force` is the reviewer's override.
+   */
+  const applyGated = async (force = false) => {
+    setApplying(true);
+    try {
+      const r = await api<ApplySuggestionResult>(`/api/ediscovery/docs/${encodeURIComponent(doc.id)}/apply-suggestion`, { method: "POST", json: { reviewerId: currentUserId, force } });
+      if (r.applied) {
+        setGate(null);
+        onApplied?.(r.doc.coding, r.doc.aiProvenance);
+        toast.success(force ? "Suggestion applied (reviewer override)" : "Suggestion applied", { description: `${doc.bates} coded from the AI suggestion${r.reason ? ` · ${r.reason}` : ""}.` });
+      } else {
+        setGate({ reason: r.reason });
+        toast.warning("Held for review", { description: r.reason ?? "The suggestion did not pass the trust gate.", action: { label: "Apply anyway", onClick: () => void applyGated(true) } });
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) toast.error("Apply suggestion is unavailable", { description: "Use “Copy to panel” and save the coding yourself." });
+      else if (e instanceof ApiError && e.code === "no_api_key") setNoKey(true);
+      else toast.error("Could not apply the suggestion", { description: (e as Error).message });
+    } finally { setApplying(false); }
   };
 
   const applyAll = () => {
@@ -91,8 +122,18 @@ export function AiTab({ detail, analysis, onAnalysis, onApply }: { detail: DocDe
             <div className="rounded-md border p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Suggested coding <ProvenanceBadge record={analysis} /></div>
-                <Button size="xs" onClick={applyAll}><Wand2 className="size-3.5" /> Apply suggestion</Button>
+                <div className="flex items-center gap-1">
+                  <Tip label="Copy the suggestion into the coding panel without saving"><Button size="xs" variant="ghost" onClick={applyAll}><Wand2 className="size-3.5" /> Copy to panel</Button></Tip>
+                  <Tip label="Apply through the trust gate: verified, source-backed suggestions are saved and audited; others are held for review"><Button size="xs" onClick={() => applyGated(false)} disabled={applying}>{applying ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Apply suggestion</Button></Tip>
+                </div>
               </div>
+              {gate && (
+                <div className="mt-2 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs" role="status">
+                  <Eye className="mt-0.5 size-3.5 shrink-0 text-warning-foreground dark:text-warning" />
+                  <div className="min-w-0 flex-1"><span className="font-semibold">Held for review.</span> {gate.reason ?? "The suggestion did not pass the trust gate."} It was written into the notes with a NEEDS REVIEW marker; a reviewer can still apply it.</div>
+                  <Button size="xs" variant="outline" onClick={() => applyGated(true)} disabled={applying}>Apply anyway</Button>
+                </div>
+              )}
               <div className="mt-2 grid grid-cols-[110px_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
                 <span className="text-xs text-muted-foreground">Responsive</span><span className="flex items-center gap-2"><Badge variant={analysis.suggestedCoding.responsive ? "success" : "muted"}>{analysis.suggestedCoding.responsive ? "Yes" : "No"}</Badge><ScoreBar value={analysis.suggestedCoding.responsiveConfidence} /><span className="text-[11px] text-muted-foreground">confidence</span></span>
                 <span className="text-xs text-muted-foreground">Privileged</span><span className="flex items-center gap-2"><Badge variant={analysis.suggestedCoding.privileged ? "info" : "muted"}>{analysis.suggestedCoding.privileged ? (analysis.suggestedCoding.privilegeBasis ?? "yes") : "No"}</Badge><ScoreBar value={analysis.suggestedCoding.privilegedConfidence} /><span className="text-[11px] text-muted-foreground">confidence</span></span>

@@ -53,7 +53,8 @@ export function ReviewQueueSection({ matterId, onChanged }: { matterId: string; 
       if (res && !res.ok) throw new Error(res.message ?? "Decision was not recorded");
       setItems((cur) => (cur ? cur.map((x) => (x.kind === item.kind && x.id === item.id ? { ...x, review: { ...x.review, status: decision, at: new Date().toISOString(), note } } : x)).filter((x) => status === "all" || x.review?.status === "pending") : cur));
       toast.success(decision === "approved" ? `Approved · ${item.title}` : `Rejected · ${item.title}`, { description: decision === "approved" ? "Now trusted for downstream automation and exports." : "Excluded from automation; the record stays for the audit trail." });
-      onChanged?.(Math.max(0, (items?.filter((x) => x.review?.status === "pending").length ?? 1) - 1));
+      // Re-read the queue so the tab count and any records the decision cascaded to (duplicates, native records) stay exact.
+      void load();
     } catch (e) { toast.error("Could not record the decision", { description: (e as Error).message }); }
     finally { setBusy(null); }
   };

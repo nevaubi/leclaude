@@ -4,29 +4,13 @@ import { CalendarClock, ChevronDown, Database, Flame, ShieldAlert, Sparkles, Use
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tip } from "@/components/ui/tooltip";
-import { Chip, type ChipTone } from "@/components/ui/misc";
+import { Chip } from "@/components/ui/misc";
+import { deadlineChip, deadlineLabel } from "./matter-header-helpers";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { MatterOption } from "./review-page";
 import type { StatsResponse } from "./use-review-data";
 
-/** Countdown label and tone for a production deadline, from days left (pure, tested). */
-export function deadlineLabel(daysLeft: number): { label: string; tone: "destructive" | "warning" | "outline" } {
-  if (daysLeft < 0) return { label: `${Math.abs(daysLeft)}d overdue`, tone: "destructive" };
-  if (daysLeft === 0) return { label: "due today", tone: "destructive" };
-  if (daysLeft <= 7) return { label: `in ${daysLeft}d`, tone: "destructive" };
-  if (daysLeft <= 30) return { label: `in ${daysLeft}d`, tone: "warning" };
-  if (daysLeft < 60) return { label: `in ${Math.round(daysLeft / 7)} wk`, tone: "outline" };
-  return { label: `in ${Math.round(daysLeft / 30)} mo`, tone: "outline" };
-}
-
-/** Compact variant used by the tab strip / tests: tone + short label. */
-export function deadlineChip(daysLeft: number): { tone: ChipTone; label: string } {
-  if (daysLeft < 0) return { tone: "danger", label: `${Math.abs(daysLeft)}d overdue` };
-  if (daysLeft === 0) return { tone: "danger", label: "today" };
-  if (daysLeft <= 7) return { tone: "warning", label: `${daysLeft}d` };
-  if (daysLeft <= 30) return { tone: "accent", label: `${daysLeft}d` };
-  return { tone: "quiet", label: `${daysLeft}d` };
-}
+export { deadlineLabel, deadlineChip };
 
 /**
  * One-row matter header: matter · stage · review progress · next deadline ·
@@ -39,8 +23,8 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
   const dl = deadline ? deadlineLabel(deadline.daysLeft) : null;
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 overflow-x-auto border-b bg-card/40 px-4 no-scrollbar" aria-label="Matter summary">
-      <h1 className="min-w-0 max-w-[36vw] truncate text-[13px] font-semibold tracking-tight" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
-      {matter?.stage && <Chip tone="muted" title="Matter stage">{matter.stage}</Chip>}
+      <h1 className="w-auto min-w-[120px] max-w-[26vw] shrink-0 truncate text-[13px] font-semibold tracking-tight lg:max-w-[32vw]" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
+      {matter?.stage && <Chip tone="muted" title={`Stage: ${matter.stage}`} className="hidden max-w-[200px] shrink md:inline-flex">{matter.stage}</Chip>}
       <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden />
       {loading && !stats ? (
         <Skeleton className="h-4 w-56" />
@@ -48,7 +32,7 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
         <>
           <Tip label={`${stats.reviewed.toLocaleString()} of ${stats.total.toLocaleString()} reviewed · ${stats.needsReview.toLocaleString()} remaining`}>
             <span className="flex shrink-0 items-center gap-2 text-[12px]">
-              <span className="relative h-1.5 w-20 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Review progress">
+              <span className="relative h-1.5 w-16 overflow-hidden rounded-full bg-muted lg:w-20" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Review progress">
                 <span className={cn("absolute inset-y-0 left-0 rounded-full", pct >= 90 ? "bg-success" : "bg-primary")} style={{ width: `${pct}%` }} />
               </span>
               <span className="tabular font-medium">{pct}%</span>
@@ -59,7 +43,7 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
             <Tip label={`${deadline.label} · ${new Date(deadline.date + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}`}>
               <span className="flex shrink-0 items-center gap-1.5 text-[12px]">
                 <CalendarClock className={cn("size-3.5", dl.tone === "destructive" ? "text-destructive" : dl.tone === "warning" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")} />
-                <span className="hidden truncate text-muted-foreground md:inline">{deadline.label}</span>
+                <span className="hidden max-w-[180px] truncate text-muted-foreground xl:inline">{deadline.label}</span>
                 <Chip tone={dl.tone}>{dl.label}</Chip>
               </span>
             </Tip>

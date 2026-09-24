@@ -5,7 +5,6 @@ import { CalendarClock, CalendarDays, CheckSquare, ChevronRight, Gavel, Plus, Sc
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/misc";
-import { Tip } from "@/components/ui/tooltip";
 import { countdown, fmtDate, fmtDateLong, fmtTime, greetingFor, DATE_ONLY_RE } from "../time";
 import { EVENT_KIND_LABEL } from "../types";
 import { useHomeUI } from "../store";
@@ -119,7 +118,7 @@ function DeadlineRow({ d, now, onOpen }: { d: SpineDeadline; now: Date; onOpen: 
         <span className="block truncate text-[12.5px] font-medium leading-snug">{d.title}</span>
         <span className="block truncate text-[10.5px] tabular text-muted-foreground">{fmtDate(d.date, { weekday: "short", month: "short", day: "numeric" })}{d.matterId ? " · " : ""}<MatterBadge matterId={d.matterId} className="inline-flex h-4 border-transparent px-0 text-[10.5px]" /></span>
       </span>
-      <Tip label={new Date(d.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}><Chip tone={tone} className="shrink-0 tabular">{c.label}</Chip></Tip>
+      <Chip tone={tone} className="shrink-0 tabular" title={new Date(d.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}>{c.label}</Chip>
     </>
   );
   const cls = "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-accent/60 cursor-pointer focus-ring";

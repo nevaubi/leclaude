@@ -72,5 +72,6 @@ export function summarizeByMatter(items: ReviewQueueItem[], matterName: (id: str
   for (const it of items) by.set(it.matterId, [...(by.get(it.matterId) ?? []), it]);
   return Array.from(by.entries())
     .map(([matterId, rows]) => ({ matterId, matterName: matterName(matterId) ?? (matterId ? matterId : "Firm-wide"), pending: rows.length, kinds: Array.from(new Set(rows.map((r) => kindLabel(r.kind)))).sort() }))
-    .sort((a, b) => b.pending - a.pending || a.matterName.localeCompare(b.matterName));
+    // Busiest matter first; ties by name; firm-wide (no matter) rows always last.
+    .sort((a, b) => b.pending - a.pending || Number(!a.matterId) - Number(!b.matterId) || a.matterName.localeCompare(b.matterName));
 }

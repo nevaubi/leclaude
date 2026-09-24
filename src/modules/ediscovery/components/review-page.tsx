@@ -1,13 +1,11 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
-import { ChevronRight, FileSearch, KeyRound, Keyboard, RefreshCw, Sparkles, Maximize2, Minimize2, Loader2, MoreHorizontal } from "lucide-react";
+import { ChevronRight, FileSearch, Keyboard, RefreshCw, Sparkles, Maximize2, Minimize2, Loader2, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { useShellStore } from "@/components/shell/shell-store";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -167,9 +165,6 @@ export function ReviewPage(props: ReviewPageProps) {
         <ChevronRight className="hidden size-3.5 text-muted-foreground md:block" />
         <span className="hidden text-sm text-muted-foreground md:block">{REVIEW_TABS.find((t) => t.id === tab)?.label}</span>
         <div className="flex-1" />
-        {!props.aiConfigured && (
-          <Tip label="AI analysis, batch prediction and privilege-log drafting need OPENAI_API_KEY"><Link href="/settings#ai" className="shrink-0"><Badge variant="warning" className="cursor-pointer"><KeyRound className="size-3" /> No OpenAI key</Badge></Link></Tip>
-        )}
         {tab === "review" && store.openDocId && (
           <Tip label={store.fullscreen ? "Exit full-screen viewer" : "Full-screen viewer"} shortcut="F"><Button variant="ghost" size="icon-sm" onClick={() => store.setFullscreen(!store.fullscreen)} aria-label="Toggle full screen">{store.fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button></Tip>
         )}

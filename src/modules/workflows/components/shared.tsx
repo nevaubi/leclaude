@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import {
-  AlertCircle, AlignLeft, BellRing, BookOpenCheck, CalendarClock, CalendarPlus, Check, CheckCircle2, CircleDashed, ClipboardCheck, Clock, Download, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitMerge, Globe, Library, ListTodo, Loader2, Mail, MinusCircle, PauseCircle, PenLine, Play, Repeat, Scale, ScanSearch, Sparkles, Stamp, Tags, Timer, UserCheck, XCircle, type LucideIcon,
+  AlertCircle, AlignLeft, BellRing, BookOpenCheck, CalendarClock, CalendarPlus, Check, CheckCircle2, CircleDashed, ClipboardCheck, Clock, CopyMinus, Download, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitMerge, Globe, Library, ListTodo, Loader2, Mail, MinusCircle, PauseCircle, PenLine, Play, Repeat, Scale, ScanSearch, ShieldAlert, ShieldCheck, Sparkles, Stamp, Tags, Timer, UserCheck, XCircle, type LucideIcon,
 } from "lucide-react";
 import type { WorkflowRun, WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,8 @@ import { RUN_STATUS_LABEL } from "../types";
 
 export const ICONS: Record<string, LucideIcon> = {
   Play, CalendarClock, FilePlus2, Gavel, Mail, Sparkles, ScanSearch, Tags, AlignLeft, PenLine, ClipboardCheck, BookOpenCheck, Library, FileSearch, Scale, Globe, GitBranch, Repeat, GitMerge, UserCheck, Timer, ListTodo, CalendarPlus, FileOutput, BellRing, Download, Stamp,
+  // Integrity nodes: verify against sources, deduplicate, trust review.
+  ShieldCheck, CopyMinus, ShieldAlert,
 };
 
 export function iconFor(type: string): LucideIcon {

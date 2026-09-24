@@ -2,7 +2,7 @@
 /** Right sidebar: annotations, outline/bookmarks, search results, form fields and page comments. */
 import * as React from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Bookmark, Check, CheckCircle2, ChevronRight, Circle, CornerDownRight, Highlighter, Link2, List, ListTree, MessageSquare, PenLine, Pencil, RotateCcw, ScanSearch, Search, Send, Signature, Square, Stamp, StickyNote, Strikethrough, Trash2, Type, Underline, X } from "lucide-react";
+import { Bookmark, Check, CheckCircle2, ChevronRight, Circle, CornerDownRight, Highlighter, Link2, List, ListTree, MessageSquare, PenLine, Pencil, RotateCcw, ScanSearch, Search, Send, Signature, Square, Stamp, StickyNote, Strikethrough, Trash2, Type, Underline, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OfficeComment } from "@/lib/types/domain";
 import { Button } from "@/components/ui/button";
@@ -13,12 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tip } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/ui/misc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { IconPanelTabs } from "@/modules/office/shared/office-chrome";
 import { ANNOTATION_LABEL, activePages, boundsOf, sourceToDisplay, type AnnotationType, type PdfAnnotation, type PdfFormField, type PdfOutlineItem } from "./model";
 import { usePdfStore, type SidebarTab } from "./store";
 
 export const ANN_ICON: Record<AnnotationType, React.ComponentType<{ className?: string }>> = { highlight: Highlighter, underline: Underline, strikeout: Strikethrough, note: StickyNote, text: Type, rect: Square, ellipse: Circle, freehand: PenLine, stamp: Stamp, redaction: ScanSearch, link: Link2, signature: Signature };
 
-const TABS: { id: SidebarTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const TABS: { id: SidebarTab; label: string; icon: LucideIcon }[] = [
   { id: "annotations", label: "Annotations", icon: Highlighter },
   { id: "outline", label: "Outline", icon: ListTree },
   { id: "search", label: "Search", icon: Search },
@@ -45,13 +46,8 @@ export interface PdfSidebarProps {
 export function PdfSidebar(props: PdfSidebarProps) {
   const { tab, onTabChange, counts } = props;
   return (
-    <div className="flex h-full w-[300px] shrink-0 flex-col border-l bg-background">
-      <div className="flex h-9 shrink-0 items-center border-b px-1">
-        {TABS.map((t) => { const n = t.id === "annotations" ? counts.annotations : t.id === "comments" ? counts.comments : t.id === "search" ? counts.hits : t.id === "forms" ? counts.fields : 0; return (
-          <Tip key={t.id} label={t.label}><button onClick={() => onTabChange(t.id)} className={cn("relative flex h-7 flex-1 items-center justify-center rounded-md text-muted-foreground hover:text-foreground cursor-pointer", tab === t.id && "bg-accent text-foreground")} aria-label={t.label} aria-pressed={tab === t.id}><t.icon className="size-4" />{n > 0 && <span className="absolute right-1 top-0 rounded-full bg-primary px-1 text-[9px] leading-3 text-primary-foreground tabular">{n > 99 ? "99+" : n}</span>}</button></Tip>
-        ); })}
-        <button onClick={() => onTabChange(null)} className="ml-1 rounded p-1 text-muted-foreground hover:text-foreground cursor-pointer" aria-label="Close sidebar"><X className="size-3.5" /></button>
-      </div>
+    <div className="flex h-full w-[288px] shrink-0 flex-col border-l bg-background" aria-label="PDF sidebar">
+      <IconPanelTabs tabs={TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon, count: t.id === "annotations" ? counts.annotations : t.id === "comments" ? counts.comments : t.id === "search" ? counts.hits : t.id === "forms" ? counts.fields : 0 }))} value={tab} onChange={(t) => onTabChange(t)} onClose={() => onTabChange(null)} />
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {tab === "annotations" && <AnnotationsTab onOpen={props.onOpenAnnotation} />}
         {tab === "outline" && <OutlineTab />}

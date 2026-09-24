@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Chip } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Tip } from "@/components/ui/tooltip";
 import { TrustBadge } from "@/components/ai/trust-badge";
 import type { Provenance } from "@/lib/integrity/types";
 import type { BriefItem, DailyBrief } from "../types";
@@ -74,7 +73,7 @@ export function DailyBriefCard({ className }: { className?: string }) {
         {brief.source === "ai" ? (
           <TrustBadge provenance={provenance} compact={!provenance} />
         ) : (
-          <Tip label={aiConfigured ? "Computed from your calendar, tasks, news and updates. Regenerate for an AI brief." : "No OpenAI key configured. This brief is computed from your data."}><Chip tone="quiet" icon={Calculator}>Computed</Chip></Tip>
+          <Chip tone="quiet" icon={Calculator} title={aiConfigured ? "Computed from your calendar, tasks, news and updates. Regenerate for an AI brief." : "No OpenAI key configured. This brief is computed from your data."}>Computed</Chip>
         )}
         <span className="hidden text-[11px] text-muted-foreground sm:inline">{relativeLabel(brief.generatedAt, now)}</span>
         <div className="flex-1" />

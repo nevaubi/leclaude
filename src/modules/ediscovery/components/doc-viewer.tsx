@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronLeft, ChevronRight, X, Maximize2, Minimize2, Paperclip, MessagesSquare, Copy, Files, ArrowUpLeft, PanelRightClose, PanelRightOpen, Search, ClipboardCopy, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Maximize2, Minimize2, Paperclip, MessagesSquare, Copy, Files, ArrowUpLeft, PanelRightClose, PanelRightOpen, Search, ClipboardCopy, Loader2, AlertTriangle, CircleCheck, CircleX, Flame, Save, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,17 +17,11 @@ import { api, useDoc, useSimilar, type DocDetailResponse } from "./use-review-da
 import { useReview } from "./review-page";
 import { ReviewListContext } from "./review-tab";
 import { CodingPanel } from "./coding-panel";
+import { CODING_COLUMN_MIN_WIDTH, codingColumnWidth } from "./viewer-layout";
 import { AiTab } from "./ai-tab";
 import { CodingBadges, IssueChip, ProvenanceBadge, TypeIcon, formatShortDate } from "./shared";
 
-/** Viewer width at which the coding panel becomes a fixed right column instead of an overlay. */
-export const CODING_COLUMN_MIN_WIDTH = 560;
-
-/** Coding column width for a given viewer width: 240px in tight viewers, 272px when there is room. */
-export function codingColumnWidth(viewerWidth: number): number {
-  if (viewerWidth <= 0) return 272;
-  return viewerWidth < 720 ? 240 : 272;
-}
+export { CODING_COLUMN_MIN_WIDTH, codingColumnWidth };
 
 const TABS: { id: ViewerTab; label: string }[] = [
   { id: "text", label: "Text" }, { id: "metadata", label: "Metadata" }, { id: "family", label: "Family" }, { id: "similar", label: "Similar" }, { id: "ai", label: "AI" },
@@ -149,6 +143,10 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
         ))}
         {doc && <div className="ml-auto flex items-center gap-2 pr-1"><CodingBadges coding={draft ?? doc.coding} compact /></div>}
       </div>
+      {/* The coding column is hidden: keep the primary decisions one glance away in a sticky row. */}
+      {!narrow && !codingVisible && draft && doc && (
+        <QuickDecisionRow draft={draft} onChange={setDraft} onSave={() => save()} saving={saving} dirty={dirty} onOpenPanel={() => setCodingOpen(true)} />
+      )}
       {/* body */}
       <div className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-hidden">
@@ -163,7 +161,7 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
           ) : tab === "similar" ? (
             <SimilarView docId={docId} active={tab === "similar"} onOpen={setOpenDocId} />
           ) : (
-            <AiTab detail={detail.data} analysis={detail.data.analysis} onAnalysis={(a) => detail.mutate((cur) => (cur ? { ...cur, analysis: a } : cur))} onApply={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))} />
+            <AiTab detail={detail.data} analysis={detail.data.analysis} onAnalysis={(a) => detail.mutate((cur) => (cur ? { ...cur, analysis: a } : cur))} onApply={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))} onApplied={(coding, aiProvenance) => { detail.mutate((cur) => (cur ? { ...cur, doc: { ...cur.doc, coding, ...(aiProvenance ? { aiProvenance } : {}) } } : cur)); setDraft({ ...coding, issues: [...(coding.issues ?? [])] }); list.patchCoding([docId], coding); }} />
           )}
         </div>
         {codingVisible && draft && doc && (
@@ -181,6 +179,24 @@ function normalise(c: CodingDecision) {
   const { reviewedAt: _a, reviewerId: _b, ...rest } = c;
   void _a; void _b;
   return { ...rest, issues: [...(rest.issues ?? [])].sort(), notes: rest.notes ?? "" };
+}
+
+/** Sticky one-row decision bar shown when the coding column is collapsed: Responsive / Not / Privileged / Hot / Save & next. */
+function QuickDecisionRow({ draft, onChange, onSave, saving, dirty, onOpenPanel }: { draft: CodingDecision; onChange: (c: CodingDecision) => void; onSave: () => void; saving: boolean; dirty: boolean; onOpenPanel: () => void }) {
+  const autoAdvance = useReviewStore((s) => s.autoAdvance);
+  const seg = "inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11.5px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+  const off = "border-border text-muted-foreground hover:bg-accent hover:text-foreground";
+  return (
+    <div className="sticky-actions flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1.5" role="toolbar" aria-label="Coding decisions">
+      <Tip label="Responsive" shortcut="R"><button type="button" onClick={() => onChange({ ...draft, responsive: draft.responsive === true ? null : true })} aria-pressed={draft.responsive === true} className={cn(seg, draft.responsive === true ? "border-success/40 bg-success/12 text-success" : off)}><CircleCheck className="size-3.5" /> Responsive</button></Tip>
+      <Tip label="Not responsive" shortcut="N"><button type="button" onClick={() => onChange({ ...draft, responsive: draft.responsive === false ? null : false })} aria-pressed={draft.responsive === false} className={cn(seg, draft.responsive === false ? "border-foreground/25 bg-muted text-foreground" : off)}><CircleX className="size-3.5" /> Not</button></Tip>
+      <Tip label="Privileged (withhold)" shortcut="P"><button type="button" onClick={() => onChange({ ...draft, privileged: !draft.privileged, privilegeBasis: draft.privileged ? undefined : (draft.privilegeBasis ?? "attorney-client") })} aria-pressed={!!draft.privileged} className={cn(seg, draft.privileged ? "border-info/40 bg-info/12 text-info" : off)}><ShieldAlert className="size-3.5" /> Privileged</button></Tip>
+      <Tip label="Hot document" shortcut="H"><button type="button" onClick={() => onChange({ ...draft, hot: !draft.hot })} aria-pressed={!!draft.hot} className={cn(seg, draft.hot ? "border-destructive/40 bg-destructive/10 text-destructive" : off)}><Flame className="size-3.5" /> Hot</button></Tip>
+      <div className="flex-1" />
+      <Tip label="Open the coding panel for issue codes, notes and reviewer"><Button variant="ghost" size="xs" className="h-7" onClick={onOpenPanel}><PanelRightOpen className="size-3.5" /> Details</Button></Tip>
+      <Tip label={autoAdvance ? "Save coding and open the next document" : "Save coding"} shortcut="⌘S"><Button size="xs" className="h-7" onClick={onSave} disabled={saving} variant={dirty ? "default" : "secondary"}>{saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />} {dirty ? (autoAdvance ? "Save & next" : "Save") : "Saved"}</Button></Tip>
+    </div>
+  );
 }
 
 function FamilyNav({ family, threadIdx, onOpen }: { family: DocDetailResponse["family"] | undefined; threadIdx: number; onOpen: (id: string) => void }) {

@@ -14,26 +14,26 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Briefcase, Check, ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, FileType, Loader2, MoreHorizontal, Presentation, RotateCcw, Save, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Matter, OfficeKind } from "@/lib/types/domain";
-import type { Provenance } from "@/lib/integrity/types";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TopbarSlot } from "@/components/shell/app-shell";
-import type { EditProposal } from "./types";
+import { KIND_BADGE, downloadItemsToEntries, saveButtonLabel, saveTone, savedAtLabel, type ChromeMenuEntry, type ChromeSaveState, type DownloadItem, type IconLike } from "./office-chrome-helpers";
 
-export type ChromeSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+export * from "./office-chrome-helpers";
+
 
 // ---------------------------------------------------------------------------
 // Kind metadata
 // ---------------------------------------------------------------------------
 
 export const KIND_CHROME: Record<OfficeKind, { badge: string; icon: LucideIcon; color: string; noun: string; plural: string; downloadLabel: string; placeholder: string }> = {
-  word: { badge: "DOCX", icon: FileText, color: "text-chart-1", noun: "document", plural: "documents", downloadLabel: "Download", placeholder: "Untitled document" },
-  sheet: { badge: "XLSX", icon: FileSpreadsheet, color: "text-chart-4", noun: "workbook", plural: "workbooks", downloadLabel: "Export", placeholder: "Untitled workbook" },
-  slides: { badge: "PPTX", icon: Presentation, color: "text-chart-3", noun: "deck", plural: "decks", downloadLabel: "Download", placeholder: "Untitled deck" },
-  pdf: { badge: "PDF", icon: FileType, color: "text-destructive", noun: "PDF", plural: "PDFs", downloadLabel: "Download", placeholder: "Untitled PDF" },
+  word: { badge: KIND_BADGE.word, icon: FileText, color: "text-chart-1", noun: "document", plural: "documents", downloadLabel: "Download", placeholder: "Untitled document" },
+  sheet: { badge: KIND_BADGE.sheet, icon: FileSpreadsheet, color: "text-chart-4", noun: "workbook", plural: "workbooks", downloadLabel: "Export", placeholder: "Untitled workbook" },
+  slides: { badge: KIND_BADGE.slides, icon: Presentation, color: "text-chart-3", noun: "deck", plural: "decks", downloadLabel: "Download", placeholder: "Untitled deck" },
+  pdf: { badge: KIND_BADGE.pdf, icon: FileType, color: "text-destructive", noun: "PDF", plural: "PDFs", downloadLabel: "Download", placeholder: "Untitled PDF" },
 };
 
 export function KindBadge({ kind, className }: { kind: OfficeKind; className?: string }) {
@@ -51,22 +51,7 @@ export function KindBadge({ kind, className }: { kind: OfficeKind; className?: s
 // Header (portaled into the shell's top bar)
 // ---------------------------------------------------------------------------
 
-export interface ChromeMenuItem { label: React.ReactNode; icon?: LucideIcon; onSelect?: () => void; shortcut?: string; hint?: string; disabled?: boolean; destructive?: boolean; href?: string; download?: string }
-export type ChromeMenuEntry = ChromeMenuItem | "separator" | { heading: string };
-
-/** Download menu item (alternative shape accepted by OfficeChrome's `download`). */
-export interface DownloadItem { id: string; label: React.ReactNode; icon?: LucideIcon; onSelect?: () => void; shortcut?: string; hint?: string; separatorBefore?: boolean; disabled?: boolean; href?: string; download?: string }
-
-export function downloadItemsToEntries(items: DownloadItem[]): ChromeMenuEntry[] {
-  const out: ChromeMenuEntry[] = [];
-  for (const it of items) {
-    if (it.separatorBefore && out.length) out.push("separator");
-    out.push({ label: it.label, icon: it.icon, onSelect: it.onSelect, shortcut: it.shortcut, hint: it.hint, disabled: it.disabled, href: it.href, download: it.download });
-  }
-  return out;
-}
-
-export interface ChromePanelToggle { id: string; label: string; icon: LucideIcon; active: boolean; onToggle: () => void; shortcut?: string; count?: number }
+export interface ChromePanelToggle { id: string; label: string; icon: IconLike; active: boolean; onToggle: () => void; shortcut?: string; count?: number }
 
 export interface OfficeChromeProps {
   kind: OfficeKind;
@@ -232,7 +217,7 @@ export const ToolSep = () => <span className="mx-1 h-5 w-px shrink-0 bg-border" 
 export const TOOL_BTN = "inline-flex h-7 min-w-7 shrink-0 items-center justify-center gap-1 rounded-md px-1 text-[12.5px] text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 cursor-pointer";
 export const TOOL_BTN_ACTIVE = "bg-accent text-accent-foreground";
 
-export interface ToolButtonProps { icon?: LucideIcon; label: string; shortcut?: string; active?: boolean; onClick: () => void; disabled?: boolean; children?: React.ReactNode; className?: string; keepFocus?: boolean }
+export interface ToolButtonProps { icon?: IconLike; label: string; shortcut?: string; active?: boolean; onClick: () => void; disabled?: boolean; children?: React.ReactNode; className?: string; keepFocus?: boolean }
 
 /** Icon (or icon + text) toolbar button. `keepFocus` (default true) keeps the editor selection by preventing mousedown focus. */
 export function ToolButton({ icon: Icon, label, shortcut, active, onClick, disabled, children, className, keepFocus = true }: ToolButtonProps) {
@@ -247,7 +232,7 @@ export function ToolButton({ icon: Icon, label, shortcut, active, onClick, disab
 }
 
 /** Text + chevron trigger used for the grouped menus (Style, Font, Size, Page, Insert…). Wrap in a DropdownMenuTrigger / PopoverTrigger with asChild. */
-export const ToolMenuTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon; label: React.ReactNode; active?: boolean; width?: number; hideLabelBelow?: "lg" | "xl" }>(
+export const ToolMenuTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: IconLike; label: React.ReactNode; active?: boolean; width?: number; hideLabelBelow?: "lg" | "xl" }>(
   ({ icon: Icon, label, active, className, width, hideLabelBelow, ...rest }, ref) => (
     <button ref={ref} type="button" onMouseDown={(e) => e.preventDefault()} data-state={active ? "on" : "off"} className={cn(TOOL_BTN, "px-1.5", active && TOOL_BTN_ACTIVE, className)} style={width ? { width } : undefined} {...rest}>
       {Icon && <Icon className="size-4" />}
@@ -304,7 +289,7 @@ export function TrackedChangesStrip({ count, index, onNav, onPrev, onNext, onAcc
 // Segmented control, panel tabs, status bar
 // ---------------------------------------------------------------------------
 
-export interface SegmentOption<T extends string> { id: T; label: React.ReactNode; icon?: LucideIcon; title?: string; shortcut?: string }
+export interface SegmentOption<T extends string> { id: T; label: React.ReactNode; icon?: IconLike; title?: string; shortcut?: string }
 
 export function SegmentedControl<T extends string>({ options, value, onChange, className, size = "sm", ariaLabel, grow, "aria-label": ariaLabelAttr }: { options: SegmentOption<T>[]; value: T; onChange: (v: T) => void; className?: string; size?: "xs" | "sm"; ariaLabel?: string; "aria-label"?: string; grow?: boolean }) {
   return (
@@ -322,7 +307,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, c
   );
 }
 
-export interface PanelTab<T extends string> { id: T; label: string; icon?: LucideIcon; count?: number; shortcut?: string; hint?: string }
+export interface PanelTab<T extends string> { id: T; label: string; icon?: IconLike; count?: number; shortcut?: string; hint?: string }
 
 /** Underlined tab strip for right-hand panels (Assistant | Comments (2) | Charts | Page Setup). */
 export function PanelTabs<T extends string>({ tabs, value, onChange, onClose, className, compact }: { tabs: PanelTab<T>[]; value: T | null; onChange: (t: T) => void; onClose?: () => void; className?: string; compact?: boolean }) {
@@ -359,96 +344,6 @@ export function StatusItem({ children, className, title, onClick, hide, active }
 }
 
 export const StatusSpacer = () => <span className="min-w-2 flex-1" aria-hidden />;
-
-// ---------------------------------------------------------------------------
-// Pure helpers (tested)
-// ---------------------------------------------------------------------------
-
-export function saveTone(state: ChromeSaveState): "muted" | "warning" | "destructive" {
-  if (state === "error") return "destructive";
-  if (state === "dirty" || state === "saving") return "warning";
-  return "muted";
-}
-
-export function saveButtonLabel(state: ChromeSaveState): string {
-  switch (state) {
-    case "saving": return "Saving…";
-    case "dirty": return "Save";
-    case "error": return "Retry";
-    default: return "Saved";
-  }
-}
-
-export function formatClock(d: Date): string {
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-/** "Saved 3:08 PM" / "Unsaved changes" / "Saving…" / "Save failed" / "All changes saved". */
-export function savedAtLabel(state: ChromeSaveState, lastSavedAt: Date | null): string {
-  switch (state) {
-    case "saving": return "Saving…";
-    case "dirty": return "Unsaved changes";
-    case "error": return "Save failed";
-    case "saved": return lastSavedAt ? `Saved ${formatClock(lastSavedAt)}` : "Saved";
-    default: return lastSavedAt ? `Saved ${formatClock(lastSavedAt)}` : "All changes saved";
-  }
-}
-
-function looksLikeProvenance(x: unknown): x is Provenance {
-  return Boolean(x && typeof x === "object" && typeof (x as Provenance).model === "string" && typeof (x as Provenance).generatedAt === "string" && Array.isArray((x as Provenance).sources));
-}
-
-/**
- * The office agent stream ends with an `office-provenance` artifact. Older servers send the run
- * provenance directly; newer ones send `{ run, proposals: [{id, provenance}], findings: [...] }`.
- * Accept both and return the run-level provenance plus per-proposal provenance when present.
- */
-export function extractRunProvenance(data: unknown): { run: Provenance | null; proposals: Record<string, Provenance>; findings: Record<string, Provenance> } {
-  const out = { run: null as Provenance | null, proposals: {} as Record<string, Provenance>, findings: {} as Record<string, Provenance> };
-  if (!data || typeof data !== "object") return out;
-  if (looksLikeProvenance(data)) { out.run = data; return out; }
-  const d = data as { run?: unknown; provenance?: unknown; proposals?: unknown; findings?: unknown };
-  if (looksLikeProvenance(d.run)) out.run = d.run;
-  else if (looksLikeProvenance(d.provenance)) out.run = d.provenance;
-  for (const [key, bucket] of [["proposals", out.proposals], ["findings", out.findings]] as const) {
-    const list = d[key];
-    if (!Array.isArray(list)) continue;
-    for (const item of list) {
-      const it = item as { id?: unknown; provenance?: unknown };
-      if (typeof it?.id === "string" && looksLikeProvenance(it.provenance)) bucket[it.id] = it.provenance;
-    }
-  }
-  return out;
-}
-
-/** Research was requested but the run read nothing: warn before anyone relies on the answer. */
-export function needsNotSourceBackedBanner(research: boolean, provenance: Provenance | null | undefined): boolean {
-  if (!research) return false;
-  if (!provenance) return true;
-  return provenance.sources.length === 0;
-}
-
-export type AuditedProposalStatus = "applied" | "discarded" | "failed";
-
-/** Body for POST /api/office/docs/[id]/audit-apply: the proposals with their final status and provenance. */
-export function proposalAuditPayload(proposals: (EditProposal & { provenance?: Provenance })[], statusOf: (p: EditProposal) => AuditedProposalStatus, extra: { mode?: string; message?: string } = {}) {
-  return {
-    proposals: proposals.map((p) => ({ id: p.id, kind: p.kind, title: p.title, summary: p.summary?.slice(0, 300), target: p.target, targetLabel: p.targetLabel, risk: p.risk, status: statusOf(p), provenance: p.provenance })),
-    mode: extra.mode,
-    message: extra.message?.slice(0, 300),
-  };
-}
-
-/** Compact "Comments (3)" style label. */
-export function countLabel(label: string, count: number | undefined): string {
-  return count ? `${label} (${count})` : label;
-}
-
-/** Approximate page count from words: legal double-spaced pages run ~275 words, 1.15 spacing ~500. */
-export function approximatePages(words: number, lineSpacing: number): number {
-  const perPage = lineSpacing >= 2 ? 275 : lineSpacing >= 1.5 ? 360 : 500;
-  return Math.max(1, Math.ceil(words / perPage));
-}
 
 // ---------------------------------------------------------------------------
 // Compatibility aliases (earlier chrome API names). Keep stable.

@@ -8,18 +8,16 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Briefcase, ChevronDown, Download, FileText, FileType, Flame, History, Keyboard, Loader2, Merge, MessageSquare, PanelRight, PanelLeft, Save, Scissors, Sparkles, Stamp, Upload, Minimize2, FilePlus2, RotateCw, Type, Highlighter, ListTree, Search, List } from "lucide-react";
+import { ArrowLeft, Download, FileText, FileType, Flame, History, Keyboard, Loader2, Merge, MessageSquare, PanelRight, PanelLeft, Scissors, Sparkles, Stamp, Upload, Minimize2, FilePlus2, RotateCw, Type, Highlighter, ListTree, Search, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Matter, OfficeComment } from "@/lib/types/domain";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/ui/misc";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { OfficeAgentPanel, saveStateLabel, useOfficeDoc, type ApplyResult, type EditProposal, type OfficeScope } from "@/modules/office/shared";
+import { KindBadge, OfficeChrome, OfficeErrorState, OfficeStatusBar, StatusItem, ToolbarSkeleton, useNarrowViewport, type ChromeMenuEntry } from "@/modules/office/shared/office-chrome";
 import "./pdf.css";
 import { clearRunsCache, clearThumbCache, downloadBlob, downloadExport, fmtBytes, pageImageForAgent, postForm, postJson, rasterizeRedactedPages, safeFilename, searchDocument } from "./client-utils";
 import { AnnotationDialog, ApplyDialog, BatesDialog, CustomStampDialog, DecorationsDialog, MergeDialog, ShortcutsDialog, SignatureDialog, SplitDialog, type ApplyOptions } from "./dialogs";
@@ -74,18 +72,18 @@ function NewPdfView({ blobId, matterId }: { blobId: string | null; matterId: str
   };
   return (
     <div className="pdf-dropzone flex h-full flex-col">
-      <TopbarSlot><Link href="/office?kind=pdf" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" /> PDFs</Link><Badge variant="destructive" className="gap-1 font-mono"><FileType className="size-3" /> PDF</Badge><span className="text-sm font-semibold">New PDF</span></TopbarSlot>
+      <TopbarSlot><Link href="/office?kind=pdf" className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[12.5px] text-muted-foreground hover:bg-accent hover:text-foreground"><ArrowLeft className="size-3.5" /> PDFs</Link><KindBadge kind="pdf" /><span className="text-[13px] font-semibold">New PDF</span></TopbarSlot>
       <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <div className="w-full max-w-2xl">
           <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) void upload(f); }} onClick={() => !busy && inputRef.current?.click()} className={cn("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-background/80 p-12 text-center transition-colors hover:border-primary/60", drag && "border-primary bg-primary/5")}>
-            {busy ? <><Loader2 className="size-8 animate-spin text-primary" /><div className="text-sm font-medium">{busy}</div><div className="text-xs text-muted-foreground">Extracting text, outline and form fields</div></> : <><div className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive"><Upload className="size-6" /></div><div className="text-base font-semibold">Drop a PDF to open it</div><div className="text-xs text-muted-foreground">Productions, orders, exhibits, scanned letters — up to 60 MB. The file is stored in the library and opened in the editor with text extraction.</div><Button size="sm" className="mt-2" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}><Upload className="size-3.5" /> Choose a file</Button></>}
+            {busy ? <><Loader2 className="size-8 animate-spin text-primary" /><div className="text-sm font-medium">{busy}</div><div className="text-xs text-muted-foreground">Extracting text, outline and form fields</div></> : <><div className="flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive"><Upload className="size-5" /></div><div className="text-[15px] font-semibold">Drop a PDF to open it</div><div className="max-w-md text-[12.5px] text-muted-foreground">Productions, orders, exhibits, scanned letters — up to 60 MB. The file is stored in the library and opened with text extraction.</div><Button size="sm" className="mt-2" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}><Upload className="size-3.5" /> Choose a file</Button></>}
             <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }} />
           </div>
           {templates.length > 0 && (
             <div className="mt-6">
-              <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Or start from a template</div>
+              <div className="mb-2 text-[12.5px] font-semibold">Or start from a template</div>
               <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                {templates.map((t) => <Link key={t.id} href={`/office/pdf/new?template=${t.id}${matterId ? `&matter=${matterId}` : ""}`} className="rounded-lg border bg-background p-3 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"><div className="flex items-center gap-1.5 text-xs font-medium"><FileType className="size-3.5 text-destructive" /> {t.name}</div><div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{t.description}</div></Link>)}
+                {templates.map((t) => <Link key={t.id} href={`/office/pdf/new?template=${t.id}${matterId ? `&matter=${matterId}` : ""}`} className="rounded-lg border bg-background p-3 text-left transition-colors hover:border-foreground/20"><div className="flex items-center gap-1.5 text-[13px] font-medium"><FileType className="size-3.5 text-destructive" /> {t.name}</div><div className="mt-1 line-clamp-2 text-[11.5px] text-muted-foreground">{t.description}</div></Link>)}
               </div>
             </div>
           )}
@@ -116,7 +114,9 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
   const [preparing, setPreparing] = React.useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = React.useState<PDFDocumentProxy | null>(null);
   const [title, setTitle] = React.useState("");
+  const narrow = useNarrowViewport();
   const [agentOpen, setAgentOpen] = React.useState(true);
+  React.useEffect(() => { if (narrow) setAgentOpen(false); }, [narrow]);
   const [comments, setComments] = React.useState<OfficeComment[]>([]);
   const [dialog, setDialog] = React.useState<null | "bates" | "decorations" | "merge" | "split" | "signature" | "stamp" | "apply" | "shortcuts" | "versions">(null);
   const [splitPages, setSplitPages] = React.useState<number[] | undefined>(undefined);
@@ -324,69 +324,59 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
   const zoomPct = Math.round((effectiveScale / (96 / 72)) * 100);
   const sizeLabel = model.meta.sourceSize ? fmtBytes(Number(model.meta.sourceSize)) : null;
 
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center p-6">
-        <TopbarSlot><Link href="/library" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to Library</Link></TopbarSlot>
-        <EmptyState icon={AlertTriangle} title={error} description="The PDF may have been deleted, or the link is wrong." action={<Button asChild variant="outline"><Link href="/office?kind=pdf">Open PDFs</Link></Button>} />
-      </div>
-    );
-  }
+  if (error) return <OfficeErrorState kind="pdf" error={error} />;
+
+  const openComments = comments.filter((c) => !c.resolved).length;
+  const pageOps: ChromeMenuEntry[] = [
+    { heading: "Pages" },
+    { label: "Bates stamping…", icon: Stamp, shortcut: "⌘B", onSelect: () => setDialog("bates") },
+    { label: "Header, footer, page numbers, watermark…", icon: Type, onSelect: () => setDialog("decorations") },
+    "separator",
+    { label: `Insert blank page after p. ${currentPage}`, icon: FilePlus2, onSelect: insertBlank },
+    { label: "Rotate all pages", icon: RotateCw, onSelect: rotateAll },
+    { label: "Merge another PDF…", icon: Merge, onSelect: () => setDialog("merge") },
+    { label: "Extract pages to a new PDF…", icon: Scissors, onSelect: () => { setSplitPages(undefined); setDialog("split"); } },
+    { label: "Compress (re-save)", icon: Minimize2, hint: sizeLabel ?? undefined, onSelect: () => void doCompress() },
+    "separator",
+    { label: "Apply edits to source…", icon: Flame, hint: "redactions · Bates", onSelect: () => setDialog("apply") },
+    "separator",
+    { label: "Version history", icon: History, onSelect: () => setDialog("versions") },
+    { label: "Keyboard shortcuts", icon: Keyboard, shortcut: "?", onSelect: () => setDialog("shortcuts") },
+  ];
+  const downloads: ChromeMenuEntry[] = [
+    { label: "Edited PDF (flattened, redactions applied)", icon: FileType, onSelect: () => void exportEdited() },
+    { label: "Edited PDF with editable annotations", icon: Highlighter, onSelect: () => void exportEdited({ native: true }) },
+    ...(model.meta.hasForm ? [{ label: "Edited PDF with flattened form", icon: List, onSelect: () => void exportEdited({ flattenForms: true }) } as ChromeMenuEntry] : []),
+    { label: "Current source PDF", icon: Download, href: `/api/blobs/${model.sourceBlobId}`, download: `${safeFilename(doc?.title ?? "document")}-source.pdf` },
+    "separator",
+    { label: "Extracted text (.txt)", icon: FileText, onSelect: () => void exportText() },
+    { label: "Convert to Word document", icon: FileText, onSelect: () => void convertToWord() },
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TopbarSlot>
-        <Tip label="Back to Library" shortcut="G L"><Link href="/library" className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" /> Library</Link></Tip>
-        <Badge variant="destructive" className="shrink-0 gap-1 font-mono"><FileType className="size-3" /> PDF</Badge>
-        {matter ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><button className="hidden max-w-[180px] shrink-0 items-center gap-1 truncate rounded-md border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground lg:flex cursor-pointer"><Briefcase className="size-3" /><span className="truncate">{matter.shortName}</span><ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72"><DropdownMenuLabel>Matter</DropdownMenuLabel><DropdownMenuRadioGroup value={matter.id} onValueChange={(v) => void office.save({ matterId: v })}>{matters.map((mm) => <DropdownMenuRadioItem key={mm.id} value={mm.id}><span className="truncate">{mm.shortName} <span className="text-muted-foreground">· {mm.client}</span></span></DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent>
-          </DropdownMenu>
-        ) : ready ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><button className="hidden shrink-0 items-center gap-1 rounded-md border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground lg:flex cursor-pointer"><Briefcase className="size-3" /> Link matter</button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">{matters.map((mm) => <DropdownMenuItem key={mm.id} onClick={() => void office.save({ matterId: mm.id })}><span className="truncate">{mm.shortName} <span className="text-muted-foreground">· {mm.client}</span></span></DropdownMenuItem>)}</DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-        <input data-title-input="1" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => void commitTitle()} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} aria-label="Document title" placeholder="Untitled PDF" className="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold outline-none transition-colors hover:border-border focus:border-ring focus:bg-background" />
-        <span className={cn("hidden shrink-0 text-[11px] xl:inline", office.saveState === "error" ? "text-destructive" : office.saveState === "dirty" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")}>{saveLabel}</span>
-        <div className="flex shrink-0 items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5" disabled={!ready}><Stamp className="size-4" /> Pages <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuItem onClick={() => setDialog("bates")}><Stamp /> Bates stamping… <span className="ml-auto text-[10px] text-muted-foreground">⌘B</span></DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setDialog("decorations")}><Type /> Header, footer, page numbers, watermark…</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={insertBlank}><FilePlus2 /> Insert blank page after p. {currentPage}</DropdownMenuItem>
-              <DropdownMenuItem onClick={rotateAll}><RotateCw /> Rotate all pages</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setDialog("merge")}><Merge /> Merge another PDF…</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { setSplitPages(undefined); setDialog("split"); }}><Scissors /> Extract pages to a new PDF…</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doCompress()}><Minimize2 /> Compress (re-save){sizeLabel ? <span className="ml-auto text-[10px] text-muted-foreground">{sizeLabel}</span> : null}</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setDialog("apply")}><Flame /> Apply edits to source… <span className="ml-auto text-[10px] text-muted-foreground">redactions · Bates</span></DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5" disabled={!ready}>{exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuItem onClick={() => void exportEdited()}><FileType /> Edited PDF (flattened, redactions applied)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void exportEdited({ native: true })}><Highlighter /> Edited PDF with editable annotations</DropdownMenuItem>
-              {model.meta.hasForm && <DropdownMenuItem onClick={() => void exportEdited({ flattenForms: true })}><List /> Edited PDF with flattened form</DropdownMenuItem>}
-              <DropdownMenuItem asChild><a href={`/api/blobs/${model.sourceBlobId}`} download={`${safeFilename(doc?.title ?? "document")}-source.pdf`}><Download /> Current source PDF</a></DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => void exportText()}><FileText /> Extracted text (.txt)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void convertToWord()}><FileText /> Convert to Word document</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Tip label="Save" shortcut="⌘S"><Button variant="ghost" size="sm" onClick={() => void saveNow()} disabled={office.saveState === "saving" || !ready}><Save className="size-4" /> Save</Button></Tip>
-          <Tip label="Version history"><Button variant="ghost" size="sm" onClick={() => setDialog("versions")} disabled={!ready}><History className="size-4" /> Versions</Button></Tip>
-          <Tip label="Comments" shortcut="⌘⇧M"><Button variant={sidebarTab === "comments" ? "secondary" : "ghost"} size="icon-sm" onClick={() => store.getState().setSidebarTab(sidebarTab === "comments" ? null : "comments")} aria-label="Toggle comments" className="relative"><MessageSquare className="size-4" />{comments.filter((c) => !c.resolved).length > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-primary px-1 text-[9px] leading-3 text-primary-foreground tabular">{comments.filter((c) => !c.resolved).length}</span>}</Button></Tip>
-          <Tip label="PDF assistant" shortcut="⌘/"><Button variant={agentOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setAgentOpen((v) => !v)} aria-pressed={agentOpen} aria-label="Toggle assistant"><Sparkles className={cn("size-4", agentOpen && "text-primary")} /></Button></Tip>
-        </div>
-      </TopbarSlot>
+      <OfficeChrome
+        kind="pdf"
+        title={title}
+        onTitleChange={setTitle}
+        onTitleCommit={commitTitle}
+        matter={matter}
+        matters={matters}
+        onMatterChange={(v) => void office.save({ matterId: v })}
+        saveState={office.saveState}
+        lastSavedAt={office.lastSavedAt}
+        onSave={() => void saveNow()}
+        ready={ready}
+        download={downloads}
+        exporting={Boolean(exporting)}
+        more={pageOps}
+        panels={[
+          { id: "comments", label: "Comments", icon: MessageSquare, shortcut: "⌘⇧M", active: sidebarTab === "comments", count: openComments, onToggle: () => store.getState().setSidebarTab(sidebarTab === "comments" ? null : "comments") },
+          { id: "assistant", label: "PDF assistant", icon: Sparkles, shortcut: "⌘/", active: agentOpen, onToggle: () => setAgentOpen((v) => !v) },
+        ]}
+      />
 
-      {ready ? <PdfToolbar onSearch={(q, o) => void runSearch(q, o)} onNextHit={nextHit} onOpenSignature={() => setDialog("signature")} onRedactSearch={(q, regex, reason) => { if (q === store.getState().search.query && store.getState().search.hits.length) markHits("redaction", reason); else void redactPattern(q, regex, reason); }} onCustomStamp={() => setDialog("stamp")} /> : <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">{[24, 24, 24, 24, 24, 24, 80, 60, 24, 120, 90, 170].map((w, i) => <Skeleton key={i} className="h-6" style={{ width: w }} />)}</div>}
+      {ready ? <PdfToolbar onSearch={(q, o) => void runSearch(q, o)} onNextHit={nextHit} onOpenSignature={() => setDialog("signature")} onRedactSearch={(q, regex, reason) => { if (q === store.getState().search.query && store.getState().search.hits.length) markHits("redaction", reason); else void redactPattern(q, regex, reason); }} onCustomStamp={() => setDialog("stamp")} /> : <ToolbarSkeleton widths={[24, 24, 24, 24, 24, 24, 80, 60, 24, 120, 90, 170]} />}
 
       <div className="flex min-h-0 flex-1">
         {ready && railOpen ? <ThumbnailRail pdfDoc={pdfDoc} cacheKey={cacheKey} commentCounts={commentCounts} onExtract={(pgs) => { setSplitPages(pgs); setDialog("split"); }} /> : !ready ? <div className="flex w-[168px] shrink-0 flex-col gap-2 border-r p-3">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="flex gap-2"><Skeleton className="h-4 w-4" /><Skeleton className="aspect-[8.5/11] flex-1" /></div>)}</div> : null}
@@ -414,29 +404,33 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
           {agentOpen && (
             <>
               <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={400} minSize={320} maxSize={640}>
-                <OfficeAgentPanel endpoint="/api/office/pdf/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled PDF"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => store.getState().undo()} onLocate={onLocate} suggestions={SUGGESTIONS} onApplied={onApplied} title="PDF assistant" extraContext={extraContext} trackedChanges={false} />
+              <ResizablePanel defaultSize={narrow ? 340 : 400} minSize={300} maxSize={640}>
+                <OfficeAgentPanel endpoint="/api/office/pdf/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled PDF"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => store.getState().undo()} onLocate={onLocate} suggestions={SUGGESTIONS} onApplied={onApplied} title="PDF assistant" extraContext={extraContext} trackedChanges={false} onVersions={() => setDialog("versions")} onClose={() => setAgentOpen(false)} />
               </ResizablePanel>
             </>
           )}
         </ResizablePanelGroup>
       </div>
 
-      <div className="flex h-7 shrink-0 items-center gap-3 border-t bg-background px-3 text-[11px] text-muted-foreground">
-        <button onClick={() => store.getState().setRailOpen(!railOpen)} className="flex items-center gap-1 hover:text-foreground cursor-pointer" aria-label="Toggle page rail"><PanelLeft className="size-3.5" /></button>
-        <span className="tabular">Page {currentPage} of {pages.length}</span>
-        {model.pages.some((p) => p.deleted) && <span>{model.pages.filter((p) => p.deleted).length} deleted</span>}
-        <span>{stats.total} annotation{stats.total === 1 ? "" : "s"}{stats.byType.redaction ? ` · ${stats.byType.redaction} redaction${stats.byType.redaction === 1 ? "" : "s"}${model.annotations.some((a) => a.type === "redaction" && !a.applied) ? " pending" : ""}` : ""}</span>
-        {model.bates && <span className="font-mono">{model.bates.prefix}{String(model.bates.start).padStart(model.bates.digits, "0")}{model.bates.applied ? " ✓" : " (on export)"}</span>}
-        {selectedAnnotationId && <span className="text-foreground">1 selected · Delete to remove · double-click to edit</span>}
-        {selection && !selectedAnnotationId && <span>“{selection.text.slice(0, 40)}{selection.text.length > 40 ? "…" : ""}” selected · press 1/2/3 to mark</span>}
-        <div className="flex-1" />
-        {sizeLabel && <span className="hidden md:inline">{sizeLabel}</span>}
-        <span className="hidden lg:inline">{saveLabel}</span>
-        <span className="tabular">{zoomPct}%</span>
-        <Tip label="Keyboard shortcuts" shortcut="?"><button onClick={() => setDialog("shortcuts")} className="rounded p-0.5 hover:text-foreground cursor-pointer" aria-label="Keyboard shortcuts"><Keyboard className="size-3.5" /></button></Tip>
-        <button onClick={() => store.getState().setSidebarTab(sidebarTab ? null : "annotations")} className="rounded p-0.5 hover:text-foreground cursor-pointer" aria-label="Toggle sidebar"><PanelRight className="size-3.5" /></button>
-      </div>
+      <OfficeStatusBar
+        right={
+          <>
+            {sizeLabel && <StatusItem hide="md" title="Source file size">{sizeLabel}</StatusItem>}
+            <StatusItem title="Zoom" className="tabular">{zoomPct}%</StatusItem>
+            <StatusItem hide="lg" className={cn(office.saveState === "error" && "text-destructive")} title="Save state">{saveLabel}</StatusItem>
+            <StatusItem onClick={() => setDialog("shortcuts")} title="Keyboard shortcuts (?)"><Keyboard className="size-3.5" /></StatusItem>
+            <StatusItem onClick={() => store.getState().setSidebarTab(sidebarTab ? null : "annotations")} title="Toggle sidebar" active={Boolean(sidebarTab)}><PanelRight className="size-3.5" /></StatusItem>
+          </>
+        }
+      >
+        <StatusItem onClick={() => store.getState().setRailOpen(!railOpen)} title="Toggle page thumbnails" active={railOpen}><PanelLeft className="size-3.5" /></StatusItem>
+        <StatusItem className="tabular">Page {currentPage} of {pages.length}</StatusItem>
+        {model.pages.some((p) => p.deleted) && <StatusItem>{model.pages.filter((p) => p.deleted).length} deleted</StatusItem>}
+        <StatusItem>{stats.total} annotation{stats.total === 1 ? "" : "s"}{stats.byType.redaction ? ` · ${stats.byType.redaction} redaction${stats.byType.redaction === 1 ? "" : "s"}${model.annotations.some((a) => a.type === "redaction" && !a.applied) ? " pending" : ""}` : ""}</StatusItem>
+        {model.bates && <StatusItem hide="md" className="font-mono" title="Bates numbering">{model.bates.prefix}{String(model.bates.start).padStart(model.bates.digits, "0")}{model.bates.applied ? " ✓" : " (on export)"}</StatusItem>}
+        {selectedAnnotationId && <StatusItem hide="lg" className="text-foreground">1 selected · Delete to remove · double-click to edit</StatusItem>}
+        {selection && !selectedAnnotationId && <StatusItem hide="lg">“{selection.text.slice(0, 40)}{selection.text.length > 40 ? "…" : ""}” selected · press 1/2/3 to mark</StatusItem>}
+      </OfficeStatusBar>
 
       <AnnotationDialog annotation={editing} onClose={() => setEditing(null)} />
       <BatesDialog open={dialog === "bates"} onOpenChange={(o) => setDialog(o ? "bates" : null)} />

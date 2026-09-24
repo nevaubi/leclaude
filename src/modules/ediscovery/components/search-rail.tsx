@@ -10,13 +10,12 @@ import { SAVED_VIEWS, type FacetBucket, type SavedView, type SearchFilters, type
 import { useReviewStore } from "./store";
 import { useReview } from "./review-page";
 import { SectionLabel, issueColorClasses } from "./shared";
+import { activeFacetCount } from "./rail-helpers";
+
+export { activeFacetCount };
 
 const VIEW_ICONS: Record<SavedView, React.ElementType> = { all: Files, needs_review: CircleDashed, hot: Flame, privileged: ShieldAlert, ai_responsive: Sparkles, recent: Clock };
 
-/** Number of active facet values (pure, tested). */
-export function activeFacetCount(filters: SearchFilters): number {
-  return Object.values(filters).reduce((n, v) => n + (v?.length ?? 0), 0);
-}
 
 export function SearchRail({ response, loading }: { response: SearchResponse | null; loading: boolean }) {
   const { issueCodes, viewCounts } = useReview();

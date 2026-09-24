@@ -7,25 +7,11 @@ import { useShellStore } from "./shell-store";
 import { useTheme } from "./theme-provider";
 import { FilePlus2, FileSpreadsheet, Presentation, Sparkles, Briefcase, FileText, Users, Calendar, ListTodo, Workflow, Sun, Moon, Monitor, ShieldCheck, ShieldAlert, PanelLeft } from "lucide-react";
 import { debounce } from "@/lib/utils";
+import { groupHits, type QuickSearchHit } from "./palette-groups";
 
-export interface QuickSearchHit {
-  id: string;
-  kind: "matter" | "document" | "person" | "task" | "event" | "workflow" | "library" | "office";
-  title: string;
-  subtitle?: string;
-  href: string;
-}
+export { groupHits, type QuickSearchHit };
 
 const KIND_ICON = { matter: Briefcase, document: FileText, person: Users, task: ListTodo, event: Calendar, workflow: Workflow, library: FileText, office: FileText } as const;
-const KIND_LABEL: Record<QuickSearchHit["kind"], string> = { matter: "Matter", document: "Document", person: "Person", task: "Task", event: "Event", workflow: "Workflow", library: "Library", office: "Office" };
-
-/** Group hits by kind so a mixed result list reads as sections, matters first. */
-export function groupHits(hits: QuickSearchHit[]): { kind: QuickSearchHit["kind"]; label: string; hits: QuickSearchHit[] }[] {
-  const order: QuickSearchHit["kind"][] = ["matter", "document", "office", "library", "person", "task", "event", "workflow"];
-  const by = new Map<QuickSearchHit["kind"], QuickSearchHit[]>();
-  for (const h of hits) by.set(h.kind, [...(by.get(h.kind) ?? []), h]);
-  return order.filter((k) => by.has(k)).map((k) => ({ kind: k, label: KIND_LABEL[k] + (by.get(k)!.length === 1 ? "" : "s"), hits: by.get(k)! }));
-}
 
 export function CommandPalette() {
   const router = useRouter();
