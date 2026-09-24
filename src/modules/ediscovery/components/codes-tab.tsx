@@ -262,7 +262,7 @@ function PrivilegeLogSection() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl p-5">
+    <div className="mx-auto max-w-[1400px] p-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">Privilege log</h2>
@@ -288,7 +288,7 @@ function PrivilegeLogSection() {
         <EmptyState icon={ShieldAlert} title="No privilege log entries" description={missing.length ? `${missing.length} documents are coded privileged. Generate entries to start the log.` : "Code documents as privileged in the Review tab; they will appear here."} action={missing.length ? <Button size="sm" onClick={() => generate(false, true)}><Sparkles className="size-4" /> Generate {missing.length} entries</Button> : undefined} />
       ) : (
         <div className="overflow-x-auto rounded-md border bg-card">
-          <table className="w-full min-w-[960px] text-xs">
+          <table className="w-full min-w-[900px] text-xs">
             <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>{["#", "Bates", "Date", "Type", "Author", "Recipients", "Basis", "Description", "Status", ""].map((h) => <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr>
             </thead>
@@ -300,14 +300,14 @@ function PrivilegeLogSection() {
                   <td className="px-3 py-2 tabular whitespace-nowrap">{formatShortDate(e.date)}</td>
                   <td className="px-3 py-2"><span className="flex items-center gap-1"><TypeIcon type={e.docType} />{e.docType}</span></td>
                   <td className="px-3 py-2">{e.author}</td>
-                  <td className="max-w-[200px] px-3 py-2 text-muted-foreground">{e.recipients.join("; ") || "—"}</td>
+                  <td className="max-w-[150px] px-3 py-2 text-muted-foreground">{e.recipients.join("; ") || "—"}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <Select value={e.basis} onValueChange={(v) => patch(e.id, { basis: v })}>
                       <SelectTrigger size="sm" className="h-7 w-[132px] text-[11px]"><SelectValue /></SelectTrigger>
                       <SelectContent>{["Attorney-client", "Work product", "Attorney-client; Work product", "Common interest", "Joint defense"].map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                     </Select>
                   </td>
-                  <td className="min-w-[320px] px-3 py-2">
+                  <td className="min-w-[260px] px-3 py-2">
                     {editingId === e.id ? (
                       <div>
                         <Textarea value={editText} onChange={(ev) => setEditText(ev.target.value)} className="min-h-[70px] text-xs" autoFocus />

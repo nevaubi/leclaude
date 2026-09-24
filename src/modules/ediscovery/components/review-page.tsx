@@ -137,8 +137,8 @@ export function ReviewPage(props: ReviewPageProps) {
         <span className="shrink-0 text-sm font-semibold">E-Discovery</span>
         <ChevronRight className="size-3.5 text-muted-foreground" />
         <Select value={matterId} onValueChange={changeMatter}>
-          <SelectTrigger size="sm" className="h-7 w-auto max-w-[280px] gap-1.5 border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-accent" aria-label="Matter">
-            <SelectValue />
+          <SelectTrigger size="sm" className="h-7 w-auto max-w-[280px] gap-1.5 whitespace-nowrap border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-accent" aria-label="Matter">
+            <SelectValue>{matter?.shortName ?? "Matter"}</SelectValue>
           </SelectTrigger>
           <SelectContent align="start" className="min-w-[320px]">
             {props.matters.map((m) => (

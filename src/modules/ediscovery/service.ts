@@ -29,6 +29,8 @@ import {
 } from "./types";
 
 export const CURRENT_USER_ID = "p_jwhitfield";
+/** Maximum number of documents returned by a semantic (hybrid) search. */
+export const SEMANTIC_K = 60;
 const RECENT_KEY = (matterId: string) => `ediscovery:recent:${matterId}`;
 const RECENT_MAX = 25;
 
@@ -231,7 +233,8 @@ export async function searchDocuments(req: SearchRequest): Promise<SearchRespons
 
   if (useSemantic) {
     // Hybrid (keyword BM25 + embeddings when available) over the vector index, restricted to this matter.
-    const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, req.q!, { k: Math.max(200, inView.length), perDoc: 1, filter: (meta) => meta.matterId === req.matterId });
+    // Capped to the top SEMANTIC_K by fused rank so the result set is a ranked shortlist, not the whole corpus.
+    const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, req.q!, { k: SEMANTIC_K, perDoc: 1, filter: (meta) => meta.matterId === req.matterId });
     const scoreById = new Map<string, { score: number; passage: string }>();
     for (const h of hits) if (!scoreById.has(h.docId)) scoreById.set(h.docId, { score: h.score, passage: h.text });
     // Structured parts of the query (fields, Bates, dates, NOT) still apply as hard filters.

@@ -20,8 +20,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
     .map((m) => ({ id: m.id, shortName: m.shortName, name: m.name, caption: m.caption, client: m.client, stage: m.stage, docCount: counts.get(m.id) ?? 0 }))
     .sort((a, b) => b.docCount - a.docCount || a.shortName.localeCompare(b.shortName));
   const matterId = sp.matter && matters.some((m) => m.id === sp.matter) ? sp.matter : matters.find((m) => m.id === MATTERS.afff)?.id ?? matters[0]?.id ?? MATTERS.afff;
-  const tabParam = sp.tab === "timeline" && !REVIEW_TABS.some((t) => t.id === sp.tab) ? "timeline" : sp.tab;
-  const tab = (REVIEW_TABS.some((t) => t.id === tabParam) ? tabParam : sp.view === "timeline" ? "timeline" : "review") as ReviewTab;
+  // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module.
+  const requested = sp.tab ?? sp.view;
+  const tab = (REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
   const reviewers = d.people
     .find((p) => p.organization === "Calloway & Reyes LLP" && (p.role === "attorney" || p.role === "paralegal" || p.role === "staff"))
     .map((p) => ({ id: p.id, name: p.name, title: p.title }));

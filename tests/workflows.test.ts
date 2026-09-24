@@ -427,10 +427,10 @@ describe("engine", () => {
 
   it("updates e-discovery coding and saves Word documents through the office service", async () => {
     const d = db();
-    d.edocs.put({ id: "ed_test_1", matterId: MATTERS.afff, bates: "MFC-TEST-0001", date: "2016-08-19", custodianId: PEOPLE.robertKaine, custodianName: "Robert Kaine", type: "Email", subject: "Test privileged email", text: "privileged legal advice about reporting", coding: {} });
+    d.edocs.put({ id: "ed_test_1", matterId: MATTERS.afff, bates: "MFC-TEST-0001", date: "2031-01-01", custodianId: PEOPLE.robertKaine, custodianName: "Robert Kaine", type: "Email", subject: "Test privileged email", text: "privileged legal advice about reporting", coding: {} });
     const w = wf("wf_test_coding", [
       N("start", "trigger.manual"),
-      N("search", "data.search_ediscovery", { query: "*", matterId: MATTERS.afff, limit: 5 }),
+      N("search", "data.search_ediscovery", { query: "*", matterId: MATTERS.afff, limit: 1 }),
       N("code", "action.update_coding", { documents: "{{steps.search.output.results | pluck:bates}}", field: "privileged", value: "true", note: "coded in test" }),
       N("doc", "action.save_document", { kind: "word", title: "Memo {{inputs.n}}", content: "# Memo {{inputs.n}}\n\nCoded {{steps.code.output.updated}} document(s).\n\n- MFC-TEST-0001", matterId: MATTERS.afff }),
       N("sheet", "action.save_document", { kind: "sheet", title: "Log", rows: "{{steps.search.output.results}}", matterId: MATTERS.afff }),
