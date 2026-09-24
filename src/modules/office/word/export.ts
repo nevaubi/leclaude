@@ -255,7 +255,7 @@ function collectImageSrcs(doc: PMNode): string[] {
 export async function exportDocx(doc: PMNode, opts: ExportOptions): Promise<Buffer> {
   const settings: DocSettings = { ...DEFAULT_SETTINGS, ...(opts.settings ?? {}) };
   const font = settings.font === "sans" ? "Calibri" : "Times New Roman";
-  const ctx: Ctx = { settings, font, images: new Map(), footnotes: new Map(), footnoteBodies: {}, comments: [], commentIds: new Map(), revisionId: 1, listInstance: 0, author: opts.author ?? "Calloway & Reyes LLP", changes: opts.changes ?? "revisions" };
+  const ctx: Ctx = { settings, font, images: new Map(), footnotes: new Map(), footnoteBodies: {}, comments: [], commentIds: new Map(), revisionId: 1, listInstance: 0, author: opts.author ?? "Seeger Weiss LLP", changes: opts.changes ?? "revisions" };
 
   for (const src of collectImageSrcs(doc)) { try { ctx.images.set(src, opts.fetchImage ? await opts.fetchImage(src) : null); } catch { ctx.images.set(src, null); } }
 

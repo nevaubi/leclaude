@@ -15,7 +15,7 @@ export const PRYCE_DEPOSITION: Deposition = {
   witnessTitle: "Vice President, Fire Suppression Products, Meridian Fluorochem Corp.",
   date: "2026-07-22",
   takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)",
-  defendingBy: "Jordan Whitfield / Priya Raman (Calloway & Reyes LLP)",
+  defendingBy: "Jordan Whitfield / Priya Raman (Seeger Weiss LLP)",
   location: "Meridian Fluorochem Corp., 1800 Industrial Parkway, Decatur, IL — Boardroom",
   volume: 1,
   pages: 231,

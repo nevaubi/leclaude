@@ -47,7 +47,7 @@ Responsive: the MTSA and all change orders and drafts; negotiation history (espe
 Non-responsive: unrelated lanes and customers; routine invoicing.
 
 ## Privilege
-Communications with Calloway & Reyes are privileged. The October 17 demand letter and any correspondence sent to Apex are **not** privileged. Marlow Insurance correspondence is not privileged (no common-interest agreement).
+Communications with Seeger Weiss are privileged. The October 17 demand letter and any correspondence sent to Apex are **not** privileged. Marlow Insurance correspondence is not privileged (no common-interest agreement).
 
 ## Hot
 Documents establishing (1) Northgate's written rejection of CO-3, (2) Apex's single-supervisor nights, (3) the §11.1(d) negotiation, (4) camera 6.

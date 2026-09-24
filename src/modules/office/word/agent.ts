@@ -76,7 +76,7 @@ export function productionDeps(): WordToolDeps {
     },
     async polishParagraphs(paragraphs, goals, context) {
       const result = await generateJSON<{ rewrites: { id: string; markdown: string; note?: string }[] }>({
-        instructions: `You are a senior litigator's line editor at Calloway & Reyes LLP. Rewrite each paragraph to meet the goals while preserving meaning, defined terms, citations, numbers, dates, names and cross-references exactly. Keep inline formatting as markdown (**bold**, *italic*). Return every paragraph id; if a paragraph needs no change, return it unchanged. Add a one-line note explaining a material change.`,
+        instructions: `You are a senior litigator's line editor at Seeger Weiss LLP. Rewrite each paragraph to meet the goals while preserving meaning, defined terms, citations, numbers, dates, names and cross-references exactly. Keep inline formatting as markdown (**bold**, *italic*). Return every paragraph id; if a paragraph needs no change, return it unchanged. Add a one-line note explaining a material change.`,
         input: JSON.stringify({ document: context.title, section: context.sectionTitle, matter: context.matter, goals, paragraphs }),
         schema: { type: "object", properties: { rewrites: { type: "array", items: { type: "object", properties: { id: { type: "string" }, markdown: { type: "string" }, note: { type: "string" } }, required: ["id", "markdown"] } } }, required: ["rewrites"] },
         name: "polish_rewrites",

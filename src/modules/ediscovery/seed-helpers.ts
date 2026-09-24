@@ -59,7 +59,7 @@ export const PEOPLE_DIR: Record<string, string> = {
   "Rhonda Feely": "rfeely@apexfreight.com",
   "Curtis Lange": "clange@apexfreight.com",
   "Ana Pereira": "apereira@marlowinsurance.com",
-  "Daniel Okafor": "dokafor@callowayreyes.com",
+  "Daniel Okafor": "dokafor@seegerweiss.com",
 };
 
 const fmtAddr = (name: string) => (PEOPLE_DIR[name] ? `${name} <${PEOPLE_DIR[name]}>` : name);

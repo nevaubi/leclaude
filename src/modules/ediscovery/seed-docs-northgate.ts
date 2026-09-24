@@ -435,7 +435,7 @@ Nothing in this letter waives any right or remedy of Northgate, all of which are
 Very truly yours,
 
 Daniel Okafor
-Calloway & Reyes LLP
+Seeger Weiss LLP
 
 cc: Melissa Grant; Dana Whitmore; Ana Pereira, Marlow Insurance Group (by email)`,
   },
@@ -460,7 +460,7 @@ cc: Melissa Grant; Dana Whitmore; Ana Pereira, Marlow Insurance Group (by email)
 November 10, 2025
 
 Daniel Okafor, Esq.
-Calloway & Reyes LLP
+Seeger Weiss LLP
 233 South Wacker Drive, Suite 6100
 Chicago, Illinois 60606
 

@@ -254,7 +254,7 @@ export function seedWord(db: Database) {
         "Sterling denies each allegation in the Notice, reserves all defenses including manageability and the limits on penalty stacking under section 2699(f) and (g) as amended, and reserves the right to seek early evaluation and a stay under section 2699.3(g). This letter is not a waiver of any privilege; the exhibits are provided for the Agency's evaluation and are designated confidential.",
         "Please direct all correspondence to the undersigned.",
         "Respectfully submitted,",
-        `\n\n**Samuel Chen**\n${FIRM.name}\nschen@callowayreyes.com`,
+        `\n\n**Samuel Chen**\n${FIRM.name}\nschen@seegerweiss.com`,
         "cc: Jordan Whitfield; Sterling Medical Group, P.C. (via email)",
       ]),
       versions: [
@@ -380,7 +380,7 @@ export function seedWord(db: Database) {
         "Fees and costs through August 31 total $412,600 against the Phase 1 (pleadings and Science Day) budget of $650,000. We anticipate remaining within budget through Science Day.",
         "Please let us know if you would like to discuss any of these items. We appreciate the opportunity to assist you in this matter.",
         "Sincerely,",
-        `\n\n**Priya Raman**\nPartner, ${FIRM.name}\npraman@callowayreyes.com`,
+        `\n\n**Priya Raman**\nPartner, ${FIRM.name}\npraman@seegerweiss.com`,
         "cc: Samuel Chen; Maria Lopez",
       ]),
       versions: [

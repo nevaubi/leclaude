@@ -61,7 +61,7 @@ export function productionDeps(): SlidesToolDeps {
     },
     async condenseSlides(slides, goals, limits, context) {
       const result = await generateJSON<{ slides: { id: string; title?: string; body: string }[] }>({
-        instructions: `You are a senior litigator's presentation editor at Calloway & Reyes LLP. Rewrite each slide body in markdown-lite ("- bullet" lines; "  - " for a sub-bullet; **bold** for the key term) to at most ${limits.maxBullets} bullets of at most ${limits.maxWords} words each. Preserve meaning, defined terms, citations, Bates numbers, dates and figures exactly; drop filler, merge overlapping points, keep parallel grammar. Return every slide id; keep the title unless it can state the takeaway more sharply.`,
+        instructions: `You are a senior litigator's presentation editor at Seeger Weiss LLP. Rewrite each slide body in markdown-lite ("- bullet" lines; "  - " for a sub-bullet; **bold** for the key term) to at most ${limits.maxBullets} bullets of at most ${limits.maxWords} words each. Preserve meaning, defined terms, citations, Bates numbers, dates and figures exactly; drop filler, merge overlapping points, keep parallel grammar. Return every slide id; keep the title unless it can state the takeaway more sharply.`,
         input: JSON.stringify({ deck: context.deckTitle, matter: context.matter, goals, slides }),
         schema: { type: "object", properties: { slides: { type: "array", items: { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, body: { type: "string" } }, required: ["id", "body"] } } }, required: ["slides"] },
         name: "condensed_slides",
@@ -71,7 +71,7 @@ export function productionDeps(): SlidesToolDeps {
     },
     async generateNotes(slides, style, context) {
       const result = await generateJSON<{ notes: { id: string; notes: string }[] }>({
-        instructions: `Write presenter-facing speaker notes for each slide of a legal presentation by Calloway & Reyes LLP. Style: ${style}. 40–90 words per slide: what to emphasize, which cite or document to read aloud, one anticipated question, and the transition to the next slide. Plain text, no markdown. Never invent facts, cites or figures beyond the slide text; if a point needs verification say "[VERIFY]".`,
+        instructions: `Write presenter-facing speaker notes for each slide of a legal presentation by Seeger Weiss LLP. Style: ${style}. 40–90 words per slide: what to emphasize, which cite or document to read aloud, one anticipated question, and the transition to the next slide. Plain text, no markdown. Never invent facts, cites or figures beyond the slide text; if a point needs verification say "[VERIFY]".`,
         input: JSON.stringify({ deck: context.deckTitle, matter: context.matter, slides }),
         schema: { type: "object", properties: { notes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, notes: { type: "string" } }, required: ["id", "notes"] } } }, required: ["notes"] },
         name: "speaker_notes",

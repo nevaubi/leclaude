@@ -23,7 +23,8 @@ import { useReview } from "./review-page";
 import { ApiError, api, usePrivilegeLog, useProduction, useRules } from "./use-review-data";
 import { IssueChip, NoKeyCallout, SectionLabel, TypeIcon, formatShortDate, issueColorClasses } from "./shared";
 
-type Section = "codes" | "rules" | "privilege" | "production";
+export type CodesSection = "codes" | "rules" | "privilege" | "production";
+type Section = CodesSection;
 const SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "codes", label: "Issue codes", icon: Tags },
   { id: "rules", label: "Coding rules", icon: BookOpenText },
@@ -31,8 +32,8 @@ const SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "production", label: "Production", icon: PackageCheck },
 ];
 
-export function CodesTab() {
-  const [section, setSection] = React.useState<Section>("codes");
+export function CodesTab({ initialSection }: { initialSection?: CodesSection } = {}) {
+  const [section, setSection] = React.useState<Section>(initialSection ?? "codes");
   return (
     <div className="flex h-full min-h-0">
       <aside className="hidden w-[200px] shrink-0 border-r bg-sidebar/40 md:block">

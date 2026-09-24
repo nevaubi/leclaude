@@ -127,7 +127,10 @@ function tokenize(input: string, warnings: string[]): Token[] {
     const rest = s.slice(i);
     const prefixed = rest.match(/^bates:\s*/i);
     const rm = rest.slice(prefixed?.[0].length ?? 0).match(RANGE_RE);
-    if (rm && parseBates(rm[1])) {
+    // "MFC-0041877 -2001" is a Bates number followed by a negated term, not a range: a bare hyphen that
+    // follows whitespace only joins a range when the end carries its own prefix (or a bates: prefix was given).
+    const negatedTail = !!rm && !prefixed && /\s-\s*\d/.test(rm[0].slice(rm[1].length)) && !/[A-Za-z]/.test(rm[2]);
+    if (rm && !negatedTail && parseBates(rm[1])) {
       const range = parseBatesRange(rm[0]);
       if (range) { tokens.push({ t: "bates", ...range }); i += (prefixed?.[0].length ?? 0) + rm[0].length; continue; }
     }

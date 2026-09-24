@@ -221,7 +221,7 @@ export function privilegeLogWorkbook(): Workbook {
     ["MFC-0041877", "MFC-0041879", "2019-03-14", "Robert Kaine (Associate General Counsel)", "Gregory Hale", "Nadia Brooks", "Email", "Attorney-client", "Email from in-house counsel providing legal advice regarding TSCA §8(e) reporting obligations", "Withheld", "Final"],
     ["MFC-0042210", "MFC-0042214", "2019-04-02", "Helen Voss", "Robert Kaine (Associate General Counsel)", null, "Memo", "Attorney-client; Work product", "Memorandum prepared at the direction of counsel analyzing toxicology data for purposes of legal advice", "Withheld", "Final"],
     ["MFC-0043588", "MFC-0043588", "2019-06-21", "Martin Suarez (Regulatory Affairs Counsel)", "Alan Pryce", "Robert Kaine (Associate General Counsel)", "Email", "Attorney-client", "Email reflecting legal advice on product labeling in anticipation of regulatory inquiry", "Redacted", "Draft"],
-    ["MFC-0044012", "MFC-0044019", "2020-01-30", "Outside counsel (Calloway & Reyes LLP)", "Robert Kaine (Associate General Counsel)", null, "Letter", "Attorney-client; Work product", "Letter from outside litigation counsel assessing litigation exposure", "Withheld", "Final"],
+    ["MFC-0044012", "MFC-0044019", "2020-01-30", "Outside counsel (Seeger Weiss LLP)", "Robert Kaine (Associate General Counsel)", null, "Letter", "Attorney-client; Work product", "Letter from outside litigation counsel assessing litigation exposure", "Withheld", "Final"],
     ["MFC-0045101", "MFC-0045103", "2020-02-11", "Gregory Hale", "Robert Kaine (Associate General Counsel)", "Helen Voss", "Email", "Attorney-client", "Email requesting legal advice regarding response to state environmental agency request", "Withheld", "Final"],
   ];
   const last = 4 + rows.length;

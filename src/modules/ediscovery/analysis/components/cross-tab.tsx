@@ -105,19 +105,19 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
               </ul>
             )}
           </Pane>
-          <div className="grid min-h-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
+          <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
             <Pane title={<span className="flex items-center gap-1.5"><Files className="size-3.5 text-chart-1" /> Documents on this topic</span>} count={cross.data?.documents.length} actions={<span className="text-[10.5px] text-muted-foreground">{aiConfigured ? "hybrid search" : "keyword (BM25)"}</span>}>
               {cross.loading && !cross.data ? <ExcerptSkeleton /> : !cross.data?.documents.length ? <div className="p-4"><EmptyState icon={Files} title={topic ? "No document passages" : "Enter a topic"} description={topic ? "No indexed passages match; rebuild the index from the top bar if documents were added." : "Document passages appear once a topic is set."} /></div> : (
                 <ul className="divide-y">
                   {cross.data.documents.map((d) => (
                     <li key={d.id} className="group px-3 py-2 hover:bg-accent/30">
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         <CiteChip cite={d.cite} kind="document" onClick={() => onOpenDocument?.(d.id)} />
                         <span className="tabular text-[10.5px] text-muted-foreground">{d.date ? formatShortDate(d.date) : ""}</span>
                         <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium">{d.label}</span>
                         <span className="text-[10px] tabular text-muted-foreground">{Math.round(d.score * 100)}</span>
                       </div>
-                      <p className="mt-1 text-[12px] leading-relaxed text-foreground/85"><Highlighted text={d.text} re={re} /></p>
+                      <p className="mt-1 break-words text-[12px] leading-relaxed text-foreground/85"><Highlighted text={d.text} re={re} /></p>
                     </li>
                   ))}
                 </ul>

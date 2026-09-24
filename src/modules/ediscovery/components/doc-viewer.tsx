@@ -63,6 +63,7 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
   // Viewer shortcuts: ⌘S save; R/N/P/H quick coding; [ ] prev/next
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.getAttribute("role") === "combobox");
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); void save(); return; }
@@ -209,7 +210,8 @@ function TextView({ detail, terms }: { detail: DocDetailResponse; terms: string[
   const start = parseBates(doc.bates);
   const hitCount = React.useMemo(() => (regex ? (doc.text.match(regex) ?? []).length : 0), [regex, doc.text]);
   const [hitIdx, setHitIdx] = React.useState(0);
-  React.useEffect(() => setHitIdx(0), [regex]);
+  // Start from the first hit again whenever the terms or the document change (the viewer is reused across j/k navigation).
+  React.useEffect(() => setHitIdx(0), [regex, doc.id]);
   React.useEffect(() => {
     const marks = containerRef.current?.querySelectorAll("mark");
     if (!marks?.length) return;
@@ -217,7 +219,7 @@ function TextView({ detail, terms }: { detail: DocDetailResponse; terms: string[
     const m = marks[Math.min(hitIdx, marks.length - 1)];
     m?.setAttribute("data-current", "true");
     m?.scrollIntoView({ block: "center" });
-  }, [hitIdx, regex]);
+  }, [hitIdx, regex, doc.id]);
 
   const copyWithCite = async () => {
     const sel = window.getSelection();

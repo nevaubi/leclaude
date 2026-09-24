@@ -8,7 +8,7 @@ import { parseBates } from "./query";
  */
 
 const COUNSEL = new Set(["Robert Kaine", "Martin Suarez", "Daniel Okafor", "Thomas Ashby", "Elena Marsh", "Jordan Whitfield", "Priya Raman"]);
-const COUNSEL_TITLE: Record<string, string> = { "Robert Kaine": "Associate General Counsel", "Martin Suarez": "Regulatory Affairs Counsel", "Daniel Okafor": "outside counsel (Calloway & Reyes LLP)", "Thomas Ashby": "outside counsel (Ashby Lowe LLP)" };
+const COUNSEL_TITLE: Record<string, string> = { "Robert Kaine": "Associate General Counsel", "Martin Suarez": "Regulatory Affairs Counsel", "Daniel Okafor": "outside counsel (Seeger Weiss LLP)", "Thomas Ashby": "outside counsel (Ashby Lowe LLP)" };
 
 function typeNoun(t: EDocument["type"]) {
   switch (t) {
@@ -92,7 +92,7 @@ export function privilegeLogMarkdown(rows: PrivilegeLogRow[], matterName: string
   const head = `# Privilege Log\n\n**${matterName}**${caption ? ` · ${caption}` : ""}\n\nProduced pursuant to Fed. R. Civ. P. 26(b)(5)(A). ${rows.length} entr${rows.length === 1 ? "y" : "ies"}. Generated ${new Date().toISOString().slice(0, 10)}.\n\n`;
   const table = ["| No. | Bates | Date | Type | Author | Recipients | Basis | Description |", "| --- | --- | --- | --- | --- | --- | --- | --- |"];
   rows.forEach((r, i) => table.push(`| ${i + 1} | ${r.bates} | ${r.date} | ${r.docType} | ${r.author} | ${r.recipients.join("; ") || "—"} | ${r.basis} | ${r.description.replace(/\|/g, "/")} |`));
-  const legend = `\n\n## Legend\n\n- **Attorney-client**: confidential communication between client and counsel for the purpose of obtaining or providing legal advice.\n- **Work product**: material prepared by or at the direction of counsel in anticipation of litigation (Fed. R. Civ. P. 26(b)(3)).\n- Persons identified as counsel: Robert Kaine (Associate General Counsel); Martin Suarez (Regulatory Affairs Counsel); Thomas Ashby (Ashby Lowe LLP); Daniel Okafor (Calloway & Reyes LLP).`;
+  const legend = `\n\n## Legend\n\n- **Attorney-client**: confidential communication between client and counsel for the purpose of obtaining or providing legal advice.\n- **Work product**: material prepared by or at the direction of counsel in anticipation of litigation (Fed. R. Civ. P. 26(b)(3)).\n- Persons identified as counsel: Robert Kaine (Associate General Counsel); Martin Suarez (Regulatory Affairs Counsel); Thomas Ashby (Ashby Lowe LLP); Daniel Okafor (Seeger Weiss LLP).`;
   return head + table.join("\n") + legend;
 }
 

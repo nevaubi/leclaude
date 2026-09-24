@@ -86,6 +86,8 @@ export function ReviewTab() {
   // Keyboard: j/k/Enter/Space/Esc/⌘A/F
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Escape that just closed a popover / select / dialog (Radix marks it handled) must not also close the viewer.
+      if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable || t.getAttribute("role") === "combobox");
       const st = useReviewStore.getState();

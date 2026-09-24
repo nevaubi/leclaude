@@ -19,7 +19,7 @@ import { slidesInstructions, SLIDES_SUGGESTIONS } from "@/modules/office/slides/
 
 beforeAll(() => { resetSqlite(); });
 
-const theme = getTheme("calloway-navy");
+const theme = getTheme("seeger-navy");
 
 const OUTLINE = `# AFFF bellwether: case strategy
 kicker: MDL 2873
@@ -74,7 +74,7 @@ layout: section
 subtitle: Privileged`;
 
 function deckOf(outline = OUTLINE): DeckContent {
-  const deck = emptyDeck("calloway-navy");
+  const deck = emptyDeck("seeger-navy");
   deck.slides = parseOutline(outline, theme).slides;
   return deck;
 }
@@ -126,7 +126,7 @@ describe("markdown-lite", () => {
 describe("themes and colors", () => {
   it("ships at least five firm themes and resolves tokens", () => {
     expect(THEMES.length).toBeGreaterThanOrEqual(5);
-    expect(THEMES.map((t) => t.name)).toEqual(expect.arrayContaining(["Calloway Navy", "Counsel Slate", "Courtroom Serif", "Modern Mono", "Client Light"]));
+    expect(THEMES.map((t) => t.name)).toEqual(expect.arrayContaining(["Seeger Navy", "Counsel Slate", "Courtroom Serif", "Modern Mono", "Client Light"]));
     expect(resolveColor("accent", theme)).toBe(theme.colors.accent);
     expect(resolveColor("#123456", theme)).toBe("#123456");
     expect(hexForExport("accent2", theme)).toBe(theme.colors.accent2.slice(1).toUpperCase());

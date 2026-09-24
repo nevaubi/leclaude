@@ -111,7 +111,7 @@ export function ListSkeleton({ rows = 6, className }: { rows?: number; className
 
 export function Pane({ title, count, actions, children, className, bodyClassName }: { title: React.ReactNode; count?: number; actions?: React.ReactNode; children: React.ReactNode; className?: string; bodyClassName?: string }) {
   return (
-    <section className={cn("flex min-h-0 flex-col rounded-lg border bg-card", className)}>
+    <section className={cn("flex min-h-0 min-w-0 flex-col rounded-lg border bg-card", className)}>
       <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3">
         <div className="flex min-w-0 items-center gap-2 text-[12px] font-semibold"><span className="truncate">{title}</span>{count != null && <span className="rounded bg-muted px-1 py-px text-[10px] font-medium tabular text-muted-foreground">{count}</span>}</div>
         {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
@@ -128,6 +128,19 @@ export function KeyValue({ label, children, className }: { label: string; childr
       <span className="min-w-0 break-words">{children}</span>
     </div>
   );
+}
+
+/** True while the viewport is narrower than `px` (false during SSR and before mount). */
+export function useNarrowViewport(px: number) {
+  const [narrow, setNarrow] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${px - 1}px)`);
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [px]);
+  return narrow;
 }
 
 export function typingTarget(e: KeyboardEvent | React.KeyboardEvent) {

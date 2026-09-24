@@ -22,7 +22,7 @@ npm install
 npm run dev                     # http://localhost:3000
 ```
 
-The first request creates `./data/leclaude.db` and seeds a realistic demo firm (Calloway & Reyes LLP) with five matters, custodial documents, depositions, chronologies, workflows, office documents and a library. Reset at any time with `npm run db:reset`.
+The first request creates `./data/leclaude.db` and seeds a realistic demo firm (Seeger Weiss LLP) with five matters, custodial documents, depositions, chronologies, workflows, office documents and a library. Reset at any time with `npm run db:reset`.
 
 Other scripts: `npm run typecheck`, `npm run lint`, `npm test` (vitest), `npm run build && npm start`, `npm run seed` (re-run all seeders).
 

@@ -64,7 +64,7 @@ function accentRule(theme: DeckTheme, y = TITLE_Y + TITLE_H + 4): DeckElement {
 }
 
 function footerEls(theme: DeckTheme, slideNumber?: number): DeckElement[] {
-  const out = [text("footer", `${theme.logoText ?? "Calloway & Reyes LLP"}  ·  Privileged & Confidential  ·  Attorney Work Product`, { x: M, y: SLIDE_H - 44, w: 800, h: 28 }, { fontSize: 10, color: "muted", valign: "middle", padding: 0 }, "Footer")];
+  const out = [text("footer", `${theme.logoText ?? "Seeger Weiss LLP"}  ·  Privileged & Confidential  ·  Attorney Work Product`, { x: M, y: SLIDE_H - 44, w: 800, h: 28 }, { fontSize: 10, color: "muted", valign: "middle", padding: 0 }, "Footer")];
   if (slideNumber) out.push(text("footer", String(slideNumber), { x: SLIDE_W - M - 60, y: SLIDE_H - 44, w: 60, h: 28 }, { fontSize: 10, color: "muted", align: "right", valign: "middle", padding: 0 }, "Slide number"));
   return out;
 }
@@ -93,7 +93,7 @@ export function buildSlide(layout: SlideLayout, c: SlideContent, theme: DeckThem
       elements.push(t);
       if (c.subtitle) { const s = text("subtitle", c.subtitle, { x: 96, y: 428, w: 1080, h: 96 }, { fontSize: 22, color: fg, opacity: 0.85, valign: "top", lineHeight: 1.3 }, "Subtitle"); s.style.fontSize = fitFontSize(s, theme, 22, 16); elements.push(s); }
       elements.push(text("date", c.date ?? "", { x: 96, y: 580, w: 700, h: 36 }, { fontSize: 15, color: fg, opacity: 0.75, valign: "middle" }, "Date / presenter"));
-      elements.push(text("logo", theme.logoText ?? "Calloway & Reyes LLP", { x: 96, y: 636, w: 600, h: 36 }, { fontFamily: "heading", fontSize: 16, bold: true, color: fg, valign: "middle", letterSpacing: 1 }, "Firm"));
+      elements.push(text("logo", theme.logoText ?? "Seeger Weiss LLP", { x: 96, y: 636, w: 600, h: 36 }, { fontFamily: "heading", fontSize: 16, bold: true, color: fg, valign: "middle", letterSpacing: 1 }, "Firm"));
       elements.push(text("footer", "PRIVILEGED & CONFIDENTIAL · ATTORNEY WORK PRODUCT", { x: 700, y: 636, w: 484, h: 36 }, { fontSize: 10, color: fg, opacity: 0.6, align: "right", valign: "middle", letterSpacing: 1 }, "Confidentiality"));
       break;
     }

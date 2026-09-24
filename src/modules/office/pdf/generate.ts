@@ -373,7 +373,7 @@ class Typesetter {
     }
     if (s.outline !== false && this.outline.length) setOutline(this.doc, this.outline.map((o) => ({ ...o, children: o.children?.length ? o.children : undefined })));
     this.doc.setTitle(s.title);
-    this.doc.setAuthor(s.author ?? "Calloway & Reyes LLP");
+    this.doc.setAuthor(s.author ?? "Seeger Weiss LLP");
     if (s.subject) this.doc.setSubject(s.subject);
     if (s.keywords) this.doc.setKeywords(s.keywords);
     this.doc.setCreator("LeClaude PDF");

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { aiConfig } from "@/lib/ai/config";
 import { db } from "@/lib/db";
+import { IntegrityPanel } from "@/modules/settings/integrity-panel";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings" };
@@ -55,6 +56,7 @@ export default function SettingsPage() {
           ))}
         </CardContent>
       </Card>
+      <IntegrityPanel />
     </div>
   );
 }

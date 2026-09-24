@@ -85,7 +85,7 @@ const TEMPLATES: TemplateDef[] = [
           { label: "medium", description: "Negotiable issues: one-way obligations against our client, perpetual confidentiality for non-trade-secret information, non-solicit, unusual venue, broad definition of Confidential Information" },
           { label: "high", description: "Unacceptable as drafted: residuals clause against a disclosing client, IP assignment or license grant, indemnity or liquidated damages, exclusivity or standstill, compelled-disclosure carve-out missing, unlimited term with no return/destroy obligation" },
         ],
-        instructions: "Apply Calloway & Reyes standard NDA positions. Weight issues by which side the client is on: a residuals clause is high risk for a disclosing client but low risk for a receiving client.",
+        instructions: "Apply Seeger Weiss standard NDA positions. Weight issues by which side the client is on: a residuals clause is high risk for a disclosing client but low risk for a receiving client.",
       }),
       N("draft", "ai.draft", "Draft issues memo", {
         kind: "memo",

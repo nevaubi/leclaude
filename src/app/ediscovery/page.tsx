@@ -24,11 +24,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
   const linkedDoc = sp.doc ? d.edocs.get(sp.doc) ?? d.edocs.findOne((x) => x.bates.toLowerCase() === sp.doc!.toLowerCase()) : null;
   const requestedMatter = sp.matter ?? linkedDoc?.matterId;
   const matterId = requestedMatter && matters.some((m) => m.id === requestedMatter) ? requestedMatter : matters.find((m) => m.id === MATTERS.afff)?.id ?? matters[0]?.id ?? MATTERS.afff;
-  // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module.
+  // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module, and
+  // `?view=privilege` (privilege-log tasks) opens the Codes & privilege tab on the log section.
   const requested = sp.tab ?? sp.view;
-  const tab = (REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
+  const codesSection = requested === "privilege" || requested === "production" || requested === "rules" ? requested : undefined;
+  const tab = (codesSection ? "codes" : REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
   const reviewers = d.people
-    .find((p) => p.organization === "Calloway & Reyes LLP" && (p.role === "attorney" || p.role === "paralegal" || p.role === "staff"))
+    .find((p) => p.organization === "Seeger Weiss LLP" && (p.role === "attorney" || p.role === "paralegal" || p.role === "staff"))
     .map((p) => ({ id: p.id, name: p.name, title: p.title }));
   return (
     <Suspense fallback={<ReviewSkeleton />}>
@@ -36,6 +38,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
         matters={matters}
         initialMatterId={matterId}
         initialTab={tab}
+        initialCodesSection={codesSection}
         initialDocId={linkedDoc?.id ?? sp.doc}
         initialQuery={sp.q}
         initialCustodian={sp.custodian}

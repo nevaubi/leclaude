@@ -127,15 +127,15 @@ export interface DeckContent {
 // ---------------------------------------------------------------------------
 
 export const THEMES: DeckTheme[] = [
-  { id: "calloway-navy", name: "Calloway Navy", fonts: { heading: "Georgia", body: "Calibri" }, colors: { bg: "#FFFFFF", fg: "#14213D", accent: "#1F3A6B", muted: "#6B7280", accent2: "#C8A24A", surface: "#F3F5F9" }, logoText: "Calloway & Reyes LLP", titleBg: "#14213D", titleFg: "#FFFFFF" },
-  { id: "counsel-slate", name: "Counsel Slate", fonts: { heading: "Segoe UI", body: "Segoe UI" }, colors: { bg: "#F7F8FA", fg: "#1E2430", accent: "#2F6F8F", muted: "#6E7787", accent2: "#D97706", surface: "#FFFFFF" }, logoText: "Calloway & Reyes LLP", titleBg: "#1E2430", titleFg: "#F7F8FA" },
-  { id: "courtroom-serif", name: "Courtroom Serif", fonts: { heading: "Times New Roman", body: "Georgia" }, colors: { bg: "#FBF8F1", fg: "#2B2118", accent: "#7A1F1F", muted: "#7C6F64", accent2: "#B08D57", surface: "#F3EDE0" }, logoText: "Calloway & Reyes LLP", titleBg: "#2B2118", titleFg: "#FBF8F1" },
+  { id: "seeger-navy", name: "Seeger Navy", fonts: { heading: "Georgia", body: "Calibri" }, colors: { bg: "#FFFFFF", fg: "#14213D", accent: "#1F3A6B", muted: "#6B7280", accent2: "#C8A24A", surface: "#F3F5F9" }, logoText: "Seeger Weiss LLP", titleBg: "#14213D", titleFg: "#FFFFFF" },
+  { id: "counsel-slate", name: "Counsel Slate", fonts: { heading: "Segoe UI", body: "Segoe UI" }, colors: { bg: "#F7F8FA", fg: "#1E2430", accent: "#2F6F8F", muted: "#6E7787", accent2: "#D97706", surface: "#FFFFFF" }, logoText: "Seeger Weiss LLP", titleBg: "#1E2430", titleFg: "#F7F8FA" },
+  { id: "courtroom-serif", name: "Courtroom Serif", fonts: { heading: "Times New Roman", body: "Georgia" }, colors: { bg: "#FBF8F1", fg: "#2B2118", accent: "#7A1F1F", muted: "#7C6F64", accent2: "#B08D57", surface: "#F3EDE0" }, logoText: "Seeger Weiss LLP", titleBg: "#2B2118", titleFg: "#FBF8F1" },
   { id: "modern-mono", name: "Modern Mono", fonts: { heading: "Consolas", body: "Arial" }, colors: { bg: "#111318", fg: "#F2F4F8", accent: "#7CC4FF", muted: "#9AA3B2", accent2: "#FFB454", surface: "#1B1F27" }, logoText: "C&R", titleBg: "#0B0D12", titleFg: "#F2F4F8" },
-  { id: "client-light", name: "Client Light", fonts: { heading: "Calibri", body: "Calibri" }, colors: { bg: "#FFFFFF", fg: "#222222", accent: "#0F766E", muted: "#6B7280", accent2: "#F59E0B", surface: "#F0FDFA" }, logoText: "Calloway & Reyes LLP", titleBg: "#0F766E", titleFg: "#FFFFFF" },
-  { id: "verdict-ember", name: "Verdict Ember", fonts: { heading: "Cambria", body: "Arial" }, colors: { bg: "#1C1917", fg: "#FAFAF9", accent: "#F97316", muted: "#A8A29E", accent2: "#FBBF24", surface: "#292524" }, logoText: "Calloway & Reyes LLP", titleBg: "#0C0A09", titleFg: "#FAFAF9" },
+  { id: "client-light", name: "Client Light", fonts: { heading: "Calibri", body: "Calibri" }, colors: { bg: "#FFFFFF", fg: "#222222", accent: "#0F766E", muted: "#6B7280", accent2: "#F59E0B", surface: "#F0FDFA" }, logoText: "Seeger Weiss LLP", titleBg: "#0F766E", titleFg: "#FFFFFF" },
+  { id: "verdict-ember", name: "Verdict Ember", fonts: { heading: "Cambria", body: "Arial" }, colors: { bg: "#1C1917", fg: "#FAFAF9", accent: "#F97316", muted: "#A8A29E", accent2: "#FBBF24", surface: "#292524" }, logoText: "Seeger Weiss LLP", titleBg: "#0C0A09", titleFg: "#FAFAF9" },
 ];
 
-export const DEFAULT_THEME_ID = "calloway-navy";
+export const DEFAULT_THEME_ID = "seeger-navy";
 
 export function getTheme(id: string | undefined | null): DeckTheme {
   return THEMES.find((t) => t.id === id) ?? THEMES[0];

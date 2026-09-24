@@ -50,7 +50,13 @@ export function BulkBar({ hits, onCode }: { hits: DocRow[]; onCode: (patch: Part
           <DropdownMenuItem onClick={() => onCode({ privileged: false })}>Not privileged</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button size="xs" variant="outline" onClick={() => onCode({ hot: true })}><Flame className="size-3.5 text-destructive" /> Hot</Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button size="xs" variant="outline"><Flame className="size-3.5 text-destructive" /> Hot <ChevronDown className="size-3" /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onClick={() => onCode({ hot: true })}><Flame className="size-4 text-destructive" /> Flag hot</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onCode({ hot: false })}>Not hot</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <DropdownMenu>
         <DropdownMenuTrigger asChild><Button size="xs" variant="outline"><Tags className="size-3.5" /> Issue tags <ChevronDown className="size-3" /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-80 overflow-auto">

@@ -15,7 +15,7 @@ export const HALE_DEPOSITION: Deposition = {
   witnessTitle: "Director, Environmental Health & Safety, Meridian Fluorochem Corp.",
   date: "2026-05-13",
   takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)",
-  defendingBy: "Jordan Whitfield (Calloway & Reyes LLP)",
+  defendingBy: "Jordan Whitfield (Seeger Weiss LLP)",
   location: "Klein & Associates, 1180 Avenue of the Americas, New York, NY — 14th floor",
   volume: 1,
   pages: 262,

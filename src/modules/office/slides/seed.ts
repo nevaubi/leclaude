@@ -326,7 +326,7 @@ timeline:
 const CLE_OUTLINE = `# Rule 702 after the 2023 amendment
 kicker: CLE · Evidence · 1.0 general credit
 subtitle: What changed, what courts are doing with it, and how to brief it
-date: Calloway & Reyes LLP · October 2026
+date: Seeger Weiss LLP · October 2026
 
 # Agenda
 - The text: what the amendment changed
@@ -390,7 +390,7 @@ export function seedSlides(db: Database) {
       title: "AFFF bellwether — case strategy (Group C)",
       matterId: MATTERS.afff,
       templateId: "slides-case-strategy",
-      themeId: "calloway-navy",
+      themeId: "seeger-navy",
       outline: AFFF_OUTLINE,
       createdAt: "2026-09-17T15:10:00Z",
       tags: ["strategy", "bellwether", "MDL 2873"],

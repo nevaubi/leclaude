@@ -261,7 +261,7 @@ export function formatBluebook(hit: SearchHit): string {
     case "statutes":
       return hit.cite ? `${hit.cite}${hit.date ? ` (${yearOf(hit.date)})` : ""}` : hit.title;
     case "library":
-      return `${hit.title} (Calloway & Reyes LLP ${hit.library?.type ?? "library"}${hit.date ? `, ${bluebookDate(hit.date)}` : ""})`;
+      return `${hit.title} (Seeger Weiss LLP ${hit.library?.type ?? "library"}${hit.date ? `, ${bluebookDate(hit.date)}` : ""})`;
     case "ediscovery":
       return `${hit.edoc?.bates ?? hit.cite ?? ""}, ${hit.title}${hit.date ? ` (${bluebookDate(hit.date)})` : ""}`;
     case "web":

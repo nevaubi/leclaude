@@ -95,7 +95,7 @@ export function DocTable({ hits, loading, total, totalWorkspace, tookMs, semanti
           {/* header */}
           <div className="sticky top-0 z-10 flex h-8 border-b bg-background/95 text-[11px] font-medium text-muted-foreground backdrop-blur" role="row">
             {columns.map((col) => (
-              <div key={col.id} style={{ width: col.width }} className={cn("relative flex shrink-0 items-center gap-1 px-2", col.align === "right" && "justify-end")} role="columnheader" aria-sort={sort === col.sort ? (dir === "desc" ? "descending" : "ascending") : undefined}>
+              <div key={col.id} style={{ width: col.width }} className={cn("group relative flex shrink-0 items-center gap-1 px-2", col.align === "right" && "justify-end")} role="columnheader" aria-sort={sort === col.sort ? (dir === "desc" ? "descending" : "ascending") : undefined}>
                 {col.id === "select" ? (
                   <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} onCheckedChange={() => setSelected(allSelected ? [] : hits.map((h) => h.id))} className="size-3.5" aria-label="Select all in view" />
                 ) : col.sort ? (

@@ -3,6 +3,8 @@
  * through `@/lib/db` collections; keep additions backwards compatible.
  */
 
+import type { Provenance } from "@/lib/integrity/types";
+
 export type ID = string;
 export type ISODate = string; // ISO-8601
 
@@ -132,6 +134,7 @@ export interface EDocument {
   aiScore?: number; // 0-100 predicted responsiveness
   aiSummary?: string;
   aiIssues?: string[];
+  aiProvenance?: Provenance;
   entities?: { people: string[]; orgs: string[]; places: string[]; chemicals?: string[] };
   coding: CodingDecision;
   isDuplicateOf?: ID;
@@ -184,6 +187,7 @@ export interface TimelineEvent {
   disputed?: boolean;
   createdBy: "ai" | "user";
   verified?: boolean;
+  provenance?: Provenance;
 }
 
 export interface Relationship {
@@ -207,6 +211,7 @@ export interface Conflict {
   analysis: string;
   status: "open" | "resolved" | "dismissed";
   createdBy: "ai" | "user";
+  provenance?: Provenance;
 }
 
 export interface IssueCode {

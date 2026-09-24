@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Search, ScrollText, Sparkles, Highlighter, Download, FileText, Loader2, RefreshCw, X, Gavel, Paperclip, Flag, CalendarClock, ChevronRight, Trash2, Pencil, Check, BookOpenText } from "lucide-react";
+import { Search, ScrollText, Sparkles, Highlighter, Download, FileText, Loader2, RefreshCw, X, Gavel, Paperclip, Flag, CalendarClock, ChevronRight, Trash2, Pencil, Check, BookOpenText, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import type { Deposition, DepositionQA } from "@/lib/types/domain";
 import { OBJECTION_RULINGS, QA_FLAGS, formatPageLine, formatRange, type AnalysisTabProps, type Designation, type DepositionSummary, type ObjectionRuling, type QAFlag } from "../types";
 import { resolvePageLine } from "../transcript";
 import { TranscriptViewer } from "./transcript-viewer";
-import { FLAG_STYLES, FlagBadge, ListSkeleton, NoKeyCallout, ObjectionBadge, AiLabel, AiButtonHint, formatShortDate, typingTarget, OBJECTION_STYLES } from "./shared";
+import { FLAG_STYLES, FlagBadge, ListSkeleton, NoKeyCallout, ObjectionBadge, AiLabel, AiButtonHint, formatShortDate, typingTarget, useNarrowViewport, OBJECTION_STYLES } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useDeposition, useDepositions, useOverview, useTranscriptSearch, type DepositionDetail } from "./use-analysis-data";
 
 type SidePanel = "digest" | "designations" | "objections" | "exhibits" | "flags";
@@ -159,6 +159,12 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
   const [purpose, setPurpose] = React.useState<Designation["purpose"]>("affirmative");
   const [digesting, setDigesting] = React.useState(false);
   const [noKey, setNoKey] = React.useState(false);
+  // Below 1280px the transcript column cannot share the width with the 340px side panel (the shell sidebar and the
+  // deposition list already take ~540px), so the panel becomes an overlay that is closed by default.
+  const narrow = useNarrowViewport(1280);
+  const [panelOpen, setPanelOpen] = React.useState(false);
+  const panelVisible = !narrow || panelOpen;
+  const showPanel = (p: SidePanel) => { setPanel(p); if (narrow) setPanelOpen(true); };
   const dep = detail.data?.deposition;
   const transcript = React.useMemo(() => dep?.transcript ?? [], [dep]);
   const exhibitDocIds = React.useMemo(() => Object.fromEntries((detail.data?.exhibits ?? []).map((e) => [e.id, e.docId])), [detail.data]);
@@ -202,7 +208,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
       const r = await api<{ designation: Designation }>(`/api/ediscovery/analysis/depositions/${id}/designations`, { method: "POST", json: { startPage: selection.start.page, startLine: selection.start.line, endPage: end.page, endLine: end.line, purpose } });
       detail.mutate((cur) => (cur ? { ...cur, designations: [...cur.designations, r.designation].sort((a, b) => a.startPage - b.startPage || a.startLine - b.startLine) } : cur));
       setSelection({});
-      setPanel("designations");
+      showPanel("designations");
       onChanged();
       toast.success(`Designated ${formatRange(r.designation)}`, { description: purpose });
     } catch (e) { toast.error("Could not save designation", { description: (e as Error).message }); }
@@ -252,7 +258,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
   // Keyboard: j/k move, a/c/e/x flags, d designate mode, Enter commits designation, Esc cancels.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (typingTarget(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || typingTarget(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (!transcript.length) return;
       if (e.key === "j") { e.preventDefault(); setActiveIndex((i) => Math.min(transcript.length - 1, i + 1)); }
       else if (e.key === "k") { e.preventDefault(); setActiveIndex((i) => Math.max(0, i - 1)); }
@@ -311,7 +317,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
       {!transcript.length ? (
         <div className="flex flex-1 items-center justify-center p-8"><EmptyState icon={CalendarClock} title={dep.status === "scheduled" ? `Scheduled for ${formatShortDate(dep.date)}` : "No transcript yet"} description={dep.status === "scheduled" ? `${dep.location ?? ""}. Use “Prepare outline for next witness” to build the examination outline from the documents and prior testimony.` : "The transcript has not been loaded."} /></div>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b px-3 py-1.5">
               <div className="relative">
@@ -338,6 +344,11 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
               ) : (
                 <Tip label="Designate a page:line range" shortcut="D"><Button size="xs" variant="outline" onClick={() => setDesignating(true)}><Highlighter className="size-3.5" /> Designate</Button></Tip>
               )}
+              {narrow && (
+                <Tip label={panelOpen ? "Hide digest, designations, objections, exhibits and flags" : "Show digest, designations, objections, exhibits and flags"}>
+                  <Button size="icon-xs" variant="ghost" onClick={() => setPanelOpen((v) => !v)} aria-label="Toggle side panel" aria-pressed={panelOpen}>{panelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}</Button>
+                </Tip>
+              )}
             </div>
             <TranscriptViewer transcript={transcript} activeIndex={activeIndex} onActiveIndex={setActiveIndex} query={find} flagFilter={flagFilter} designations={detail.data?.designations ?? []} selection={selection} designating={designating} onPickBoundary={pickBoundary} onToggleFlag={toggleFlag} onSaveNote={saveNote} onOpenExhibit={openExhibit} exhibitDocIds={exhibitDocIds} className="flex-1" />
             <div className="flex h-7 shrink-0 items-center gap-3 border-t px-3 text-[10.5px] text-muted-foreground">
@@ -345,7 +356,8 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
               <span className="hidden md:inline"><kbd className="px-1 text-[9.5px]">j</kbd>/<kbd className="px-1 text-[9.5px]">k</kbd> move · <kbd className="px-1 text-[9.5px]">a</kbd> admission · <kbd className="px-1 text-[9.5px]">c</kbd> contradiction · <kbd className="px-1 text-[9.5px]">e</kbd> evasive · <kbd className="px-1 text-[9.5px]">x</kbd> key · <kbd className="px-1 text-[9.5px]">d</kbd> designate</span>
             </div>
           </div>
-          <aside className="hidden w-[340px] shrink-0 flex-col border-l lg:flex">
+          {panelVisible && (
+          <aside className={cn("flex w-[340px] shrink-0 flex-col border-l bg-background", narrow && "absolute inset-y-0 right-0 z-20 max-w-[85%] shadow-xl")} aria-label="Deposition side panel">
             <nav className="flex shrink-0 items-center gap-0 overflow-x-auto border-b px-1 no-scrollbar" aria-label="Deposition panels">
               {([["digest", "Digest", Sparkles], ["designations", "Designations", Highlighter], ["objections", "Objections", Gavel], ["exhibits", "Exhibits", Paperclip], ["flags", "Flags", Flag]] as [SidePanel, string, React.ElementType][]).map(([id, label, Icon]) => (
                 <button key={id} type="button" onClick={() => setPanel(id)} className={cn("relative flex h-8 shrink-0 items-center gap-1 px-1.5 text-[11.5px] font-medium transition-colors cursor-pointer", panel === id ? "text-foreground" : "text-muted-foreground hover:text-foreground")} aria-current={panel === id ? "true" : undefined} title={label}>
@@ -353,6 +365,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
                   {panel === id && <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-primary" />}
                 </button>
               ))}
+              {narrow && <Button size="icon-xs" variant="ghost" className="ml-auto shrink-0" onClick={() => setPanelOpen(false)} aria-label="Close side panel"><X className="size-3.5" /></Button>}
             </nav>
             <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
               {panel === "digest" && <DigestPanel dep={dep} digesting={digesting} noKey={noKey || !aiConfigured} onRun={() => runDigest(false)} onJump={(cite) => { const m = cite.match(/(\d+):(\d+)/); if (!m) return; const idx = resolvePageLine(transcript, `${Number(m[1])}:${Number(m[2])}`); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } else toast.info(`${cite} is not in the excerpted transcript`); }} />}
@@ -362,6 +375,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
               {panel === "flags" && <FlagsPanel transcript={transcript} onJump={(i) => { setFlagFilter(null); setActiveIndex(i); }} />}
             </div>
           </aside>
+          )}
         </div>
       )}
     </div>

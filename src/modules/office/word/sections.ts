@@ -6,11 +6,11 @@ import type { Matter } from "@/lib/types/domain";
 import { makeHeading, makeParagraph, makeTable, newId, type PMNode, type DocSection } from "./doc-model";
 
 export const FIRM = {
-  name: "Calloway & Reyes LLP",
+  name: "Seeger Weiss LLP",
   address1: "1201 Main Street, Suite 1900",
   address2: "Columbia, South Carolina 29201",
   phone: "(803) 555-0140",
-  email: "jwhitfield@callowayreyes.com",
+  email: "jwhitfield@seegerweiss.com",
 };
 
 export type TemplateSectionId = "signature_block" | "certificate_of_service" | "table_of_authorities_placeholder" | "caption_block" | "notary_block" | "verification" | "proposed_order" | "definitions" | "exhibit_list";

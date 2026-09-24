@@ -26,7 +26,7 @@ export const BROOKS_DEPOSITION: Deposition = {
   witnessTitle: "Product Stewardship Manager, Meridian Fluorochem Corp.",
   date: "2026-09-10",
   takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)",
-  defendingBy: "Priya Raman (Calloway & Reyes LLP)",
+  defendingBy: "Priya Raman (Seeger Weiss LLP)",
   location: "Meridian Fluorochem Corp., Decatur, IL",
   volume: 1,
   pages: 188,
@@ -57,8 +57,8 @@ export const BROOKS_DEPOSITION: Deposition = {
 };
 
 export const SCHEDULED_DEPOSITIONS: Deposition[] = [
-  { id: "dep_afff_hale_v2", matterId: M, witnessId: P.gregoryHale, witnessName: "Gregory Hale", witnessTitle: "Director, Environmental Health & Safety, Meridian Fluorochem Corp.", date: "2026-09-24", takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)", defendingBy: "Jordan Whitfield (Calloway & Reyes LLP)", location: "Calloway & Reyes LLP, Charleston — Conference Room 4B", volume: 2, pages: 0, transcript: [], exhibits: [], status: "scheduled" },
-  { id: "dep_afff_suarez_v1", matterId: M, witnessId: P.martinSuarez, witnessName: "Martin Suarez", witnessTitle: "Regulatory Affairs Counsel, Meridian Fluorochem Corp.", date: "2026-10-21", takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)", defendingBy: "Jordan Whitfield (Calloway & Reyes LLP)", location: "Calloway & Reyes LLP, Charleston — Conference Room 4B", volume: 1, pages: 0, transcript: [], exhibits: [], status: "scheduled" },
+  { id: "dep_afff_hale_v2", matterId: M, witnessId: P.gregoryHale, witnessName: "Gregory Hale", witnessTitle: "Director, Environmental Health & Safety, Meridian Fluorochem Corp.", date: "2026-09-24", takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)", defendingBy: "Jordan Whitfield (Seeger Weiss LLP)", location: "Seeger Weiss LLP, Charleston — Conference Room 4B", volume: 2, pages: 0, transcript: [], exhibits: [], status: "scheduled" },
+  { id: "dep_afff_suarez_v1", matterId: M, witnessId: P.martinSuarez, witnessName: "Martin Suarez", witnessTitle: "Regulatory Affairs Counsel, Meridian Fluorochem Corp.", date: "2026-10-21", takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)", defendingBy: "Jordan Whitfield (Seeger Weiss LLP)", location: "Seeger Weiss LLP, Charleston — Conference Room 4B", volume: 1, pages: 0, transcript: [], exhibits: [], status: "scheduled" },
 ];
 
 export const AFFF_DEPOSITIONS: Deposition[] = [HALE_DEPOSITION, VOSS_DEPOSITION, PRYCE_DEPOSITION, BROOKS_DEPOSITION, ...SCHEDULED_DEPOSITIONS];

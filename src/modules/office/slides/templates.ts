@@ -6,7 +6,7 @@ import { parseOutline } from "./layouts";
 import { emptyDeck, getTheme, type DeckContent } from "./model";
 
 /** Build a deck from the outline grammar (see layouts.ts). */
-export function deckFromOutline(outline: string, themeId = "calloway-navy"): DeckContent {
+export function deckFromOutline(outline: string, themeId = "seeger-navy"): DeckContent {
   const theme = getTheme(themeId);
   const { slides, themeId: declared } = parseOutline(outline, theme);
   const deck = emptyDeck(declared ?? themeId);
@@ -249,7 +249,7 @@ layout: table
 # Our proposal
 layout: quote
 quote: A resolution today at $[X] reflects the realistic range of outcomes, avoids two years of litigation, and lets both parties move on.
-by: Calloway & Reyes LLP, on behalf of [CLIENT]
+by: Seeger Weiss LLP, on behalf of [CLIENT]
 
 # Next steps
 - Mediator's proposal by [DATE]
@@ -459,7 +459,7 @@ function cleOutline(): string {
   return `# Rule 702 after the 2023 amendment
 kicker: CLE · Evidence · 1.0 general credit
 subtitle: What changed, what courts are doing with it, and how to brief it
-date: Calloway & Reyes LLP · ${today()}
+date: Seeger Weiss LLP · ${today()}
 
 # Agenda
 - The text: what the amendment changed
@@ -523,7 +523,7 @@ subtitle: Materials and citations available on the firm library under Knowledge 
 
 function allHandsOutline(): string {
   return `# Firm all-hands
-kicker: Calloway & Reyes LLP · Quarterly all-hands
+kicker: Seeger Weiss LLP · Quarterly all-hands
 subtitle: Wins, pipeline, people and what is next
 date: ${today()}
 
@@ -577,17 +577,17 @@ timeline:
 
 # Thank you
 layout: section
-subtitle: Questions, ideas and feedback: knowledge@callowayreyes.com`;
+subtitle: Questions, ideas and feedback: knowledge@seegerweiss.com`;
 }
 
 export const SLIDES_TEMPLATES: OfficeTemplate[] = [
-  { id: "slides-case-strategy", kind: "slides", name: "Case strategy deck", description: "Themes, chronology, key documents with Bates cites, damages exposure, risks and next steps for an internal or client strategy session.", category: "Litigation", practiceArea: "Litigation", tags: ["strategy", "litigation", "internal"], build: ({ matterId }) => deckFromOutline(caseStrategyOutline(matterOf(matterId)), "calloway-navy") },
+  { id: "slides-case-strategy", kind: "slides", name: "Case strategy deck", description: "Themes, chronology, key documents with Bates cites, damages exposure, risks and next steps for an internal or client strategy session.", category: "Litigation", practiceArea: "Litigation", tags: ["strategy", "litigation", "internal"], build: ({ matterId }) => deckFromOutline(caseStrategyOutline(matterOf(matterId)), "seeger-navy") },
   { id: "slides-client-update", kind: "slides", name: "Client status update", description: "Executive summary, developments, deadline table, budget chart and decisions needed — client-ready in the Client Light theme.", category: "Client", practiceArea: "Litigation", tags: ["client", "status", "budget"], build: ({ matterId }) => deckFromOutline(clientUpdateOutline(matterOf(matterId)), "client-light") },
   { id: "slides-mediation", kind: "slides", name: "Mediation presentation", description: "FRE 408 mediation statement: competing narratives, what a jury will see, outcome ranges, cost of continuing and a settlement framework.", category: "Litigation", practiceArea: "Litigation", tags: ["mediation", "settlement"], build: ({ matterId }) => deckFromOutline(mediationOutline(matterOf(matterId)), "counsel-slate") },
   { id: "slides-depo-prep", kind: "slides", name: "Deposition prep for witness", description: "Witness-facing preparation deck: goals, ground rules, themes, documents to know, the hard questions, objections and logistics.", category: "Litigation", practiceArea: "Litigation", tags: ["deposition", "witness", "prep"], build: ({ matterId }) => deckFromOutline(depoPrepOutline(matterOf(matterId)), "courtroom-serif") },
-  { id: "slides-expert-timeline", kind: "slides", name: "Expert timeline", description: "State-of-the-science and regulatory timelines, reliance-list table, Rule 702 factors and cross-examination vulnerabilities.", category: "Litigation", practiceArea: "Products Liability", tags: ["expert", "Daubert", "timeline"], build: ({ matterId }) => deckFromOutline(expertTimelineOutline(matterOf(matterId)), "calloway-navy") },
+  { id: "slides-expert-timeline", kind: "slides", name: "Expert timeline", description: "State-of-the-science and regulatory timelines, reliance-list table, Rule 702 factors and cross-examination vulnerabilities.", category: "Litigation", practiceArea: "Products Liability", tags: ["expert", "Daubert", "timeline"], build: ({ matterId }) => deckFromOutline(expertTimelineOutline(matterOf(matterId)), "seeger-navy") },
   { id: "slides-board-briefing", kind: "slides", name: "Board M&A briefing (Project Harbor)", description: "Deal overview, key terms table, diligence findings, risks and mitigants, timeline to closing and the resolutions requested.", category: "Transactional", practiceArea: "Corporate / M&A", tags: ["M&A", "board", "diligence"], build: ({ matterId }) => deckFromOutline(boardBriefingOutline(matterOf(matterId)), "counsel-slate") },
   { id: "slides-cle-rule-702", kind: "slides", name: "CLE training deck (Rule 702)", description: "The 2023 amendment to Rule 702: text, before/after comparison, circuit trends table, briefing strategy and a hypothetical.", category: "Internal", tags: ["CLE", "evidence", "training"], build: () => deckFromOutline(cleOutline(), "courtroom-serif") },
   { id: "slides-all-hands", kind: "slides", name: "Firm all-hands", description: "Quarterly all-hands: wins, pipeline chart, people, initiatives and the calendar.", category: "Internal", tags: ["firm", "all-hands"], build: () => deckFromOutline(allHandsOutline(), "modern-mono") },
-  { id: "slides-blank", kind: "slides", name: "Blank deck", description: "A single title slide in the firm theme.", category: "Internal", tags: ["blank"], build: ({ title }) => deckFromOutline(`# ${title ?? "Untitled deck"}\nsubtitle: \ndate: ${today()}`, "calloway-navy") },
+  { id: "slides-blank", kind: "slides", name: "Blank deck", description: "A single title slide in the firm theme.", category: "Internal", tags: ["blank"], build: ({ title }) => deckFromOutline(`# ${title ?? "Untitled deck"}\nsubtitle: \ndate: ${today()}`, "seeger-navy") },
 ];

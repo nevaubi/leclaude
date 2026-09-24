@@ -37,6 +37,7 @@ export function ConflictsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.getAttribute("role") === "combobox")) return;
       if (e.metaKey || e.ctrlKey || e.altKey || !rows.length) return;

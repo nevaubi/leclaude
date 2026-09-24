@@ -123,7 +123,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "trigger.email", category: "trigger", label: "Inbound email", short: "Email", icon: "Mail",
     description: "Fires when a message arrives at the workflow inbox address (delivered through POST /api/workflows/events).",
     keywords: ["inbox", "message", "mail", "intake"],
-    defaultConfig: { address: "intake@workflows.callowayreyes.com", subjectContains: "" },
+    defaultConfig: { address: "intake@workflows.seegerweiss.com", subjectContains: "" },
     fields: [
       { key: "address", label: "Inbox address", type: "text" },
       { key: "subjectContains", label: "Subject contains", type: "text", placeholder: "NDA" },
@@ -136,7 +136,7 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     type: "ai.prompt", category: "ai", label: "AI prompt", short: "Prompt", icon: "Sparkles", usesAI: true,
     description: "General-purpose model step with your own instructions and a prompt template. Returns text or JSON that matches a schema; can research with web, legal and firm sources.",
     keywords: ["gpt", "llm", "generate", "ask", "completion", "json"],
-    defaultConfig: { instructions: "You are a careful senior litigator at Calloway & Reyes LLP.", prompt: "{{inputs.text}}", modelTier: "primary", output: "text", jsonSchema: "", research: { web: false, legal: false, internal: false }, retries: 1, timeoutSec: 180 },
+    defaultConfig: { instructions: "You are a careful senior litigator at Seeger Weiss LLP.", prompt: "{{inputs.text}}", modelTier: "primary", output: "text", jsonSchema: "", research: { web: false, legal: false, internal: false }, retries: 1, timeoutSec: 180 },
     fields: [
       { key: "instructions", label: "Instructions (system)", type: "textarea", rows: 4, required: true },
       { key: "prompt", label: "Prompt", type: "template", rows: 6, required: true, help: "Use {{inputs.key}}, {{steps.nodeId.output.path}}, {{matter.name}}, {{loop.item}}." },

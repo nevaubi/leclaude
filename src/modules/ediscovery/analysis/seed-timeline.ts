@@ -78,7 +78,7 @@ export const AFFF_TIMELINE: TimelineEvent[] = [
   ev("2017-11-02", "Benchmark-dose analysis: BMDL10 0.03 mg/kg-day for hepatic endpoints", "scientific", 3, [doc("MFC-0043211", "ed_afff_43211"), depo("dep_afff_voss_v1", "Voss 139:4")], { personIds: [P.helenVoss] }),
   ev("2017-10-11", "Q3 2017 EHS report references July/August 2017 groundwater interims that cannot be located", "litigation", 4, [doc("MFC-0043105", "ed_afff_43105"), depo("dep_afff_hale_v1", "Hale 190:14")], { personIds: [P.gregoryHale], disputed: true }),
   ev("2018-12-07", "JPML creates MDL No. 2873 (D.S.C.)", "litigation", 4, [ext("In re Aqueous Film-Forming Foams Prods. Liab. Litig., MDL No. 2873 (J.P.M.L. Dec. 7, 2018)")], {}),
-  ev("2023-02-14", "Calloway & Reyes engaged for Meridian Fluorochem", "litigation", 2, [ext("Engagement letter")], { personIds: [P.jordanWhitfield, P.priyaRaman] }),
+  ev("2023-02-14", "Seeger Weiss engaged for Meridian Fluorochem", "litigation", 2, [ext("Engagement letter")], { personIds: [P.jordanWhitfield, P.priyaRaman] }),
   ev("2026-05-13", "Deposition of Gregory Hale, Vol. I", "testimony", 4, [depo("dep_afff_hale_v1", "Hale Vol. I")], { personIds: [P.gregoryHale, P.opposingCounselKlein, P.jordanWhitfield] }),
   ev("2026-06-17", "Deposition of Helen Voss, Vol. I", "testimony", 4, [depo("dep_afff_voss_v1", "Voss Vol. I")], { personIds: [P.helenVoss, P.opposingCounselKlein, P.jordanWhitfield] }),
   ev("2026-07-22", "Deposition of Alan Pryce", "testimony", 4, [depo("dep_afff_pryce_v1", "Pryce Vol. I")], { personIds: [P.alanPryce, P.opposingCounselKlein, P.jordanWhitfield, P.priyaRaman] }),

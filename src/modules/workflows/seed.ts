@@ -212,7 +212,7 @@ const RESEARCH_MEMO_NG = `# Research memo — Consequential-damages waivers and 
 
 const CLIENT_REPORT_AFFF = `# Weekly status report — In re: AFFF Products Liability Litigation (MDL No. 2873)
 
-**Prepared for:** Meridian Fluorochem Corp., Legal Department · **Week ending:** September 18, 2026 · **From:** Calloway & Reyes LLP
+**Prepared for:** Meridian Fluorochem Corp., Legal Department · **Week ending:** September 18, 2026 · **From:** Seeger Weiss LLP
 
 ## Summary
 

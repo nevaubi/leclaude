@@ -124,7 +124,7 @@ function YearHistogram({ years, selected, onToggle }: { years: { year: string; c
             })}
           </div>
           <div className="mt-1 flex justify-between text-[10px] tabular text-muted-foreground"><span>{first}</span>{range.length > 2 && <span>{range[Math.floor(range.length / 2)]}</span>}<span>{last}</span></div>
-          {selected.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{selected.sort().map((y) => <button key={y} onClick={() => onToggle(y)} className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[10px] text-primary hover:bg-primary/20 cursor-pointer">{y} ×</button>)}</div>}
+          {selected.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{[...selected].sort().map((y) => <button key={y} onClick={() => onToggle(y)} className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[10px] text-primary hover:bg-primary/20 cursor-pointer">{y} ×</button>)}</div>}
         </div>
       )}
     </div>

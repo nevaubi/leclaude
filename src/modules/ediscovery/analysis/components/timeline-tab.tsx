@@ -117,26 +117,26 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
           {tl.loading && !tl.data ? <div className="space-y-2 p-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div> : !events.length ? (
             <div className="flex h-full items-center justify-center p-8"><EmptyState icon={Activity} title={hasFilters ? "No events match the filters" : "No events yet"} description={hasFilters ? "Clear a filter or widen the date range." : "Add events by hand or extract them from documents."} action={hasFilters ? <Button size="sm" variant="outline" onClick={() => setFilters({ categories: [] })}>Clear filters</Button> : <Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" /> Add event</Button>} /></div>
           ) : (
-            <table className="w-full border-collapse text-[12px]">
+            <table className="w-full table-fixed border-collapse text-[12px]">
               <thead className="sticky top-0 z-10 bg-muted/80 text-[10.5px] uppercase tracking-wider text-muted-foreground backdrop-blur">
                 <tr>
-                  <th className="w-[112px] border-b px-3 py-1.5 text-left font-semibold">Date</th>
+                  <th className="w-[104px] border-b px-3 py-1.5 text-left font-semibold">Date</th>
                   <th className="border-b px-3 py-1.5 text-left font-semibold">Event</th>
-                  <th className="w-[124px] border-b px-3 py-1.5 text-left font-semibold">Category</th>
-                  <th className="w-[260px] border-b px-3 py-1.5 text-left font-semibold">Sources</th>
-                  <th className="w-[64px] border-b px-2 py-1.5 text-center font-semibold" title="Verified"><ShieldCheck className="mx-auto size-3.5" /></th>
-                  <th className="w-[64px] border-b px-2 py-1.5 text-center font-semibold" title="Disputed"><AlertOctagon className="mx-auto size-3.5" /></th>
-                  <th className="w-[40px] border-b" />
+                  <th className="w-[118px] border-b px-3 py-1.5 text-left font-semibold">Category</th>
+                  <th className="w-[200px] border-b px-3 py-1.5 text-left font-semibold xl:w-[260px]">Sources</th>
+                  <th className="w-[44px] border-b px-2 py-1.5 text-center font-semibold" title="Verified"><ShieldCheck className="mx-auto size-3.5" /></th>
+                  <th className="w-[44px] border-b px-2 py-1.5 text-center font-semibold" title="Disputed"><AlertOctagon className="mx-auto size-3.5" /></th>
+                  <th className="w-[36px] border-b" />
                 </tr>
               </thead>
               <tbody>
                 {events.map((e) => (
                   <tr key={e.id} ref={(el) => { if (el) rowRefs.current.set(e.id, el); else rowRefs.current.delete(e.id); }} onClick={() => setSelectedId(e.id === selectedId ? null : e.id)} className={cn("group cursor-pointer border-b align-top transition-colors hover:bg-accent/40", selectedId === e.id && "bg-primary/8")}>
-                    <td className="px-3 py-2 font-mono text-[11px] tabular text-muted-foreground whitespace-nowrap">{formatEventDate(e)}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-mono text-[11px] tabular text-muted-foreground">{formatEventDate(e)}</td>
+                    <td className="min-w-0 px-3 py-2">
                       <div className="flex items-start gap-2">
                         <span className="mt-1 inline-flex shrink-0 gap-px" title={`Significance ${e.significance}/5`}>{Array.from({ length: 5 }).map((_, i) => <span key={i} className={cn("h-2.5 w-1 rounded-sm", i < e.significance ? "bg-primary/70" : "bg-muted")} />)}</span>
-                        <div className="min-w-0">
+                        <div className="min-w-0 break-words">
                           <div className="font-medium leading-snug">{e.title}{e.createdBy === "ai" && <AiLabel className="ml-1.5 align-middle" />}</div>
                           {e.description && <div className="mt-0.5 line-clamp-2 text-[11.5px] text-muted-foreground">{e.description}</div>}
                           {e.personIds?.length ? <div className="mt-0.5 text-[10.5px] text-muted-foreground">{e.personIds.map((p) => people.get(p) ?? p).join(", ")}</div> : null}

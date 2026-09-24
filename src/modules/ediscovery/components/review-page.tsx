@@ -17,7 +17,7 @@ import { useReviewStore } from "./store";
 import { api, useIssueCodes, useStats } from "./use-review-data";
 import { MatterHeader } from "./matter-header";
 import { ReviewTab as ReviewTabView } from "./review-tab";
-import { CodesTab } from "./codes-tab";
+import { CodesTab, type CodesSection } from "./codes-tab";
 import { PredictDialog } from "./predict-dialog";
 import { Kbd } from "./shared";
 import type { IssueCode } from "@/lib/types/domain";
@@ -53,6 +53,8 @@ export interface ReviewPageProps {
   matters: MatterOption[];
   initialMatterId: string;
   initialTab: ReviewTab;
+  /** Section of the Codes & privilege tab to open first (deep links such as `?view=privilege`). */
+  initialCodesSection?: CodesSection;
   initialDocId?: string;
   initialQuery?: string;
   initialCustodian?: string;
@@ -117,6 +119,7 @@ export function ReviewPage(props: ReviewPageProps) {
   // Global shortcuts for the page.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.getAttribute("role") === "combobox");
       if (e.key === "?" && !typing) { e.preventDefault(); setHelpOpen((o) => !o); }
@@ -196,7 +199,7 @@ export function ReviewPage(props: ReviewPageProps) {
           {tab === "timeline" && <TimelineTab matterId={matterId} onOpenDocument={openDocument} />}
           {tab === "people" && <PeopleGraphTab matterId={matterId} onOpenDocument={openDocument} />}
           {tab === "conflicts" && <ConflictsTab matterId={matterId} onOpenDocument={openDocument} />}
-          {tab === "codes" && <CodesTab key={matterId} />}
+          {tab === "codes" && <CodesTab key={matterId} initialSection={props.initialCodesSection} />}
         </div>
       </div>
 

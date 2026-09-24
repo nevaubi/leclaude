@@ -1,6 +1,6 @@
 /** Shared prompt fragments so every agent speaks with one voice. */
 
-export const FIRM_NAME = process.env.NEXT_PUBLIC_FIRM_NAME ?? "Calloway & Reyes LLP";
+export const FIRM_NAME = process.env.NEXT_PUBLIC_FIRM_NAME ?? "Seeger Weiss LLP";
 
 export const LEGAL_STYLE_RULES = `Writing standards:
 - Write like a careful senior litigator: precise, plain, no filler, no hype. Prefer active voice and short sentences.

@@ -1,7 +1,7 @@
 /**
  * Document specs for PDF templates and seeds. Each builder returns a DocSpec
  * that `generatePdf` typesets with pdf-lib. Content is realistic litigation
- * paper for Calloway & Reyes LLP matters (AFFF MDL, Northgate v. Apex, …).
+ * paper for Seeger Weiss LLP matters (AFFF MDL, Northgate v. Apex, …).
  */
 import type { Block, CaptionSpec, DocSpec } from "./generate";
 
@@ -14,7 +14,7 @@ const NORTHGATE_COURT = ["Supreme Court of the State of New York", "County of Ne
 const NORTHGATE_LEFT = ["NORTHGATE LOGISTICS HOLDINGS, LLC,", "                    Plaintiff,", "        – against –", "APEX FREIGHT SYSTEMS, INC.,", "                    Defendant."];
 const NORTHGATE_RIGHT = ["Index No. 654412/2025", "", "Hon. Andrea Masley, J.S.C.", "Part 48"];
 
-const FIRM_SIGNATURE = ["**Jordan Whitfield** (D.S.C. Bar No. 11642)", "Priya Raman", "**CALLOWAY & REYES LLP**", "1201 Main Street, Suite 2400", "Columbia, South Carolina 29201", "Tel. (803) 555-0140", "jwhitfield@callowayreyes.com", "", "*Counsel for Defendant Meridian Fluorochem Corp.*"];
+const FIRM_SIGNATURE = ["**Jordan Whitfield** (D.S.C. Bar No. 11642)", "Priya Raman", "**CALLOWAY & REYES LLP**", "1201 Main Street, Suite 2400", "Columbia, South Carolina 29201", "Tel. (803) 555-0140", "jwhitfield@seegerweiss.com", "", "*Counsel for Defendant Meridian Fluorochem Corp.*"];
 
 function longDate(d = new Date()) { return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }); }
 function afffCaption(title: string[]): CaptionSpec { return { court: AFFF_COURT, left: AFFF_LEFT, right: AFFF_RIGHT, title }; }
@@ -28,7 +28,7 @@ export function depositionNoticeSpec(ctx: SpecContext = {}, o: { witness?: strin
   const witnessTitle = o.witnessTitle ?? "Senior Toxicologist, Meridian Fluorochem Corp.";
   const date = o.date ?? "Thursday, October 22, 2026";
   const time = o.time ?? "9:30 a.m. Eastern";
-  const location = o.location ?? "Calloway & Reyes LLP, 1201 Main Street, Suite 2400, Columbia, South Carolina 29201 (and by remote videoconference)";
+  const location = o.location ?? "Seeger Weiss LLP, 1201 Main Street, Suite 2400, Columbia, South Carolina 29201 (and by remote videoconference)";
   const topics = o.topics ?? [
     "The witness's role in Meridian's toxicology program from 1996 to 2012, including the design, review and internal circulation of the 1998 rodent study summarized at MFC-0102211.",
     "Receipt, routing and review of third-party PFOA/PFOS study data, including the November 1999 routing slip at MFC-0077102 and any related correspondence.",
@@ -73,7 +73,7 @@ export function depositionNoticeSpec(ctx: SpecContext = {}, o: { witness?: strin
       ] },
       { type: "paragraph", text: "Documents produced pursuant to this Schedule shall be produced in the format specified in the ESI Protocol (CMO No. 5) with load files, extracted text and the metadata fields listed in Appendix B thereto.", italic: true, size: 10 },
     ],
-    footer: { left: "Notice of Deposition — " + witness, right: "Calloway & Reyes LLP" },
+    footer: { left: "Notice of Deposition — " + witness, right: "Seeger Weiss LLP" },
   };
 }
 
@@ -215,11 +215,11 @@ export function subpoenaSpec(ctx: SpecContext = {}, o: { recipient?: string; rec
     blocks: [
       { type: "paragraph", text: `**TO:** ${recipient}, ${address}` },
       { type: "paragraph", text: `☒ **Production:** YOU ARE COMMANDED to produce at the time, date, and place set forth below the following documents, electronically stored information, or objects, and to permit inspection, copying, testing, or sampling of the material: **See Attachment A.**` },
-      { type: "keyvalue", rows: [["Place:", "Calloway & Reyes LLP, 1201 Main Street, Suite 2400, Columbia, SC 29201 (or by secure electronic transfer arranged with counsel)"], ["Date and time:", returnDate]], keyWidth: 110 },
+      { type: "keyvalue", rows: [["Place:", "Seeger Weiss LLP, 1201 Main Street, Suite 2400, Columbia, SC 29201 (or by secure electronic transfer arranged with counsel)"], ["Date and time:", returnDate]], keyWidth: 110 },
       { type: "paragraph", text: "☐ **Inspection of Premises:** Not applicable." },
       { type: "paragraph", text: "The following provisions of Fed. R. Civ. P. 45 are attached — Rule 45(c), relating to the place of compliance; Rule 45(d), relating to your protection as a person subject to a subpoena; and Rule 45(e) and (g), relating to your duty to respond to this subpoena and the potential consequences of not doing so." },
       { type: "keyvalue", rows: [["Date:", longDate(ctx.date)], ["Issued by:", "CLERK OF COURT — or — Attorney's signature: /s/ Jordan Whitfield"]], keyWidth: 110 },
-      { type: "paragraph", text: "The name, address, e-mail address, and telephone number of the attorney representing Defendant Meridian Fluorochem Corp., who issues or requests this subpoena, are: Jordan Whitfield, Calloway & Reyes LLP, 1201 Main Street, Suite 2400, Columbia, SC 29201; jwhitfield@callowayreyes.com; (803) 555-0140.", size: 10.5 },
+      { type: "paragraph", text: "The name, address, e-mail address, and telephone number of the attorney representing Defendant Meridian Fluorochem Corp., who issues or requests this subpoena, are: Jordan Whitfield, Seeger Weiss LLP, 1201 Main Street, Suite 2400, Columbia, SC 29201; jwhitfield@seegerweiss.com; (803) 555-0140.", size: 10.5 },
       { type: "heading", text: "Notice to the Person Who Issues or Requests This Subpoena", level: 3 },
       { type: "paragraph", text: "If this subpoena commands the production of documents, electronically stored information, or tangible things or the inspection of premises before trial, a notice and a copy of the subpoena must be served on each party in this case before it is served on the person to whom it is directed. Fed. R. Civ. P. 45(a)(4).", size: 10.5 },
       { type: "pagebreak" },
@@ -261,7 +261,7 @@ export function certificateOfServiceSpec(ctx: SpecContext = {}, o: { document?: 
     ["Michael T. Ferrante", "Ferrante Whitmore LLP", "Co-Lead Counsel for Plaintiffs", "mferrante@fwlaw.com", "CM/ECF and e-mail"],
     ["Susan Okonkwo-Reyes", "U.S. Department of Justice, ENRD", "Counsel for the United States", "susan.okonkwo-reyes@usdoj.gov", "CM/ECF"],
     ["David Lindqvist", "Lindqvist Shaw PC", "Counsel for Defendant Tyco Fire Products LP", "dlindqvist@lindqvistshaw.com", "E-mail (MDL service list)"],
-    ["Priya Raman", "Calloway & Reyes LLP", "Counsel for Meridian (internal)", "praman@callowayreyes.com", "E-mail"],
+    ["Priya Raman", "Seeger Weiss LLP", "Counsel for Meridian (internal)", "praman@seegerweiss.com", "E-mail"],
   ];
   return {
     title: ctx.title ?? "Certificate of Service",
@@ -271,7 +271,7 @@ export function certificateOfServiceSpec(ctx: SpecContext = {}, o: { document?: 
     blocks: [
       { type: "paragraph", text: `I, Jordan Whitfield, a member of the bar of this Court, hereby certify that on **${o.date ?? longDate(ctx.date)}**, I caused a true and correct copy of the foregoing **${document}** to be served on the persons listed below by the means indicated, in accordance with Fed. R. Civ. P. 5(b) and Case Management Order No. 2 ¶ 9 (electronic service through the MDL Centrality service list).`, indent: true },
       { type: "table", columns: ["Name", "Firm / office", "Role", "E-mail", "Method"], widths: [1.2, 1.4, 1.6, 1.6, 1.1], size: 9.5, rows: recipients },
-      { type: "paragraph", text: "Documents designated **CONFIDENTIAL** or **HIGHLY CONFIDENTIAL – ATTORNEYS' EYES ONLY** under the Protective Order (ECF No. 1183) were transmitted through the secure file-transfer portal maintained by Calloway & Reyes LLP and not by unencrypted e-mail. Access credentials were sent under separate cover to the designated Tier 2 recipients only." },
+      { type: "paragraph", text: "Documents designated **CONFIDENTIAL** or **HIGHLY CONFIDENTIAL – ATTORNEYS' EYES ONLY** under the Protective Order (ECF No. 1183) were transmitted through the secure file-transfer portal maintained by Seeger Weiss LLP and not by unencrypted e-mail. Access credentials were sent under separate cover to the designated Tier 2 recipients only." },
       { type: "paragraph", text: "I declare under penalty of perjury under the laws of the United States of America that the foregoing is true and correct. Executed at Columbia, South Carolina." },
       { type: "signature", lines: FIRM_SIGNATURE, dateLine: `Dated: ${o.date ?? longDate(ctx.date)}` },
     ],
@@ -306,7 +306,7 @@ export function exhibitCoverSpec(ctx: SpecContext = {}, o: { exhibit?: string; d
       { type: "spacer", height: 30 },
       { type: "paragraph", text: "Reporter's exhibit sticker to be affixed below. Do not write on the underlying document.", align: "center", italic: true, size: 10 },
     ],
-    footer: { center: `Exhibit ${exhibit}`, right: "Calloway & Reyes LLP" },
+    footer: { center: `Exhibit ${exhibit}`, right: "Seeger Weiss LLP" },
     outline: false,
   };
 }

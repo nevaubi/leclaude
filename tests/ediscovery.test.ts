@@ -108,6 +108,18 @@ describe("query parser", () => {
     expect(q.bates[0].start.number).toBe(q.bates[0].end.number);
     expect(q.ast.kind).toBe("and");
   });
+  it("treats a bare Bates number followed by a negated numeric term as an exclusion, not a range", () => {
+    // "MFC-0041877 -2001" used to parse as the range MFC-0002001–MFC-0041877 (55 hits instead of 1).
+    const q = parseQuery("MFC-0041877 -2001");
+    expect(q.bates).toHaveLength(1);
+    expect(q.bates[0].start.number).toBe(41877);
+    expect(q.bates[0].end.number).toBe(41877);
+    expect(q.ast).toMatchObject({ kind: "and", children: [{ kind: "bates" }, { kind: "not", child: { kind: "term", value: "2001" } }] });
+    // spaced hyphen still joins a range when the end carries its own prefix, and an unspaced abbreviated end still works
+    expect(parseQuery("MFC-0041877 - MFC-0041880").bates[0].end.number).toBe(41880);
+    expect(parseQuery("MFC-0041877-0041880").bates[0].end.number).toBe(41880);
+    expect(parseQuery("MFC-0041877 to 0041880").bates[0].end.number).toBe(41880);
+  });
   it("tolerates malformed input", () => {
     const q = parseQuery('liver AND (serum "recovery group');
     expect(q.warnings.length).toBeGreaterThan(0);

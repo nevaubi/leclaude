@@ -4,14 +4,14 @@ import type { Matter, Person } from "@/lib/types/domain";
 import { MATTERS, PEOPLE } from "./ids";
 
 const people: Person[] = [
-  { id: PEOPLE.jordanWhitfield, name: "Jordan Whitfield", email: "jwhitfield@callowayreyes.com", title: "Partner", organization: "Calloway & Reyes LLP", role: "attorney", tags: ["litigation", "MDL"] },
-  { id: PEOPLE.priyaRaman, name: "Priya Raman", email: "praman@callowayreyes.com", title: "Partner", organization: "Calloway & Reyes LLP", role: "attorney", tags: ["products liability", "toxic tort"] },
-  { id: PEOPLE.danielOkafor, name: "Daniel Okafor", email: "dokafor@callowayreyes.com", title: "Senior Associate", organization: "Calloway & Reyes LLP", role: "attorney", tags: ["commercial", "M&A"] },
-  { id: PEOPLE.elenaMarsh, name: "Elena Marsh", email: "emarsh@callowayreyes.com", title: "Associate", organization: "Calloway & Reyes LLP", role: "attorney", tags: ["litigation"] },
-  { id: PEOPLE.samuelChen, name: "Samuel Chen", email: "schen@callowayreyes.com", title: "Associate", organization: "Calloway & Reyes LLP", role: "attorney", tags: ["employment", "regulatory"] },
-  { id: PEOPLE.mariaLopez, name: "Maria Lopez", email: "mlopez@callowayreyes.com", title: "Litigation Paralegal", organization: "Calloway & Reyes LLP", role: "paralegal" },
-  { id: PEOPLE.tomBradley, name: "Tom Bradley", email: "tbradley@callowayreyes.com", title: "E-Discovery Project Manager", organization: "Calloway & Reyes LLP", role: "staff" },
-  { id: PEOPLE.aishaKhan, name: "Aisha Khan", email: "akhan@callowayreyes.com", title: "Knowledge Management Director", organization: "Calloway & Reyes LLP", role: "staff" },
+  { id: PEOPLE.jordanWhitfield, name: "Jordan Whitfield", email: "jwhitfield@seegerweiss.com", title: "Partner", organization: "Seeger Weiss LLP", role: "attorney", tags: ["litigation", "MDL"] },
+  { id: PEOPLE.priyaRaman, name: "Priya Raman", email: "praman@seegerweiss.com", title: "Partner", organization: "Seeger Weiss LLP", role: "attorney", tags: ["products liability", "toxic tort"] },
+  { id: PEOPLE.danielOkafor, name: "Daniel Okafor", email: "dokafor@seegerweiss.com", title: "Senior Associate", organization: "Seeger Weiss LLP", role: "attorney", tags: ["commercial", "M&A"] },
+  { id: PEOPLE.elenaMarsh, name: "Elena Marsh", email: "emarsh@seegerweiss.com", title: "Associate", organization: "Seeger Weiss LLP", role: "attorney", tags: ["litigation"] },
+  { id: PEOPLE.samuelChen, name: "Samuel Chen", email: "schen@seegerweiss.com", title: "Associate", organization: "Seeger Weiss LLP", role: "attorney", tags: ["employment", "regulatory"] },
+  { id: PEOPLE.mariaLopez, name: "Maria Lopez", email: "mlopez@seegerweiss.com", title: "Litigation Paralegal", organization: "Seeger Weiss LLP", role: "paralegal" },
+  { id: PEOPLE.tomBradley, name: "Tom Bradley", email: "tbradley@seegerweiss.com", title: "E-Discovery Project Manager", organization: "Seeger Weiss LLP", role: "staff" },
+  { id: PEOPLE.aishaKhan, name: "Aisha Khan", email: "akhan@seegerweiss.com", title: "Knowledge Management Director", organization: "Seeger Weiss LLP", role: "staff" },
   { id: PEOPLE.gregoryHale, name: "Gregory Hale", email: "g.hale@meridianfluorochem.com", title: "Director, Environmental Health & Safety", organization: "Meridian Fluorochem Corp.", role: "custodian" },
   { id: PEOPLE.helenVoss, name: "Helen Voss", email: "h.voss@meridianfluorochem.com", title: "Senior Toxicologist", organization: "Meridian Fluorochem Corp.", role: "custodian" },
   { id: PEOPLE.nadiaBrooks, name: "Nadia Brooks", email: "n.brooks@meridianfluorochem.com", title: "Product Stewardship Manager", organization: "Meridian Fluorochem Corp.", role: "custodian" },

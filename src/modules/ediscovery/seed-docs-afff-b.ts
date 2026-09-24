@@ -1055,7 +1055,7 @@ Rob`,
 
 Rob — final version attached reflecting your edits. I will brief Alan verbally per your guidance. The voluntary update letter went to OPPT (Feld's successor, Dana Okoro) and to IEPA on 29 September with Beacon's reports and Helen's re-analysis attached. Acknowledgement from IEPA received this morning; nothing yet from OPPT.
 
-Document collection: Tom Bradley's group at Calloway & Reyes has sent the collection protocol. Custodians in the first tier are Hale, Voss, Brooks, Pryce, you and me. IT starts imaging on the 10th.
+Document collection: Tom Bradley's group at Seeger Weiss has sent the collection protocol. Custodians in the first tier are Hale, Voss, Brooks, Pryce, you and me. IT starts imaging on the 10th.
 
 Martin`,
   },

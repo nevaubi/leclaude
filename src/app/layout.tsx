@@ -6,7 +6,7 @@ import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "LeClaude";
-const firmName = process.env.NEXT_PUBLIC_FIRM_NAME ?? "Calloway & Reyes LLP";
+const firmName = process.env.NEXT_PUBLIC_FIRM_NAME ?? "Seeger Weiss LLP";
 
 export const metadata: Metadata = {
   title: { default: appName, template: `%s · ${appName}` },

@@ -146,8 +146,8 @@ export async function exportPptx(deck: DeckContent, opts: ExportOptions): Promis
   pptx.defineLayout({ name: "LECLAUDE_WIDE", width: PAGE_W_IN, height: PAGE_H_IN });
   pptx.layout = "LECLAUDE_WIDE";
   pptx.title = opts.title;
-  pptx.author = opts.author ?? "Calloway & Reyes LLP";
-  pptx.company = "Calloway & Reyes LLP";
+  pptx.author = opts.author ?? "Seeger Weiss LLP";
+  pptx.company = "Seeger Weiss LLP";
   pptx.theme = { headFontFace: deck.theme.fonts.heading, bodyFontFace: deck.theme.fonts.body };
   const theme = deck.theme;
   for (const s of deck.slides) {

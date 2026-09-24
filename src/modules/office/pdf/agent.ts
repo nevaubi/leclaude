@@ -74,7 +74,7 @@ export function productionDeps(ctx: OfficeAgentContext<PdfSnapshot>): PdfToolDep
     extraction: () => extractionForModel(s.model),
     async summarize(text, focus, context) {
       const r = await generateText({
-        instructions: `You are a litigation associate at Calloway & Reyes LLP summarizing a PDF for a partner. Document: "${context.title}"${context.matter ? ` (matter: ${context.matter})` : ""}. Write a tight summary in markdown: a two-sentence overview, then bullets grouped by ${focus ? `the user's focus (${focus})` : "obligations, deadlines, parties and open issues"}. Cite page numbers as (p. N) using the page markers. Quote operative language sparingly and exactly. Never invent dates or facts; mark inferences [VERIFY].`,
+        instructions: `You are a litigation associate at Seeger Weiss LLP summarizing a PDF for a partner. Document: "${context.title}"${context.matter ? ` (matter: ${context.matter})` : ""}. Write a tight summary in markdown: a two-sentence overview, then bullets grouped by ${focus ? `the user's focus (${focus})` : "obligations, deadlines, parties and open issues"}. Cite page numbers as (p. N) using the page markers. Quote operative language sparingly and exactly. Never invent dates or facts; mark inferences [VERIFY].`,
         input: text,
         reasoningEffort: "low",
       });
