@@ -1,0 +1,581 @@
+import "server-only";
+import { nanoid } from "nanoid";
+import { db } from "@/lib/db";
+import { hybridSearch, indexDocuments, indexStats } from "@/lib/ai/vector-store";
+import { VECTOR_COLLECTIONS } from "@/lib/ai/toolkit/internal";
+import type { EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain";
+import { batesInRange, compareBates, isEmptyQuery, makeSnippet, matchesQuery, parseQuery, type ParsedQuery, type Searchable } from "./query";
+import { indexTextFor, isProducible, productionLoadFileCsv, productionSummary, templatePrivilegeDescription, toPrivilegeLogRow } from "./privilege";
+import { CODING_RULES_KEY, DEFAULT_CODING_RULES } from "./rules";
+import {
+  SCORE_BUCKETS,
+  type BulkCodingRequest,
+  type CodingPatch,
+  type CodingStatus,
+  type DocRow,
+  type Facets,
+  type FamilyInfo,
+  type IssueCodeInput,
+  type MatterStats,
+  type PrivilegeLogRow,
+  type SavedView,
+  type SavedViewCounts,
+  type ScoreBucket,
+  type SearchFilters,
+  type SearchRequest,
+  type SearchResponse,
+  type SimilarDoc,
+  type SortKey,
+} from "./types";
+
+export const CURRENT_USER_ID = "p_jwhitfield";
+const RECENT_KEY = (matterId: string) => `ediscovery:recent:${matterId}`;
+const RECENT_MAX = 25;
+
+// ---------------------------------------------------------------------------
+// Projections (cached per document object; the collection cache replaces
+// objects on write so stale projections fall out automatically)
+// ---------------------------------------------------------------------------
+
+const searchableCache = new WeakMap<EDocument, Searchable>();
+
+export function toSearchable(d: EDocument): Searchable {
+  let s = searchableCache.get(d);
+  if (s) return s;
+  const lower = (x?: string) => (x ?? "").toLowerCase();
+  const to = (d.to ?? []).join("; ").toLowerCase();
+  const cc = (d.cc ?? []).join("; ").toLowerCase();
+  s = {
+    id: d.id,
+    bates: d.bates,
+    batesEnd: d.batesEnd,
+    date: d.date,
+    custodian: `${lower(d.custodianName)} ${lower(d.custodianId)}`,
+    type: lower(d.type),
+    from: lower(d.from),
+    to,
+    cc,
+    subject: lower(d.subject),
+    haystack: `${lower(d.bates)} ${lower(d.subject)} ${lower(d.from)} ${to} ${cc} ${lower(d.custodianName)} ${lower(d.text)} ${(d.tags ?? []).join(" ").toLowerCase()}`,
+    issues: (d.coding.issues ?? []).join(" ").toLowerCase(),
+    tags: (d.tags ?? []).join(" ").toLowerCase(),
+    hash: lower(d.hash),
+  };
+  searchableCache.set(d, s);
+  return s;
+}
+
+export function codingStatuses(d: EDocument): CodingStatus[] {
+  const out: CodingStatus[] = [];
+  if (d.coding.responsive === true) out.push("responsive");
+  else if (d.coding.responsive === false) out.push("non_responsive");
+  else out.push("needs_review");
+  if (d.coding.privileged === true) out.push("privileged");
+  if (d.coding.hot) out.push("hot");
+  return out;
+}
+
+export function scoreBucket(d: EDocument): ScoreBucket {
+  const s = d.aiScore;
+  if (s == null) return "unscored";
+  if (s >= 90) return "90+";
+  if (s >= 70) return "70-89";
+  if (s >= 50) return "50-69";
+  return "<50";
+}
+
+function familyInfo(d: EDocument, byId: Map<string, EDocument>, threadSizes: Map<string, number>): FamilyInfo {
+  return {
+    isParent: (d.family?.attachmentIds?.length ?? 0) > 0,
+    isAttachment: !!d.family?.parentId && byId.has(d.family.parentId),
+    attachmentCount: d.family?.attachmentIds?.length ?? 0,
+    inThread: !!d.family?.threadId,
+    threadSize: d.family?.threadId ? (threadSizes.get(d.family.threadId) ?? 1) : 0,
+    isDuplicate: !!d.isDuplicateOf,
+    nearDuplicateCount: d.nearDuplicateIds?.length ?? 0,
+  };
+}
+
+export function toRow(d: EDocument, byId: Map<string, EDocument>, threadSizes: Map<string, number>, extra: { score?: number; snippet?: string } = {}): DocRow {
+  const { text, entities: _e, aiSummary: _s, ...rest } = d;
+  void _e; void _s;
+  return { ...rest, family2: familyInfo(d, byId, threadSizes), textLength: text.length, ...extra };
+}
+
+// ---------------------------------------------------------------------------
+// Matter-scoped document access
+// ---------------------------------------------------------------------------
+
+export function matterDocs(matterId: string): EDocument[] {
+  return db().edocs.find((d) => d.matterId === matterId);
+}
+
+function indexes(docs: EDocument[]) {
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  const threadSizes = new Map<string, number>();
+  for (const d of docs) if (d.family?.threadId) threadSizes.set(d.family.threadId, (threadSizes.get(d.family.threadId) ?? 0) + 1);
+  return { byId, threadSizes };
+}
+
+export function recentIds(matterId: string): string[] {
+  return db().kv.get<string[]>(RECENT_KEY(matterId)) ?? [];
+}
+
+export function recordView(matterId: string, docId: string) {
+  const cur = recentIds(matterId).filter((id) => id !== docId);
+  cur.unshift(docId);
+  db().kv.set(RECENT_KEY(matterId), cur.slice(0, RECENT_MAX));
+}
+
+function viewPredicate(view: SavedView | undefined, matterId: string): (d: EDocument) => boolean {
+  switch (view) {
+    case "needs_review": return (d) => d.coding.responsive == null;
+    case "hot": return (d) => !!d.coding.hot;
+    case "privileged": return (d) => d.coding.privileged === true;
+    case "ai_responsive": return (d) => (d.aiScore ?? 0) >= 70;
+    case "recent": { const set = new Set(recentIds(matterId)); return (d) => set.has(d.id); }
+    default: return () => true;
+  }
+}
+
+export function viewCounts(matterId: string): SavedViewCounts[] {
+  const docs = matterDocs(matterId);
+  const views: SavedView[] = ["all", "needs_review", "hot", "privileged", "ai_responsive", "recent"];
+  return views.map((view) => ({ view, count: docs.filter(viewPredicate(view, matterId)).length }));
+}
+
+// ---------------------------------------------------------------------------
+// Faceting (each facet counted with every other filter applied)
+// ---------------------------------------------------------------------------
+
+type FacetKey = keyof SearchFilters;
+
+function facetMatch(d: EDocument, key: FacetKey, values: string[]): boolean {
+  if (!values.length) return true;
+  switch (key) {
+    case "custodians": return values.includes(d.custodianId);
+    case "types": return values.includes(d.type);
+    case "statuses": { const st = codingStatuses(d); return values.some((v) => st.includes(v as CodingStatus)); }
+    case "issues": return values.some((v) => (d.coding.issues ?? []).includes(v));
+    case "scores": return values.includes(scoreBucket(d));
+    case "years": return values.includes(d.date.slice(0, 4));
+  }
+}
+
+const FACET_KEYS: FacetKey[] = ["custodians", "types", "statuses", "issues", "scores", "years"];
+
+export function applyFilters(docs: EDocument[], filters: SearchFilters | undefined, except?: FacetKey): EDocument[] {
+  if (!filters) return docs;
+  return docs.filter((d) => FACET_KEYS.every((k) => k === except || facetMatch(d, k, (filters[k] as string[] | undefined) ?? [])));
+}
+
+export function computeFacets(base: EDocument[], filters: SearchFilters | undefined, matterId: string): Facets {
+  const count = <T,>(list: EDocument[], keyOf: (d: EDocument) => T[]) => {
+    const m = new Map<T, number>();
+    for (const d of list) for (const k of keyOf(d)) m.set(k, (m.get(k) ?? 0) + 1);
+    return m;
+  };
+  const custodianNames = new Map<string, string>();
+  for (const d of base) custodianNames.set(d.custodianId, d.custodianName);
+  const c = count(applyFilters(base, filters, "custodians"), (d) => [d.custodianId]);
+  const t = count(applyFilters(base, filters, "types"), (d) => [d.type]);
+  const s = count(applyFilters(base, filters, "statuses"), (d) => codingStatuses(d));
+  const i = count(applyFilters(base, filters, "issues"), (d) => d.coding.issues ?? []);
+  const sc = count(applyFilters(base, filters, "scores"), (d) => [scoreBucket(d)]);
+  const y = count(applyFilters(base, filters, "years"), (d) => [d.date.slice(0, 4)]);
+  const codes = new Map(db().issueCodes.find((x) => x.matterId === matterId).map((x) => [x.code, x]));
+  const statusLabel: Record<CodingStatus, string> = { responsive: "Responsive", non_responsive: "Non-responsive", needs_review: "Needs review", privileged: "Privileged", hot: "Hot" };
+  const sortDesc = (a: { count: number; label: string }, b: { count: number; label: string }) => b.count - a.count || a.label.localeCompare(b.label);
+  return {
+    custodian: Array.from(c.entries()).map(([value, n]) => ({ value, label: custodianNames.get(value) ?? value, count: n })).sort(sortDesc),
+    type: Array.from(t.entries()).map(([value, n]) => ({ value, label: value, count: n })).sort(sortDesc),
+    status: (["responsive", "needs_review", "non_responsive", "privileged", "hot"] as CodingStatus[]).map((v) => ({ value: v, label: statusLabel[v], count: s.get(v) ?? 0 })),
+    issues: Array.from(new Set([...codes.keys(), ...i.keys()])).map((value) => ({ value, label: codes.get(value)?.label ?? value, count: i.get(value) ?? 0 })).sort(sortDesc),
+    score: SCORE_BUCKETS.map((b) => ({ value: b.id, label: b.label, count: sc.get(b.id) ?? 0 })),
+    years: Array.from(y.entries()).map(([year, n]) => ({ year, count: n })).sort((a, b) => a.year.localeCompare(b.year)),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Sorting
+// ---------------------------------------------------------------------------
+
+export function sortDocs<T extends { doc: EDocument; score?: number }>(items: T[], sort: SortKey | undefined, dir: "asc" | "desc" | undefined): T[] {
+  const mul = (dir ?? (sort === "aiScore" || sort === "relevance" ? "desc" : "asc")) === "desc" ? -1 : 1;
+  const cmp: Record<SortKey, (a: T, b: T) => number> = {
+    date: (a, b) => a.doc.date.localeCompare(b.doc.date) || compareBates(a.doc.bates, b.doc.bates),
+    bates: (a, b) => compareBates(a.doc.bates, b.doc.bates),
+    custodian: (a, b) => a.doc.custodianName.localeCompare(b.doc.custodianName) || a.doc.date.localeCompare(b.doc.date),
+    type: (a, b) => a.doc.type.localeCompare(b.doc.type) || a.doc.date.localeCompare(b.doc.date),
+    subject: (a, b) => a.doc.subject.localeCompare(b.doc.subject),
+    aiScore: (a, b) => (a.doc.aiScore ?? -1) - (b.doc.aiScore ?? -1) || compareBates(a.doc.bates, b.doc.bates),
+    relevance: (a, b) => (a.score ?? 0) - (b.score ?? 0) || compareBates(b.doc.bates, a.doc.bates),
+  };
+  const fn = cmp[sort ?? "bates"];
+  return [...items].sort((a, b) => fn(a, b) * mul);
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+export async function searchDocuments(req: SearchRequest): Promise<SearchResponse> {
+  const t0 = Date.now();
+  const all = matterDocs(req.matterId);
+  const { byId, threadSizes } = indexes(all);
+  const parsed: ParsedQuery = parseQuery(req.q ?? "");
+  const useSemantic = !!req.semantic && !!req.q?.trim();
+
+  let scored: { doc: EDocument; score?: number; snippet?: string }[];
+  const inView = all.filter(viewPredicate(req.view, req.matterId));
+
+  if (useSemantic) {
+    // Hybrid (keyword BM25 + embeddings when available) over the vector index, restricted to this matter.
+    const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, req.q!, { k: Math.max(200, inView.length), perDoc: 1, filter: (meta) => meta.matterId === req.matterId });
+    const scoreById = new Map<string, { score: number; passage: string }>();
+    for (const h of hits) if (!scoreById.has(h.docId)) scoreById.set(h.docId, { score: h.score, passage: h.text });
+    // Structured parts of the query (fields, Bates, dates, NOT) still apply as hard filters.
+    const structural = stripTerms(parsed);
+    scored = inView
+      .filter((d) => scoreById.has(d.id) && (structural.kind === "empty" || matchesQuery(toSearchable(d), structural)))
+      .map((d) => ({ doc: d, score: scoreById.get(d.id)!.score, snippet: makeSnippet(scoreById.get(d.id)!.passage, parsed.terms) }));
+  } else {
+    const matched = isEmptyQuery(parsed) ? inView : inView.filter((d) => matchesQuery(toSearchable(d), parsed.ast));
+    scored = matched.map((d) => ({ doc: d, snippet: parsed.terms.length ? makeSnippet(d.text, parsed.terms) : undefined }));
+  }
+
+  const base = scored.map((s) => s.doc);
+  const facets = computeFacets(base, req.filters, req.matterId);
+  const filteredIds = new Set(applyFilters(base, req.filters).map((d) => d.id));
+  const filtered = scored.filter((s) => filteredIds.has(s.doc.id));
+  const sort: SortKey = req.sort ?? (useSemantic ? "relevance" : "bates");
+  const sorted = sortDocs(filtered, sort, req.dir);
+  const offset = Math.max(0, req.offset ?? 0);
+  const limit = Math.min(500, Math.max(1, req.limit ?? 100));
+  const page = sorted.slice(offset, offset + limit);
+  return {
+    hits: page.map((s) => toRow(s.doc, byId, threadSizes, { score: s.score, snippet: s.snippet })),
+    total: sorted.length,
+    totalWorkspace: all.length,
+    offset,
+    limit,
+    facets,
+    parsed: { terms: parsed.terms, fields: parsed.fields, bates: parsed.bates.map((b) => ({ start: b.start.raw, end: b.end.raw })), warnings: parsed.warnings },
+    tookMs: Date.now() - t0,
+    semantic: useSemantic,
+  };
+}
+
+/** Remove free-text terms from a parsed query, keeping structural constraints (used by semantic mode). */
+function stripTerms(parsed: ParsedQuery): ParsedQuery["ast"] {
+  const walk = (n: ParsedQuery["ast"]): ParsedQuery["ast"] => {
+    switch (n.kind) {
+      case "term": return { kind: "empty" };
+      case "and": case "or": {
+        const kids = n.children.map(walk).filter((c) => c.kind !== "empty");
+        return kids.length === 0 ? { kind: "empty" } : kids.length === 1 ? kids[0] : { kind: n.kind, children: kids };
+      }
+      case "not": { const c = walk(n.child); return c.kind === "empty" ? c : { kind: "not", child: c }; }
+      default: return n;
+    }
+  };
+  return walk(parsed.ast);
+}
+
+/** Ordered ids for keyboard navigation / auto-advance: same query, no paging. */
+export async function searchIds(req: SearchRequest): Promise<string[]> {
+  const res = await searchDocuments({ ...req, offset: 0, limit: 500 });
+  return res.hits.map((h) => h.id);
+}
+
+// ---------------------------------------------------------------------------
+// Stats
+// ---------------------------------------------------------------------------
+
+export function matterStats(matterId: string): MatterStats & { views: SavedViewCounts[] } {
+  const docs = matterDocs(matterId);
+  const matter = db().matters.get(matterId);
+  const reviewed = docs.filter((d) => d.coding.responsive != null).length;
+  const deadline = matter?.keyDates?.find((k) => /production/i.test(k.label)) ?? null;
+  const daysLeft = deadline ? Math.ceil((new Date(deadline.date + "T00:00:00Z").getTime() - Date.now()) / 86_400_000) : 0;
+  let indexed = { docs: 0, chunks: 0, embedded: 0 };
+  try {
+    const all = indexStats(VECTOR_COLLECTIONS.edocs);
+    // per-matter doc count approximated from the collection; chunk/embed totals are collection-wide
+    indexed = { docs: Math.min(all.docs, docs.length), chunks: all.chunks, embedded: all.embedded };
+  } catch { /* ignore */ }
+  return {
+    matterId,
+    total: docs.length,
+    reviewed,
+    pctReviewed: docs.length ? Math.round((reviewed / docs.length) * 100) : 0,
+    needsReview: docs.length - reviewed,
+    responsive: docs.filter((d) => d.coding.responsive === true).length,
+    nonResponsive: docs.filter((d) => d.coding.responsive === false).length,
+    privileged: docs.filter((d) => d.coding.privileged === true).length,
+    hot: docs.filter((d) => !!d.coding.hot).length,
+    aiScored: docs.filter((d) => d.aiScore != null).length,
+    custodians: new Set(docs.map((d) => d.custodianId)).size,
+    productionDeadline: deadline ? { label: deadline.label, date: deadline.date, daysLeft } : null,
+    indexed,
+    views: viewCounts(matterId),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+export interface DocDetail {
+  doc: EDocument;
+  family: {
+    parent: DocRow | null;
+    attachments: DocRow[];
+    thread: DocRow[];
+    duplicateOf: DocRow | null;
+    duplicates: DocRow[];
+    nearDuplicates: DocRow[];
+  };
+  row: DocRow;
+  reviewerName?: string;
+}
+
+export function getDocument(id: string, opts: { recordView?: boolean } = {}): DocDetail | null {
+  const d = db().edocs.get(id) ?? db().edocs.findOne((x) => x.bates.toLowerCase() === id.toLowerCase());
+  if (!d) return null;
+  const all = matterDocs(d.matterId);
+  const { byId, threadSizes } = indexes(all);
+  const row = (x: EDocument) => toRow(x, byId, threadSizes);
+  const parent = d.family?.parentId ? byId.get(d.family.parentId) ?? null : null;
+  const attachments = (d.family?.attachmentIds ?? []).map((x) => byId.get(x)).filter(Boolean) as EDocument[];
+  const thread = d.family?.threadId ? all.filter((x) => x.family?.threadId === d.family?.threadId).sort((a, b) => a.date.localeCompare(b.date) || compareBates(a.bates, b.bates)) : [];
+  const duplicateOf = d.isDuplicateOf ? byId.get(d.isDuplicateOf) ?? null : null;
+  const duplicates = all.filter((x) => x.isDuplicateOf === d.id || (d.hash && x.hash === d.hash && x.id !== d.id && !x.isDuplicateOf && !d.isDuplicateOf));
+  const nearDuplicates = Array.from(new Set([...(d.nearDuplicateIds ?? []), ...all.filter((x) => x.nearDuplicateIds?.includes(d.id)).map((x) => x.id)])).map((x) => byId.get(x)).filter(Boolean) as EDocument[];
+  if (opts.recordView) recordView(d.matterId, d.id);
+  const reviewer = d.coding.reviewerId ? db().people.get(d.coding.reviewerId) : null;
+  return {
+    doc: d,
+    row: row(d),
+    family: { parent: parent ? row(parent) : null, attachments: attachments.map(row), thread: thread.map(row), duplicateOf: duplicateOf ? row(duplicateOf) : null, duplicates: duplicates.map(row), nearDuplicates: nearDuplicates.map(row) },
+    reviewerName: reviewer?.name,
+  };
+}
+
+export function updateCoding(id: string, patch: CodingPatch, reviewerId: string = CURRENT_USER_ID): EDocument | null {
+  const cur = db().edocs.get(id);
+  if (!cur) return null;
+  const coding = { ...cur.coding, ...patch };
+  if (coding.privileged !== true) delete coding.privilegeBasis;
+  if (coding.issues) coding.issues = Array.from(new Set(coding.issues));
+  coding.reviewerId = reviewerId;
+  coding.reviewedAt = new Date().toISOString();
+  return db().edocs.put({ ...cur, coding });
+}
+
+export function bulkCode(req: BulkCodingRequest): { updated: number } {
+  let updated = 0;
+  const ids = Array.from(new Set(req.ids));
+  const docs = ids.map((id) => db().edocs.get(id)).filter(Boolean) as EDocument[];
+  const now = new Date().toISOString();
+  const next = docs.map((cur) => {
+    const coding = { ...cur.coding, ...req.patch };
+    let issues = coding.issues ?? [];
+    if (req.addIssues?.length) issues = Array.from(new Set([...issues, ...req.addIssues]));
+    if (req.removeIssues?.length) issues = issues.filter((i) => !req.removeIssues!.includes(i));
+    coding.issues = issues;
+    if (coding.privileged !== true) delete coding.privilegeBasis;
+    coding.reviewerId = req.reviewerId ?? CURRENT_USER_ID;
+    coding.reviewedAt = now;
+    updated++;
+    return { ...cur, coding };
+  });
+  db().edocs.putMany(next);
+  return { updated };
+}
+
+// ---------------------------------------------------------------------------
+// Similar documents (family relations first, then hybrid search)
+// ---------------------------------------------------------------------------
+
+export async function similarDocuments(id: string, k = 10): Promise<SimilarDoc[]> {
+  const detail = getDocument(id);
+  if (!detail) return [];
+  const { doc } = detail;
+  const out: SimilarDoc[] = [];
+  const seen = new Set<string>([doc.id]);
+  const push = (r: DocRow, reason: SimilarDoc["reason"], score: number, passage: string) => {
+    if (seen.has(r.id)) return;
+    seen.add(r.id);
+    out.push({ id: r.id, bates: r.bates, subject: r.subject, date: r.date, custodianName: r.custodianName, type: r.type, score, passage, reason });
+  };
+  if (detail.family.duplicateOf) push(detail.family.duplicateOf, "duplicate", 1, "Exact duplicate (same hash).");
+  for (const r of detail.family.duplicates) push(r, "duplicate", 1, "Exact duplicate (same hash).");
+  for (const r of detail.family.nearDuplicates) push(r, "near-duplicate", 0.95, "Near-duplicate / draft version.");
+  if (detail.family.parent) push(detail.family.parent, "family", 0.9, "Parent document.");
+  for (const r of detail.family.attachments) push(r, "family", 0.9, "Attachment.");
+  for (const r of detail.family.thread) push(r, "thread", 0.85, "Same email thread.");
+  const query = `${doc.subject} ${doc.text.replace(/\s+/g, " ").slice(0, 600)}`;
+  try {
+    const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, query, { k: k + out.length + 1, perDoc: 1, filter: (meta) => meta.matterId === doc.matterId });
+    for (const h of hits) {
+      if (seen.has(h.docId)) continue;
+      const other = db().edocs.get(h.docId);
+      if (!other) continue;
+      push(detail.row.id === other.id ? detail.row : toRow(other, new Map(), new Map()), h.semantic != null ? "semantic" : "keyword", Number(h.score.toFixed(3)), makeSnippet(h.text, doc.subject.toLowerCase().split(/\s+/).filter((w) => w.length > 4), 90));
+      if (out.length >= k) break;
+    }
+  } catch (e) {
+    console.warn("[ediscovery] similar search failed:", (e as Error).message);
+  }
+  return out.slice(0, k);
+}
+
+// ---------------------------------------------------------------------------
+// Index
+// ---------------------------------------------------------------------------
+
+export async function rebuildIndex(matterId: string, opts: { embed?: boolean } = {}) {
+  const docs = matterDocs(matterId);
+  const res = await indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((d) => ({ id: d.id, text: indexTextFor(d), meta: { matterId: d.matterId, custodianId: d.custodianId, type: d.type, date: d.date, bates: d.bates } })), { embed: opts.embed ?? true });
+  return { matterId, ...res };
+}
+
+// ---------------------------------------------------------------------------
+// Issue codes
+// ---------------------------------------------------------------------------
+
+export function listIssueCodes(matterId: string): IssueCode[] {
+  const docs = matterDocs(matterId);
+  const counts = new Map<string, number>();
+  for (const d of docs) for (const c of d.coding.issues ?? []) counts.set(c, (counts.get(c) ?? 0) + 1);
+  return db().issueCodes
+    .find((c) => c.matterId === matterId)
+    .map((c) => ({ ...c, count: counts.get(c.code) ?? 0 }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+}
+
+export function createIssueCode(matterId: string, input: IssueCodeInput): IssueCode {
+  const code = input.code.trim().toUpperCase();
+  if (!code) throw new Error("Code is required");
+  if (db().issueCodes.findOne((c) => c.matterId === matterId && c.code === code)) throw new Error(`Issue code ${code} already exists`);
+  const ic: IssueCode = { id: `ic_${nanoid(8)}`, matterId, code, label: input.label.trim() || code, description: input.description?.trim() || undefined, color: input.color ?? "chart-1", parentId: input.parentId || undefined };
+  return db().issueCodes.put(ic);
+}
+
+export function updateIssueCode(id: string, patch: Partial<IssueCodeInput>): IssueCode | null {
+  const cur = db().issueCodes.get(id);
+  if (!cur) return null;
+  const nextCode = patch.code ? patch.code.trim().toUpperCase() : cur.code;
+  if (nextCode !== cur.code) {
+    if (db().issueCodes.findOne((c) => c.matterId === cur.matterId && c.code === nextCode)) throw new Error(`Issue code ${nextCode} already exists`);
+    const affected = matterDocs(cur.matterId).filter((d) => d.coding.issues?.includes(cur.code));
+    db().edocs.putMany(affected.map((d) => ({ ...d, coding: { ...d.coding, issues: d.coding.issues!.map((i) => (i === cur.code ? nextCode : i)) } })));
+  }
+  if (patch.parentId === id) patch.parentId = undefined;
+  return db().issueCodes.put({ ...cur, ...patch, code: nextCode, parentId: patch.parentId === "" ? undefined : (patch.parentId ?? cur.parentId) });
+}
+
+export function deleteIssueCode(id: string): boolean {
+  const cur = db().issueCodes.get(id);
+  if (!cur) return false;
+  const affected = matterDocs(cur.matterId).filter((d) => d.coding.issues?.includes(cur.code));
+  db().edocs.putMany(affected.map((d) => ({ ...d, coding: { ...d.coding, issues: d.coding.issues!.filter((i) => i !== cur.code) } })));
+  for (const child of db().issueCodes.find((c) => c.parentId === id)) db().issueCodes.put({ ...child, parentId: cur.parentId });
+  return db().issueCodes.delete(id);
+}
+
+// ---------------------------------------------------------------------------
+// Coding rules
+// ---------------------------------------------------------------------------
+
+export function getCodingRules(matterId: string): string {
+  return db().kv.get<string>(CODING_RULES_KEY(matterId)) ?? DEFAULT_CODING_RULES[matterId] ?? DEFAULT_CODING_RULES.default;
+}
+
+export function setCodingRules(matterId: string, text: string) {
+  db().kv.set(CODING_RULES_KEY(matterId), text);
+  return text;
+}
+
+// ---------------------------------------------------------------------------
+// Privilege log
+// ---------------------------------------------------------------------------
+
+export function listPrivilegeLog(matterId: string): PrivilegeLogRow[] {
+  return db().privilegeLog
+    .find((e) => e.matterId === matterId)
+    .map((e) => toPrivilegeLogRow(e, db().edocs.get(e.docId)))
+    .sort((a, b) => compareBates(a.bates.split(" ")[0], b.bates.split(" ")[0]));
+}
+
+export function privilegedDocsWithoutEntry(matterId: string): EDocument[] {
+  const have = new Set(db().privilegeLog.find((e) => e.matterId === matterId).map((e) => e.docId));
+  return matterDocs(matterId).filter((d) => d.coding.privileged === true && !have.has(d.id));
+}
+
+export function basisLabel(d: EDocument) {
+  switch (d.coding.privilegeBasis) {
+    case "work-product": return "Work product";
+    case "common-interest": return "Common interest";
+    case "joint-defense": return "Joint defense";
+    default: return "Attorney-client";
+  }
+}
+
+export function upsertPrivilegeEntry(d: EDocument, description: string, status: PrivilegeLogEntry["status"] = "draft"): PrivilegeLogEntry {
+  const existing = db().privilegeLog.get(`pl_${d.id}`);
+  const entry: PrivilegeLogEntry = {
+    id: `pl_${d.id}`,
+    matterId: d.matterId,
+    docId: d.id,
+    bates: d.batesEnd ? `${d.bates} – ${d.batesEnd}` : d.bates,
+    date: d.date,
+    author: d.from ?? d.custodianName,
+    recipients: [...(d.to ?? []), ...(d.cc ?? []).map((c) => `${c} (cc)`)],
+    docType: d.type,
+    basis: basisLabel(d),
+    description,
+    status: existing?.status === "final" && status === "draft" ? "final" : status,
+  };
+  return db().privilegeLog.put(entry);
+}
+
+export function updatePrivilegeEntry(id: string, patch: Partial<Pick<PrivilegeLogEntry, "description" | "status" | "basis">>): PrivilegeLogEntry | null {
+  return db().privilegeLog.update(id, patch);
+}
+
+export function deletePrivilegeEntry(id: string) {
+  return db().privilegeLog.delete(id);
+}
+
+/** Template-based generation (no AI). The AI variant lives in ai.ts and falls back to this. */
+export function generatePrivilegeLogTemplate(matterId: string, opts: { regenerate?: boolean } = {}) {
+  const docs = opts.regenerate ? matterDocs(matterId).filter((d) => d.coding.privileged === true) : privilegedDocsWithoutEntry(matterId);
+  const entries = docs.map((d) => upsertPrivilegeEntry(d, templatePrivilegeDescription(d)));
+  // Remove entries for documents no longer coded privileged.
+  const stale = db().privilegeLog.find((e) => e.matterId === matterId && db().edocs.get(e.docId)?.coding.privileged !== true);
+  for (const e of stale) db().privilegeLog.delete(e.id);
+  return { created: entries.length, removed: stale.length, ai: false };
+}
+
+// ---------------------------------------------------------------------------
+// Production
+// ---------------------------------------------------------------------------
+
+export function production(matterId: string) {
+  return productionSummary(matterId, matterDocs(matterId));
+}
+
+export function productionCsv(matterId: string) {
+  const docs = matterDocs(matterId).filter(isProducible).sort((a, b) => compareBates(a.bates, b.bates));
+  return productionLoadFileCsv(docs);
+}
+
+/** Bates lookup helper shared by routes. */
+export function findByBatesRange(matterId: string, start: string, end: string): EDocument[] {
+  const p = parseQuery(`${start}-${end}`);
+  const range = p.bates[0];
+  if (!range) return [];
+  return matterDocs(matterId).filter((d) => batesInRange(d.bates, range, d.batesEnd)).sort((a, b) => compareBates(a.bates, b.bates));
+}

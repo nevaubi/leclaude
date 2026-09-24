@@ -331,7 +331,11 @@ class Typesetter {
     for (const b of s.blocks) {
       switch (b.type) {
         case "heading": this.heading(b.text, b.level ?? 1, b.align, b.bookmark ?? true); break;
-        case "paragraph": this.paragraph(b.text, { indent: b.indent, align: b.align, size: b.size, before: b.before, after: b.after, italic: b.italic, bold: b.bold, family: b.font }); break;
+        case "paragraph": {
+          const lines = b.text.split("\n");
+          lines.forEach((line, i) => this.paragraph(line, { indent: b.indent, align: b.align, size: b.size, before: i === 0 ? b.before : 0, after: i < lines.length - 1 ? 1 : b.after, italic: b.italic, bold: b.bold, family: b.font }));
+          break;
+        }
         case "numbered": this.paragraph(b.text, { hanging: { label: b.number, width: b.indent ?? 36 } }); break;
         case "bullets": for (const it of b.items) this.paragraph(it, { hanging: { label: "•", width: 18 }, after: this.lh * 0.25 }); this.y -= this.lh * 0.3; break;
         case "keyvalue": this.keyvalue(b.rows, b.keyWidth); break;
