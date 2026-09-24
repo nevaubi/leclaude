@@ -1,20 +1,13 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Briefcase, ChevronDown, Download, FileSpreadsheet, FileText, History, Loader2, Printer, Save, Sparkles, Upload, PanelRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { FileSpreadsheet, FileText, History, ListChecks, Printer, Search, Sparkles, TableProperties, Tags, Upload, PanelRight } from "lucide-react";
 import type { Matter, OfficeComment } from "@/lib/types/domain";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/ui/misc";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { TopbarSlot } from "@/components/shell/app-shell";
 import { saveStateLabel, useOfficeDoc, type ApplyResult, type EditProposal, type OfficeScope } from "@/modules/office/shared";
+import { OfficeChrome, OfficeErrorState, ToolbarSkeleton, useNarrowViewport, type ChromeMenuEntry } from "@/modules/office/shared/office-chrome";
 import "./sheet.css";
 import { applyProposals, locateTarget, previewProposal } from "./apply-proposals";
 import { downloadCsv, downloadXlsx, importFile, MOD, printWorkbook } from "./client-utils";
@@ -51,6 +44,9 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
   const router = useRouter();
   const office = useOfficeDoc<Workbook>({ id, kind: "sheet", emptyContent: emptyWorkbook, templateId: templateId ?? null, matterId: matterId ?? null, autosaveMs: 1500 });
   const { doc, loading, error } = office;
+  const officeRef = React.useRef(office);
+  officeRef.current = office;
+  const narrow = useNarrowViewport();
   const store = useSheetStore;
   const workbook = useSheetStore((s) => s.workbook);
   const computed = useSheetStore((s) => s.computed);
@@ -66,6 +62,7 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
   const [chartEdit, setChartEdit] = React.useState<{ id?: string; type?: ChartType } | null>(null);
   const [layout, setLayout] = React.useState({ firstRow: 1, lastRow: 100, pages: 1 });
   const [exporting, setExporting] = React.useState<string | null>(null);
+  const [versionCount, setVersionCount] = React.useState<number | undefined>(undefined);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const sheet = workbook.sheets[workbook.activeSheet] ?? workbook.sheets[0];
   const matter = React.useMemo(() => matters.find((m) => m.id === (doc?.matterId ?? matterId)) ?? null, [matters, doc?.matterId, matterId]);
@@ -82,13 +79,24 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
     return () => { store.getState().setOnChange(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.id]);
-  React.useEffect(() => { if (doc?.title) setTitle(doc.title); }, [doc?.title]);
+  React.useEffect(() => { if (doc?.title && document.activeElement?.getAttribute("data-title-input") !== "1") setTitle(doc.title); }, [doc?.title]);
   React.useEffect(() => { void revision; }, [revision]);
+  // Narrow viewports open with the side panel closed; ⌘/ or the toggles reopen it.
+  const autoCollapsed = React.useRef(false);
+  React.useEffect(() => { if (narrow && !autoCollapsed.current) { autoCollapsed.current = true; setPanelOpen(false); } }, [narrow]);
+  // "Versions (n)" in the assistant header; refreshed after each save.
+  const contentVersion = doc?.contentVersion;
+  React.useEffect(() => {
+    if (!ready || !doc?.id) return;
+    let alive = true;
+    officeRef.current.versions.list().then((v) => { if (alive) setVersionCount(v.length); }).catch(() => {});
+    return () => { alive = false; };
+  }, [ready, doc?.id, contentVersion]);
   // Development hook for browser automation / debugging (never in production builds).
   React.useEffect(() => { if (process.env.NODE_ENV !== "production") (window as unknown as { __leclaudeSheetStore?: unknown }).__leclaudeSheetStore = useSheetStore; }, []);
 
   const focusGrid = React.useCallback(() => { (document.querySelector(".sheet-grid") as HTMLElement | null)?.focus(); }, []);
-  const saveNow = React.useCallback(async () => { const r = await office.save(); if (r) toast.success("Saved"); }, [office]);
+  const saveNow = React.useCallback(async () => { const r = await office.save(); if (r) toast.success("Saved", { duration: 1200 }); }, [office]);
   const commitTitle = React.useCallback(async () => { const t = title.trim() || "Untitled workbook"; if (t !== doc?.title) await office.setTitle(t); }, [title, doc?.title, office]);
 
   // comments API wrappers
@@ -130,7 +138,7 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
       const k = e.key.toLowerCase();
       if (k === "s") { e.preventDefault(); void saveNow(); }
       else if (k === "f" || k === "h") { e.preventDefault(); setDialog("find"); }
-      else if (k === "/") { e.preventDefault(); setPanelOpen(true); setTab("assistant"); }
+      else if (k === "/") { e.preventDefault(); setPanelOpen((open) => !(open && tabRef.current === "assistant")); setTab("assistant"); }
       else if (k === "p") { e.preventDefault(); printWorkbook(); }
       else if (k === "`") { e.preventDefault(); store.getState().setShowFormulas(!store.getState().showFormulas); }
       else if (e.shiftKey && k === "m") { e.preventDefault(); startComment(); }
@@ -139,6 +147,8 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveNow]);
+  const tabRef = React.useRef(tab);
+  tabRef.current = tab;
 
   const startComment = (ref?: string) => {
     const st = store.getState();
@@ -164,57 +174,56 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
     catch (e) { toast.error(`Import failed: ${(e as Error).message}`, { id: t }); }
   };
   const saveLabel = saveStateLabel(office.saveState, office.lastSavedAt);
+  const openComments = comments.filter((c) => !c.resolved).length;
 
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <TopbarSlot><Link href="/library" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Back to Library</Link></TopbarSlot>
-        <EmptyState icon={AlertTriangle} title={error} description="The workbook may have been deleted, or the link is wrong." action={<Button asChild variant="outline"><Link href="/office?kind=sheet">Open workbooks</Link></Button>} />
-      </div>
-    );
-  }
+  const downloadEntries: ChromeMenuEntry[] = [
+    { label: "Excel (.xlsx)", icon: FileSpreadsheet, onSelect: () => void doExport("xlsx") },
+    { label: `CSV — ${sheet.name}`, icon: FileText, onSelect: () => void doExport("csv") },
+    { label: "PDF (print)", icon: Printer, shortcut: `${MOD}P`, onSelect: () => void doExport("pdf") },
+    "separator",
+    { label: "Import .xlsx / .csv…", icon: Upload, onSelect: () => fileInputRef.current?.click() },
+  ];
+  const moreEntries: ChromeMenuEntry[] = [
+    { label: "Version history", icon: History, onSelect: () => setDialog("versions") },
+    "separator",
+    { label: "Find & replace…", icon: Search, shortcut: `${MOD}F`, onSelect: () => setDialog("find") },
+    { label: "Named ranges…", icon: Tags, onSelect: () => setDialog("names") },
+    { label: "Data validation…", icon: ListChecks, onSelect: () => setDialog("validation") },
+    { label: "Conditional formatting…", icon: TableProperties, onSelect: () => setDialog("conditional") },
+  ];
+
+  if (error) return <OfficeErrorState kind="sheet" error={error} description="The workbook may have been deleted, or the link is wrong." />;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <TopbarSlot>
-        <Tip label="Back to Library"><Link href="/library" className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" /> Library</Link></Tip>
-        <Badge variant="success" className="shrink-0 gap-1 font-mono"><FileSpreadsheet className="size-3" /> XLSX</Badge>
-        {matter && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><button className="hidden max-w-[180px] shrink-0 items-center gap-1 truncate rounded-md border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground lg:flex cursor-pointer"><Briefcase className="size-3" /><span className="truncate">{matter.shortName}</span><ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-72">
-              <DropdownMenuLabel>Matter</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={matter.id} onValueChange={(v) => void office.save({ matterId: v })}>{matters.map((mm) => <DropdownMenuRadioItem key={mm.id} value={mm.id}><span className="truncate">{mm.shortName} <span className="text-muted-foreground">· {mm.client}</span></span></DropdownMenuRadioItem>)}</DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <input value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => void commitTitle()} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }} aria-label="Workbook title" placeholder="Untitled workbook" className="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold outline-none transition-colors hover:border-border focus:border-ring focus:bg-background" />
-        <span className={cn("hidden shrink-0 text-[11px] xl:inline", office.saveState === "error" ? "text-destructive" : office.saveState === "dirty" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")}>{saveLabel}</span>
-        <div className="flex shrink-0 items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5">{exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem onClick={() => void doExport("xlsx")}><FileSpreadsheet /> Excel (.xlsx)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doExport("csv")}><FileText /> CSV — {sheet.name}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void doExport("pdf")}><Printer /> PDF (print) <span className="ml-auto text-[10px] text-muted-foreground">{MOD}P</span></DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}><Upload /> Import .xlsx / .csv…</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <input ref={fileInputRef} type="file" accept=".xlsx,.xlsm,.xls,.csv,.tsv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImport(f); e.target.value = ""; }} />
-          <Tip label="Save" shortcut={`${MOD}S`}><Button variant="ghost" size="sm" onClick={() => void saveNow()} disabled={office.saveState === "saving"}><Save className="size-4" /> Save</Button></Tip>
-          <Tip label="Version history"><Button variant="ghost" size="sm" onClick={() => setDialog("versions")} disabled={!ready}><History className="size-4" /> Versions</Button></Tip>
-          <Tip label="Spreadsheet assistant" shortcut={`${MOD}/`}><Button variant={panelOpen && tab === "assistant" ? "secondary" : "ghost"} size="icon-sm" onClick={() => { if (panelOpen && tab === "assistant") setPanelOpen(false); else { setPanelOpen(true); setTab("assistant"); } }} aria-label="Toggle assistant"><Sparkles className={cn("size-4", panelOpen && tab === "assistant" && "text-primary")} /></Button></Tip>
-          <Tip label="Side panel"><Button variant={panelOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setPanelOpen((v) => !v)} aria-pressed={panelOpen} aria-label="Toggle side panel"><PanelRight className="size-4" /></Button></Tip>
-        </div>
-      </TopbarSlot>
+      <OfficeChrome
+        kind="sheet"
+        title={title}
+        onTitleChange={setTitle}
+        onTitleCommit={commitTitle}
+        matter={matter}
+        matters={matters}
+        onMatterChange={(v) => void office.save({ matterId: v })}
+        saveState={office.saveState}
+        lastSavedAt={office.lastSavedAt}
+        onSave={() => void saveNow()}
+        ready={ready}
+        download={downloadEntries}
+        downloadLabel="Export"
+        exporting={Boolean(exporting)}
+        more={moreEntries}
+        panels={[
+          { id: "assistant", label: "Spreadsheet assistant", icon: Sparkles, shortcut: `${MOD}/`, active: panelOpen && tab === "assistant", onToggle: () => { if (panelOpen && tab === "assistant") setPanelOpen(false); else { setPanelOpen(true); setTab("assistant"); } } },
+          { id: "panel", label: panelOpen ? "Hide side panel" : "Show side panel", icon: PanelRight, active: panelOpen, onToggle: () => setPanelOpen((v) => !v), count: !panelOpen ? openComments : undefined },
+        ]}
+      />
 
-      <SheetToolbar onOpen={(d) => { if (d === "chart") setChartEdit({}); setDialog(d); }} onInsertChart={insertChart} onAddComment={() => startComment()} disabled={!ready} />
+      {ready ? <SheetToolbar onOpen={(d) => { if (d === "chart") setChartEdit({}); setDialog(d); }} onInsertChart={insertChart} onAddComment={() => startComment()} /> : <ToolbarSkeleton />}
       <FormulaBar onFocusGrid={focusGrid} />
 
       <div className="flex min-h-0 flex-1">
         <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
-          <ResizablePanel minSize={420}>
+          <ResizablePanel minSize={360}>
             <div className="flex h-full min-h-0 flex-col">
               {!ready || loading ? (
                 <div className="flex-1 space-y-1 p-3">{Array.from({ length: 14 }).map((_, i) => <Skeleton key={i} className="h-6 w-full" style={{ opacity: 1 - i * 0.05 }} />)}</div>
@@ -227,11 +236,12 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
           {panelOpen && (
             <>
               <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={400} minSize={320} maxSize={640}>
+              <ResizablePanel defaultSize={narrow ? 340 : 400} minSize={300} maxSize={640}>
                 <SidePanel
                   tab={tab}
                   onTab={setTab}
-                  agent={{ endpoint: "/api/office/sheet/agent", docId: doc?.id, docTitle: title || doc?.title || "Untitled workbook", matterId: doc?.matterId ?? matterId ?? null, getSnapshot, scopes, applyProposals: onApplyProposals, onUndo: () => store.getState().undo(), onLocate, suggestions, onApplied, extraContext: () => ({ activeSheet: sheet.name, selection: store.getState().selectionA1(), showFormulas: store.getState().showFormulas }) }}
+                  onClose={() => setPanelOpen(false)}
+                  agent={{ endpoint: "/api/office/sheet/agent", docId: doc?.id, docTitle: title || doc?.title || "Untitled workbook", matterId: doc?.matterId ?? matterId ?? null, getSnapshot, scopes, applyProposals: onApplyProposals, onUndo: () => store.getState().undo(), onLocate, suggestions, onApplied, extraContext: () => ({ activeSheet: sheet.name, selection: store.getState().selectionA1(), showFormulas: store.getState().showFormulas }), onVersions: () => setDialog("versions"), versionCount }}
                   comments={comments}
                   draftAnchor={draftAnchor}
                   onDraftAnchor={setDraftAnchor}
@@ -247,8 +257,9 @@ export function SheetEditorPage({ id, templateId, matterId, matters }: SheetEdit
         </ResizablePanelGroup>
       </div>
 
-      <StatusBar firstRow={layout.firstRow} lastRow={layout.lastRow} pages={layout.pages} saveLabel={saveLabel} loading={loading} comments={comments.filter((c) => !c.resolved).length} errors={errors} saveState={office.saveState} />
+      <StatusBar firstRow={layout.firstRow} lastRow={layout.lastRow} pages={layout.pages} saveLabel={saveLabel} loading={loading} comments={openComments} errors={errors} saveState={office.saveState} onComments={() => { setPanelOpen(true); setTab("comments"); }} />
 
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xlsm,.xls,.csv,.tsv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImport(f); e.target.value = ""; }} />
       <ConditionalFormatDialog open={dialog === "conditional"} onOpenChange={(v) => !v && setDialog(null)} />
       <FindReplaceDialog open={dialog === "find"} onOpenChange={(v) => !v && setDialog(null)} />
       <NamedRangesDialog open={dialog === "names"} onOpenChange={(v) => !v && setDialog(null)} />

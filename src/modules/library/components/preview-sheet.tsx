@@ -31,7 +31,7 @@ export function PreviewSheet() {
   const { previewId, openPreview } = useLibrary();
   return (
     <Sheet open={Boolean(previewId)} onOpenChange={(o) => { if (!o) openPreview(null); }}>
-      <SheetContent width="max-w-2xl" className="w-full" aria-describedby={undefined}>
+      <SheetContent width="max-w-3xl" className="w-full" aria-describedby={undefined}>
         {previewId && <PreviewBody id={previewId} key={previewId} />}
       </SheetContent>
     </Sheet>
@@ -115,7 +115,7 @@ function PreviewBody({ id }: { id: string }) {
             </SheetDescription>
           </div>
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {editorHref && <Button size="sm" asChild><Link href={editorHref}><ExternalLink className="size-3.5" /> Open in editor</Link></Button>}
           {item.type === "template" && item.url && <Button size="sm" asChild><Link href={item.url}><LayoutTemplate className="size-3.5" /> Use template</Link></Button>}
           {item.type === "link" && item.url && <Button size="sm" asChild><a href={item.url} target="_blank" rel="noreferrer"><ExternalLink className="size-3.5" /> {item.url.startsWith("/api/blobs/") ? "Open file" : "Open link"}</a></Button>}
@@ -155,7 +155,7 @@ function PreviewBody({ id }: { id: string }) {
                 </div>
               </div>
             ) : item.type === "note" ? (
-              <div className="rounded-md border bg-card px-4 py-3"><Markdown>{item.content || "*Empty note*"}</Markdown></div>
+              <div className="rounded-md border bg-card px-5 py-4"><Markdown className="reading-serif text-[14px] leading-[1.65] [&_p]:my-2">{item.content || "*Empty note*"}</Markdown></div>
             ) : null)}
 
             {item.officeDocId && detail.office && (
@@ -168,7 +168,7 @@ function PreviewBody({ id }: { id: string }) {
                 </div>
                 <div className="rounded-md border">
                   <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs font-medium"><FileText className="size-3.5" /> Text preview</div>
-                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap px-3 py-2 font-serif text-[12.5px] leading-relaxed scrollbar-thin">{detail.office.text || "This document has no text yet."}</pre>
+                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap px-4 py-3 font-serif text-[14px] leading-[1.65] scrollbar-thin">{detail.office.text || "This document has no text yet."}</pre>
                 </div>
               </div>
             )}

@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Sparkles, Undo2, PenLine, ScanSearch, MessageCircleQuestion, Check, X, Globe, ChevronDown, Loader2, AlertTriangle, Crosshair, MoreHorizontal, History, KeyRound, Copy, RotateCcw, AlertCircle } from "lucide-react";
+import { Sparkles, Undo2, PenLine, ScanSearch, MessageCircleQuestion, Check, X, Globe, ChevronDown, Loader2, AlertTriangle, Crosshair, MoreHorizontal, History, KeyRound, Copy, RotateCcw, AlertCircle, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -54,13 +54,18 @@ export interface OfficeAgentPanelProps {
   /** "Versions (n)" link in the header. */
   onVersions?: () => void;
   versionCount?: number;
+  /** Aliases for onVersions / versionCount. */
+  onOpenVersions?: () => void;
+  versionsCount?: number;
+  /** Close button in the header (panel toggles live in the editor chrome). */
+  onClose?: () => void;
   className?: string;
   defaultMode?: OfficeAgentMode;
   title?: string;
   userName?: string;
 }
 
-const MODES: { id: OfficeAgentMode; label: string; icon: React.ComponentType<{ className?: string }>; title: string }[] = [
+const MODES: { id: OfficeAgentMode; label: string; icon: LucideIcon; title: string }[] = [
   { id: "draft", label: "Draft", icon: PenLine, title: "Propose edits you can preview and apply" },
   { id: "review", label: "Review", icon: ScanSearch, title: "Read-only pass: citations, defined terms, risk" },
   { id: "ask", label: "Ask", icon: MessageCircleQuestion, title: "Questions about the document, matter and law" },
@@ -71,7 +76,9 @@ const SEVERITY_VARIANT: Record<ReviewFinding["severity"], "muted" | "info" | "wa
 interface RunInfo { provenance: Provenance | null; research: boolean; mode: OfficeAgentMode; message: string; noKey?: boolean }
 
 export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
-  const { endpoint, docId, docTitle, matterId, getSnapshot, scopes, applyProposals, onUndo, onLocate, suggestions, extraContext, onApplied, onPreview, onAudited, onVersions, versionCount, className, defaultMode = "draft", title = "Drafting assistant", userName = "You" } = props;
+  const { endpoint, docId, docTitle, matterId, getSnapshot, scopes, applyProposals, onUndo, onLocate, suggestions, extraContext, onApplied, onPreview, onAudited, onClose, className, defaultMode = "draft", title = "Drafting assistant", userName = "You" } = props;
+  const onVersions = props.onVersions ?? props.onOpenVersions;
+  const versionCount = props.versionCount ?? props.versionsCount;
   const tracked = props.trackedChanges ?? /\/word\//.test(endpoint);
   const appliedNoun = tracked ? "as tracked changes" : "to the document";
   const [mode, setMode] = React.useState<OfficeAgentMode>(defaultMode);
@@ -230,6 +237,7 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
             <DropdownMenuItem onClick={clearConversation}>Clear conversation</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {onClose && <Tip label="Close assistant" shortcut="⌘/"><Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Close assistant"><X className="size-4" /></Button></Tip>}
       </div>
 
       <div className="shrink-0 px-3 py-2">

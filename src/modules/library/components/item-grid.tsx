@@ -81,7 +81,7 @@ export function ItemGrid() {
 
 function GridSkeleton({ mode }: { mode: "grid" | "list" }) {
   return mode === "grid" ? (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 p-3">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[148px] rounded-lg" />)}</div>
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[144px] rounded-lg" />)}</div>
   ) : (
     <div className="space-y-1 p-3">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-9" />)}</div>
   );
@@ -176,7 +176,7 @@ function ItemName({ item, className, query }: { item: LibraryItemView; className
 // ---------------------------------------------------------------------------
 function CardGrid({ items, selected, dragOverId }: { items: LibraryItemView[]; selected: Set<string>; dragOverId: string | null }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(224px,1fr))] gap-3 p-3" data-surface="1" role="grid" aria-label="Items">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-4 p-4" data-surface="1" role="grid" aria-label="Items">
       {items.map((item) => <ItemCard key={item.id} item={item} selected={selected.has(item.id)} over={dragOverId === item.id} />)}
     </div>
   );
@@ -203,7 +203,7 @@ function ItemCard({ item, selected, over }: { item: LibraryItemView; selected: b
         onDragLeave={h.onDragLeave}
         onDrop={h.onDrop}
         className={cn(
-          "group relative flex h-[148px] cursor-default select-none flex-col rounded-lg border bg-card p-3 text-left shadow-xs outline-none transition-all hover:border-foreground/20 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring/60",
+          "group relative flex h-[144px] cursor-default select-none flex-col rounded-lg border bg-card p-3 text-left outline-none transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/60",
           selected && "border-primary/60 bg-accent/50 ring-2 ring-primary/30",
           over && "border-primary ring-2 ring-primary/50 bg-primary/5",
           isFolder && "bg-muted/30",
@@ -230,7 +230,7 @@ function ItemCard({ item, selected, over }: { item: LibraryItemView; selected: b
           {isFolder && item.description && <p className="line-clamp-3 text-[11.5px] leading-snug text-muted-foreground">{item.description}</p>}
         </div>
         <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          {item.matterShortName && <Badge variant="outline" className="max-w-[110px] truncate px-1.5 py-0 text-[10px]">{item.matterShortName}</Badge>}
+          {item.matterShortName && <span className="max-w-[120px] truncate text-[11px] text-muted-foreground" title={item.matterShortName}>{item.matterShortName}</span>}
           {item.status === "draft" && <Badge variant="warning" className="px-1.5 py-0 text-[10px]">Draft</Badge>}
           <span className="flex-1" />
           {item.ownerName && <PersonAvatar name={item.ownerName} size="xs" />}
@@ -344,7 +344,7 @@ function ListRow({ item, selected, over }: { item: LibraryItemView; selected: bo
 function SearchResults({ hits, query }: { hits: LibrarySearchHit[]; query: string }) {
   const { selected, openFolder } = useLibrary();
   return (
-    <div className="mx-auto max-w-5xl space-y-2 p-3" data-surface="1">
+    <div className="mx-auto max-w-5xl space-y-2 p-4" data-surface="1">
       {hits.map((h) => <SearchHitRow key={h.item.id} hit={h} query={query} selected={selected.has(h.item.id)} openFolder={openFolder} />)}
     </div>
   );

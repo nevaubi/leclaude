@@ -61,7 +61,7 @@ export function ClausePanel({ item, standard }: { item: LibraryItemView; standar
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
         {meta && <Badge variant="accent" className="capitalize">{meta.category}</Badge>}
         {meta && <Badge variant={STANCE_VARIANT[meta.stance]} className="capitalize">{meta.stance}</Badge>}
         {meta?.governingLaw && <Badge variant="outline">{meta.governingLaw} law</Badge>}
@@ -73,10 +73,11 @@ export function ClausePanel({ item, standard }: { item: LibraryItemView; standar
         <div className="rounded-md border border-info/30 bg-info/5 px-3 py-2 text-xs leading-relaxed"><span className="font-medium">Drafting notes.</span> {meta.notes}</div>
       )}
 
+      <div className="grid gap-4 lg:grid-cols-2">
       <section className="rounded-lg border">
-        <header className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
+        <header className="flex h-9 items-center gap-2 border-b px-3">
           <Wand2 className="size-4 text-primary" />
-          <div className="text-sm font-medium">Fill variables</div>
+          <div className="text-[12.5px] font-semibold">Fill variables</div>
           <span className="text-[11px] text-muted-foreground">{nFilled}/{specs.length}</span>
           <div className="flex-1" />
           <Button variant="ghost" size="xs" onClick={fillExamples} disabled={!specs.some((s) => s.example)}>Use examples</Button>
@@ -85,7 +86,7 @@ export function ClausePanel({ item, standard }: { item: LibraryItemView; standar
         {specs.length === 0 ? (
           <p className="px-3 py-3 text-xs text-muted-foreground">This clause has no variables — insert or copy it as is.</p>
         ) : (
-          <div className="grid gap-2.5 p-3 sm:grid-cols-2">
+          <div className="grid gap-2.5 p-3">
             {specs.map((s) => (
               <div key={s.name} className="space-y-1">
                 <Label className="flex items-center gap-1 text-[11px]"><code className="rounded bg-muted px-1 font-mono text-[10px]">{`{{${s.name}}}`}</code>{s.description && <span className="truncate text-muted-foreground" title={s.description}>· {s.description}</span>}</Label>
@@ -97,16 +98,18 @@ export function ClausePanel({ item, standard }: { item: LibraryItemView; standar
       </section>
 
       <section className="rounded-lg border">
-        <header className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
-          <div className="text-sm font-medium">Preview</div>
+        <header className="flex h-9 items-center gap-2 border-b px-3">
+          <div className="text-[12.5px] font-semibold">Preview</div>
           {filled.missing.length > 0 && <Badge variant="warning" className="text-[10px]">{filled.missing.length} missing</Badge>}
           <div className="flex-1" />
           <Button variant="ghost" size="xs" onClick={() => setShowPreview((v) => !v)}>{showPreview ? "Hide" : "Show"}</Button>
         </header>
-        {showPreview && <div className="max-h-72 overflow-y-auto px-3 py-2 scrollbar-thin"><Markdown compact className="font-serif text-[13px]">{filled.text}</Markdown></div>}
+        {showPreview && <div className="max-h-[420px] overflow-y-auto px-4 py-3 scrollbar-thin"><Markdown compact className="reading-serif text-[14px] leading-[1.65]">{filled.text}</Markdown></div>}
       </section>
+      </div>
 
       <section className="space-y-2 rounded-lg border p-3">
+        <div className="text-[12.5px] font-semibold">Insert</div>
         <div className="grid gap-2 sm:grid-cols-[1fr_180px]">
           <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">Document title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 text-xs" /></div>
           <div className="space-y-1"><Label className="text-[11px] text-muted-foreground">Matter</Label>

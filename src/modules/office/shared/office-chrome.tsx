@@ -54,6 +54,18 @@ export function KindBadge({ kind, className }: { kind: OfficeKind; className?: s
 export interface ChromeMenuItem { label: React.ReactNode; icon?: LucideIcon; onSelect?: () => void; shortcut?: string; hint?: string; disabled?: boolean; destructive?: boolean; href?: string; download?: string }
 export type ChromeMenuEntry = ChromeMenuItem | "separator" | { heading: string };
 
+/** Download menu item (alternative shape accepted by OfficeChrome's `download`). */
+export interface DownloadItem { id: string; label: React.ReactNode; icon?: LucideIcon; onSelect?: () => void; shortcut?: string; hint?: string; separatorBefore?: boolean; disabled?: boolean; href?: string; download?: string }
+
+export function downloadItemsToEntries(items: DownloadItem[]): ChromeMenuEntry[] {
+  const out: ChromeMenuEntry[] = [];
+  for (const it of items) {
+    if (it.separatorBefore && out.length) out.push("separator");
+    out.push({ label: it.label, icon: it.icon, onSelect: it.onSelect, shortcut: it.shortcut, hint: it.hint, disabled: it.disabled, href: it.href, download: it.download });
+  }
+  return out;
+}
+
 export interface ChromePanelToggle { id: string; label: string; icon: LucideIcon; active: boolean; onToggle: () => void; shortcut?: string; count?: number }
 
 export interface OfficeChromeProps {
@@ -69,9 +81,14 @@ export interface OfficeChromeProps {
   onSave: () => void;
   /** Editors disable most actions until the document is loaded. */
   ready?: boolean;
-  download?: ChromeMenuEntry[];
+  /** Download/Export menu: a flat list of entries, or `{ items, busy }` (DownloadItem shape). */
+  download?: ChromeMenuEntry[] | { items: DownloadItem[]; busy?: boolean; label?: string };
   downloadLabel?: string;
   exporting?: boolean;
+  /** Placeholder for the title field (defaults to "Untitled <noun>"). */
+  titlePlaceholder?: string;
+  /** Extra header controls (toggles, version history…) rendered before Download. */
+  tools?: React.ReactNode;
   /** Overflow menu (version history, page operations, shortcuts…). */
   more?: ChromeMenuEntry[];
   /** Right-hand panel toggles (comments, assistant…). Icon-only, with counts. */
@@ -105,9 +122,12 @@ function MenuEntries({ entries }: { entries: ChromeMenuEntry[] }) {
 }
 
 export function OfficeChrome(props: OfficeChromeProps) {
-  const { kind, title, onTitleChange, onTitleCommit, matter, matters, onMatterChange, saveState, lastSavedAt, onSave, ready = true, download, downloadLabel, exporting, more, panels, primary, backHref = "/library", backLabel = "Library" } = props;
+  const { kind, title, onTitleChange, onTitleCommit, matter, matters, onMatterChange, saveState, lastSavedAt, onSave, ready = true, downloadLabel, exporting, more, panels, primary, tools, titlePlaceholder, backHref = "/library", backLabel = "Library" } = props;
   const meta = KIND_CHROME[kind];
   const tone = saveTone(saveState);
+  const download = Array.isArray(props.download) ? props.download : props.download ? downloadItemsToEntries(props.download.items) : undefined;
+  const busy = exporting ?? (Array.isArray(props.download) ? false : props.download?.busy);
+  const dlLabel = downloadLabel ?? (Array.isArray(props.download) ? undefined : props.download?.label) ?? meta.downloadLabel;
   return (
     <TopbarSlot>
       <Tip label={`Back to ${backLabel}`} shortcut="G L">
@@ -136,7 +156,7 @@ export function OfficeChrome(props: OfficeChromeProps) {
         onBlur={() => void onTitleCommit()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
         aria-label={`${meta.noun[0].toUpperCase()}${meta.noun.slice(1)} title`}
-        placeholder={meta.placeholder}
+        placeholder={titlePlaceholder ?? meta.placeholder}
         disabled={!ready}
         className="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-[13px] font-semibold outline-none transition-colors hover:border-border focus:border-ring focus:bg-background disabled:opacity-70"
       />
@@ -150,10 +170,11 @@ export function OfficeChrome(props: OfficeChromeProps) {
             </Button>
           </Tip>
         ))}
+        {tools}
         {primary}
         {download && (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5" disabled={!ready} aria-label={downloadLabel ?? meta.downloadLabel}>{exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}<span className="hidden lg:inline">{downloadLabel ?? meta.downloadLabel}</span><ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5" disabled={!ready} aria-label={dlLabel}>{busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}<span className="hidden lg:inline">{dlLabel}</span><ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72"><MenuEntries entries={download} /></DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -241,17 +262,34 @@ ToolMenuTrigger.displayName = "ToolMenuTrigger";
 // Tracked changes strip (Word) — only mounted when there are changes.
 // ---------------------------------------------------------------------------
 
-export interface TrackedChangesStripProps { count: number; index: number; onNav: (dir: -1 | 1) => void; onAcceptCurrent: () => void; onRejectCurrent: () => void; onAcceptAll: () => void; onRejectAll: () => void; disabled?: boolean }
+export interface TrackedChangesStripProps {
+  count: number;
+  index: number;
+  /** Step to the previous/next change. Either `onNav` or `onPrev` + `onNext`. */
+  onNav?: (dir: -1 | 1) => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  onAcceptCurrent: () => void;
+  onRejectCurrent: () => void;
+  onAcceptAll: () => void;
+  onRejectAll: () => void;
+  /** Distinct change authors, shown quietly after the count. */
+  authors?: string[];
+  disabled?: boolean;
+}
 
-export function TrackedChangesStrip({ count, index, onNav, onAcceptCurrent, onRejectCurrent, onAcceptAll, onRejectAll, disabled }: TrackedChangesStripProps) {
+export function TrackedChangesStrip({ count, index, onNav, onPrev, onNext, onAcceptCurrent, onRejectCurrent, onAcceptAll, onRejectAll, authors, disabled }: TrackedChangesStripProps) {
   if (count <= 0) return null;
+  const prev = () => (onPrev ? onPrev() : onNav?.(-1));
+  const next = () => (onNext ? onNext() : onNav?.(1));
   return (
     <div className={cn("flex h-8 shrink-0 items-center gap-1 border-b bg-muted/30 px-3 text-[12px]", disabled && "pointer-events-none opacity-60")} role="region" aria-label="Tracked changes">
       <span className="tabular font-medium">{count} tracked change{count === 1 ? "" : "s"}</span>
+      {authors && authors.length > 0 && <span className="hidden truncate text-muted-foreground lg:inline" title={authors.join(", ")}>· {authors.length === 1 ? authors[0] : `${authors.length} authors`}</span>}
       <span className="mx-1 h-4 w-px bg-border" />
-      <Tip label="Previous change"><button type="button" onClick={() => onNav(-1)} className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Previous change"><ChevronLeft className="size-3.5" /></button></Tip>
+      <Tip label="Previous change"><button type="button" onClick={prev} className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Previous change"><ChevronLeft className="size-3.5" /></button></Tip>
       <span className="min-w-[36px] text-center tabular text-muted-foreground">{Math.min(index + 1, count)}/{count}</span>
-      <Tip label="Next change"><button type="button" onClick={() => onNav(1)} className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Next change"><ChevronRight className="size-3.5" /></button></Tip>
+      <Tip label="Next change"><button type="button" onClick={next} className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Next change"><ChevronRight className="size-3.5" /></button></Tip>
       <span className="mx-1 h-4 w-px bg-border" />
       <Tip label="Accept this change"><button type="button" onClick={onAcceptCurrent} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-success hover:bg-success/10 cursor-pointer" aria-label="Accept current change"><Check className="size-3.5" /> Accept</button></Tip>
       <Tip label="Reject this change"><button type="button" onClick={onRejectCurrent} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-destructive hover:bg-destructive/10 cursor-pointer" aria-label="Reject current change"><X className="size-3.5" /> Reject</button></Tip>
@@ -268,9 +306,9 @@ export function TrackedChangesStrip({ count, index, onNav, onAcceptCurrent, onRe
 
 export interface SegmentOption<T extends string> { id: T; label: React.ReactNode; icon?: LucideIcon; title?: string; shortcut?: string }
 
-export function SegmentedControl<T extends string>({ options, value, onChange, className, size = "sm", ariaLabel, grow }: { options: SegmentOption<T>[]; value: T; onChange: (v: T) => void; className?: string; size?: "xs" | "sm"; ariaLabel?: string; grow?: boolean }) {
+export function SegmentedControl<T extends string>({ options, value, onChange, className, size = "sm", ariaLabel, grow, "aria-label": ariaLabelAttr }: { options: SegmentOption<T>[]; value: T; onChange: (v: T) => void; className?: string; size?: "xs" | "sm"; ariaLabel?: string; "aria-label"?: string; grow?: boolean }) {
   return (
-    <div role="tablist" aria-label={ariaLabel} className={cn("inline-flex shrink-0 items-center rounded-md bg-muted p-0.5", size === "sm" ? "h-8" : "h-7", grow && "flex w-full", className)}>
+    <div role="tablist" aria-label={ariaLabel ?? ariaLabelAttr} className={cn("inline-flex shrink-0 items-center rounded-md bg-muted p-0.5", size === "sm" ? "h-8" : "h-7", grow && "flex w-full", className)}>
       {options.map((o) => {
         const active = o.id === value;
         const btn = (
@@ -284,16 +322,16 @@ export function SegmentedControl<T extends string>({ options, value, onChange, c
   );
 }
 
-export interface PanelTab<T extends string> { id: T; label: string; icon?: LucideIcon; count?: number; shortcut?: string }
+export interface PanelTab<T extends string> { id: T; label: string; icon?: LucideIcon; count?: number; shortcut?: string; hint?: string }
 
 /** Underlined tab strip for right-hand panels (Assistant | Comments (2) | Charts | Page Setup). */
-export function PanelTabs<T extends string>({ tabs, value, onChange, onClose, className }: { tabs: PanelTab<T>[]; value: T; onChange: (t: T) => void; onClose?: () => void; className?: string }) {
+export function PanelTabs<T extends string>({ tabs, value, onChange, onClose, className, compact }: { tabs: PanelTab<T>[]; value: T | null; onChange: (t: T) => void; onClose?: () => void; className?: string; compact?: boolean }) {
   return (
     <div role="tablist" className={cn("flex h-9 shrink-0 items-center border-b px-1", className)}>
       {tabs.map((t) => {
         const active = t.id === value;
         return (
-          <button key={t.id} role="tab" aria-selected={active} onClick={() => onChange(t.id)} title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label} className={cn("relative flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-[12.5px] font-medium transition-colors cursor-pointer", active ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary" : "text-muted-foreground hover:text-foreground")}>
+          <button key={t.id} role="tab" aria-selected={active} onClick={() => onChange(t.id)} title={t.hint ?? (t.shortcut ? `${t.label} (${t.shortcut})` : t.label)} className={cn("relative flex h-full items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium transition-colors cursor-pointer", compact ? "px-2" : "px-2.5", active ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary" : "text-muted-foreground hover:text-foreground")}>
             {t.icon && <t.icon className="size-3.5" />}
             {t.label}
             {t.count ? <span className={cn("rounded-full px-1.5 text-[10.5px] tabular", active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{t.count}</span> : null}
@@ -308,18 +346,19 @@ export function PanelTabs<T extends string>({ tabs, value, onChange, onClose, cl
 export function OfficeStatusBar({ children, right, className }: { children: React.ReactNode; right?: React.ReactNode; className?: string }) {
   return (
     <div className={cn("flex h-7 shrink-0 items-center overflow-hidden border-t bg-background text-[11.5px] text-muted-foreground", className)} role="status">
-      <div className="flex min-w-0 items-center divide-x overflow-hidden">{children}</div>
-      <div className="flex-1" />
+      <div className="flex min-w-0 flex-1 items-center divide-x overflow-hidden">{children}</div>
       {right && <div className="flex shrink-0 items-center divide-x">{right}</div>}
     </div>
   );
 }
 
-export function StatusItem({ children, className, title, onClick, hide }: { children: React.ReactNode; className?: string; title?: string; onClick?: () => void; hide?: "md" | "lg" | "xl" }) {
-  const cls = cn("flex h-7 items-center gap-1 whitespace-nowrap px-2.5", hide === "md" && "hidden md:flex", hide === "lg" && "hidden lg:flex", hide === "xl" && "hidden xl:flex", onClick && "hover:bg-accent hover:text-foreground cursor-pointer", className);
-  if (onClick) return <button type="button" title={title} onClick={onClick} className={cls}>{children}</button>;
+export function StatusItem({ children, className, title, onClick, hide, active }: { children: React.ReactNode; className?: string; title?: string; onClick?: () => void; hide?: "md" | "lg" | "xl"; active?: boolean }) {
+  const cls = cn("flex h-7 items-center gap-1 whitespace-nowrap px-2.5", hide === "md" && "hidden md:flex", hide === "lg" && "hidden lg:flex", hide === "xl" && "hidden xl:flex", onClick && "hover:bg-accent hover:text-foreground cursor-pointer", active && "text-primary", className);
+  if (onClick) return <button type="button" title={title} onClick={onClick} aria-pressed={active} className={cls}>{children}</button>;
   return <span title={title} className={cls}>{children}</span>;
 }
+
+export const StatusSpacer = () => <span className="min-w-2 flex-1" aria-hidden />;
 
 // ---------------------------------------------------------------------------
 // Pure helpers (tested)
@@ -410,6 +449,28 @@ export function approximatePages(words: number, lineSpacing: number): number {
   const perPage = lineSpacing >= 2 ? 275 : lineSpacing >= 1.5 ? 360 : 500;
   return Math.max(1, Math.ceil(words / perPage));
 }
+
+// ---------------------------------------------------------------------------
+// Compatibility aliases (earlier chrome API names). Keep stable.
+// ---------------------------------------------------------------------------
+
+export const saveStateTone = saveTone;
+export const headerSaveLabel = savedAtLabel;
+export const ToolbarSep = ToolSep;
+export const ToolbarSpacer = () => <span className="min-w-2 flex-1" aria-hidden />;
+export type ToolbarButtonProps = ToolButtonProps & { text?: React.ReactNode; iconClassName?: string };
+/** ToolButton with an optional text label (earlier name). */
+export function ToolbarButton({ text, iconClassName, icon: Icon, children, className, ...rest }: ToolbarButtonProps) {
+  return (
+    <ToolButton {...rest} className={cn(text != null && "px-1.5", className)}>
+      {Icon && <Icon className={cn("size-4", iconClassName)} />}
+      {text != null && <span className="text-[12.5px]">{text}</span>}
+      {children}
+    </ToolButton>
+  );
+}
+export const ToolbarMenuButton = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof ToolMenuTrigger> & { hideLabel?: boolean }>(({ hideLabel, hideLabelBelow, ...rest }, ref) => <ToolMenuTrigger ref={ref} hideLabelBelow={hideLabel ? "xl" : hideLabelBelow} {...rest} />);
+ToolbarMenuButton.displayName = "ToolbarMenuButton";
 
 // ---------------------------------------------------------------------------
 // Additive helpers shared by the Sheet / Slides / PDF editors and the office

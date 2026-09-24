@@ -21,7 +21,7 @@ import { describeSchedule } from "../../schedule";
 import { apiJson, ApiError, useWorkflowMeta } from "../../hooks";
 import type { RunSummary } from "../../service";
 import type { WorkflowListItem, WorkflowStats } from "../../types";
-import { CategoryBadge, formatTokens, formatUsd, NodeTypeStrip, RunStatusBadge, WorkflowStatusBadge } from "../shared";
+import { CATEGORY_LABEL, CategoryBadge, formatTokens, formatUsd, NodeTypeStrip, RunStatusBadge, WorkflowStatusBadge } from "../shared";
 import { RunsTable } from "../run/runs-table";
 import { DescribeWorkflowDialog } from "./describe-dialog";
 
@@ -86,7 +86,6 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
     <div className="flex h-full min-h-0 flex-col">
       <TopbarSlot>
         <span className="flex items-center gap-1.5 text-sm font-medium"><WorkflowIcon className="size-4 text-muted-foreground" /> Workflows</span>
-        <span className="hidden text-xs text-muted-foreground md:inline">· playbooks that run research, drafting and review steps for you</span>
         <div className="ml-auto flex items-center gap-1.5">
           <Button variant="outline" size="sm" onClick={() => { setDescribeText(""); setDescribeOpen(true); }}><Sparkles className="size-3.5" /> Describe a workflow</Button>
           <Button size="sm" onClick={newBlank} disabled={busy === "new"}>{busy === "new" ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />} New</Button>
@@ -94,29 +93,23 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
       </TopbarSlot>
 
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-        <div className="mx-auto max-w-[1400px] space-y-5 p-5">
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <StatTile icon={WorkflowIcon} label="Workflows" value={stats.workflows} hint={`${stats.active} active · ${stats.templates} templates`} />
-            <StatTile icon={Activity} label="Runs this week" value={stats.runsThisWeek} hint={`${stats.succeededThisWeek} succeeded · ${stats.failedThisWeek} failed`} />
-            <StatTile icon={CheckCircle2} label="Success rate" value={`${stats.successRate}%`} hint={`${stats.runs} runs all time`} tone={stats.successRate >= 80 ? "success" : "warning"} />
-            <StatTile icon={UserCheck} label="Awaiting approval" value={stats.waitingApproval} hint={stats.running ? `${stats.running} running` : "nothing running"} tone={stats.waitingApproval ? "warning" : undefined} />
-            <StatTile icon={Coins} label="AI usage (7d)" value={formatTokens(stats.tokensThisWeek)} hint={`≈ ${formatUsd(stats.costThisWeekUsd)} estimated`} />
-            <StatTile icon={CalendarClock} label="Next scheduled" value={stats.nextScheduled[0] ? <RelativeTime value={stats.nextScheduled[0].at} className="text-base" /> : "—"} hint={stats.nextScheduled[0]?.name ?? `${stats.scheduled} scheduled`} />
+        <div className="mx-auto max-w-[1400px] space-y-4 p-4 md:p-5">
+          {/* Quiet stat strip: one line, tabular, no tiles. */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border bg-card px-4 py-2.5 text-[12px]" aria-label="Workflow statistics">
+            <StatInline icon={WorkflowIcon} label="Workflows" value={stats.workflows} hint={`${stats.active} active · ${stats.templates} templates`} />
+            <StatInline icon={Activity} label="Runs this week" value={stats.runsThisWeek} hint={`${stats.succeededThisWeek} ok · ${stats.failedThisWeek} failed`} />
+            <StatInline icon={CheckCircle2} label="Success" value={`${stats.successRate}%`} hint={`${stats.runs} runs`} tone={stats.successRate >= 80 ? "success" : "warning"} />
+            <StatInline icon={UserCheck} label="Awaiting approval" value={stats.waitingApproval} hint={stats.running ? `${stats.running} running` : undefined} tone={stats.waitingApproval ? "warning" : undefined} />
+            <StatInline icon={Coins} label="AI usage (7d)" value={formatTokens(stats.tokensThisWeek)} hint={`≈ ${formatUsd(stats.costThisWeekUsd)}`} />
+            <StatInline icon={CalendarClock} label="Next scheduled" value={stats.nextScheduled[0] ? <RelativeTime value={stats.nextScheduled[0].at} /> : "—"} hint={stats.nextScheduled[0]?.name} />
           </div>
 
-          {/* Describe */}
-          <Card className="flex flex-col gap-3 border-primary/25 bg-gradient-to-r from-primary/6 via-card to-card p-4 md:flex-row md:items-center">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Sparkles className="size-5" /></div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold">Build a workflow from a sentence</div>
-              <div className="text-xs text-muted-foreground">Describe the playbook — inputs, research, drafting, approvals, tasks — and the AI builder lays out the steps for you to refine.</div>
-            </div>
-            <form className="flex w-full gap-2 md:w-[440px]" onSubmit={(e) => { e.preventDefault(); setDescribeOpen(true); }}>
-              <Input value={describeText} onChange={(e) => setDescribeText(e.target.value)} placeholder="When a deposition transcript is uploaded, digest it and…" className="h-9 bg-background" />
-              <Button type="submit" size="sm" className="h-9"><Zap className="size-3.5" /> Build</Button>
-            </form>
-          </Card>
+          {/* Describe: one compact row, not a banner. */}
+          <form className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2" onSubmit={(e) => { e.preventDefault(); setDescribeOpen(true); }}>
+            <Sparkles className="size-4 shrink-0 text-primary" />
+            <Input value={describeText} onChange={(e) => setDescribeText(e.target.value)} placeholder="Describe a playbook in one sentence — the builder lays out the steps for you to refine" className="h-8 border-0 bg-transparent px-1 text-[13px] shadow-none focus-visible:ring-0" aria-label="Describe a workflow" />
+            <Button type="submit" size="sm" variant="outline"><Zap className="size-3.5" /> Build</Button>
+          </form>
 
           {/* Tabs + filters */}
           <div className="flex flex-wrap items-center gap-2">
@@ -143,7 +136,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
           </div>
 
           {tab === "templates" && (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {shownTemplates.map((t) => <TemplateCard key={t.id} t={t} onUse={() => applyTemplate(t.id)} busy={busy === t.id} />)}
               {shownTemplates.length === 0 && <div className="md:col-span-2 xl:col-span-3"><EmptyState icon={Search} title="No templates match" description="Try another search or category." /></div>}
             </div>
@@ -228,37 +221,37 @@ export function WorkflowsGallery({ templates, mine: mineInitial, stats, recentRu
   );
 }
 
-function StatTile({ icon: Icon, label, value, hint, tone }: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: "success" | "warning" }) {
+function StatInline({ icon: Icon, label, value, hint, tone }: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: "success" | "warning" }) {
   return (
-    <div className="rounded-lg border bg-card p-3">
-      <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>{label}</span><Icon className={cn("size-3.5", tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : "text-muted-foreground/70")} /></div>
-      <div className={cn("mt-1 text-xl font-semibold tabular", tone === "warning" && "text-warning-foreground dark:text-warning")}>{value}</div>
-      {hint && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</div>}
+    <div className="flex min-w-0 items-center gap-2">
+      <Icon className={cn("size-3.5 shrink-0", tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : "text-muted-foreground/70")} />
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn("font-semibold tabular", tone === "warning" && "text-warning-foreground dark:text-warning")}>{value}</span>
+      {hint && <span className="hidden truncate text-[11px] text-muted-foreground xl:inline">· {hint}</span>}
     </div>
   );
 }
 
 function CategoryChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} className={cn("rounded-full border px-2.5 py-1 text-[11px] transition-colors cursor-pointer", active ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>{children}</button>;
+  return <button type="button" onClick={onClick} aria-pressed={active} className={cn("h-6 rounded-md border px-2 text-[11px] font-medium transition-colors cursor-pointer", active ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground")}>{children}</button>;
 }
 
 function TemplateCard({ t, onUse, busy }: { t: WorkflowListItem; onUse: () => void; busy: boolean }) {
   return (
-    <Card className="group flex flex-col p-4 transition-shadow hover:shadow-md">
+    <Card className="group flex flex-col gap-2 p-3.5 transition-colors hover:border-foreground/20">
       <div className="flex items-start gap-2">
+        <NodeTypeStrip types={t.nodeTypes} max={4} className="mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5"><CategoryBadge category={t.category} />{t.usesAI && <Badge variant="info" className="text-[10px]">AI</Badge>}{t.hasApproval && <Badge variant="warning" className="text-[10px]"><UserCheck className="size-3" /> approval</Badge>}{t.schedule && <Badge variant="outline" className="text-[10px]"><CalendarClock className="size-3" /> scheduled</Badge>}</div>
-          <Link href={`/workflows/${t.id}`} className="mt-1.5 block text-sm font-semibold leading-tight hover:underline">{t.name}</Link>
+          <Link href={`/workflows/${t.id}`} className="block truncate text-[13px] font-semibold leading-tight hover:underline underline-offset-2" title={t.name}>{t.name}</Link>
+          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span>{CATEGORY_LABEL[t.category] ?? t.category}</span><span aria-hidden>·</span><span className="tabular">{t.nodeCount} steps</span>{t.usesAI && <><span aria-hidden>·</span><span className="text-primary">AI</span></>}{t.hasApproval && <><span aria-hidden>·</span><span className="inline-flex items-center gap-0.5"><UserCheck className="size-3" /> approval</span></>}{t.schedule && <><span aria-hidden>·</span><span className="inline-flex items-center gap-0.5"><CalendarClock className="size-3" /> scheduled</span></>}</div>
         </div>
-        <NodeTypeStrip types={t.nodeTypes} max={4} className="shrink-0" />
       </div>
-      <p className="mt-2 line-clamp-3 flex-1 text-xs leading-relaxed text-muted-foreground">{t.description}</p>
-      <div className="mt-3 flex flex-wrap gap-1">{(t.tags ?? []).slice(0, 4).map((tag) => <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>)}</div>
-      <div className="mt-3 flex items-center justify-between border-t pt-3">
-        <span className="text-[11px] text-muted-foreground">{t.nodeCount} steps · {(t.inputs ?? []).length} inputs</span>
-        <div className="flex items-center gap-1.5">
+      <p className="line-clamp-1 text-[12px] leading-relaxed text-muted-foreground" title={t.description}>{t.description}</p>
+      <div className="flex items-center justify-between">
+        <span className="truncate text-[11px] text-muted-foreground">{(t.tags ?? []).slice(0, 3).join(" · ")}</span>
+        <div className="flex shrink-0 items-center gap-1">
           <Button variant="ghost" size="xs" asChild><Link href={`/workflows/${t.id}`}>Preview</Link></Button>
-          <Button size="xs" onClick={onUse} disabled={busy}>{busy ? <Loader2 className="size-3 animate-spin" /> : <Copy className="size-3" />} Use template</Button>
+          <Button size="xs" variant="outline" onClick={onUse} disabled={busy}>{busy ? <Loader2 className="size-3 animate-spin" /> : <Copy className="size-3" />} Use</Button>
         </div>
       </div>
     </Card>

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { LibraryItemType } from "@/lib/types/domain";
 import { PRACTICE_AREAS, TYPE_LABEL, type LibrarySort } from "../types";
 import { activeFilterCount } from "../filters";
@@ -56,8 +56,8 @@ export function Toolbar() {
   const newDocHref = (kind: "word" | "sheet" | "slides" | "pdf") => `/office/${kind}/new${currentMatterId ? `?matter=${currentMatterId}` : ""}`;
 
   return (
-    <div className="shrink-0 border-b bg-background/80 backdrop-blur">
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+    <div className="shrink-0 border-b bg-background">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
         {/* Breadcrumbs */}
         <nav className="flex min-w-0 items-center gap-0.5 text-sm" aria-label="Breadcrumb">
           <CrumbButton id={null} label="Library" active={!folderId && view === "folder"} onOpen={() => openFolder(null)} onDrop={dropOnCrumb} over={dragOverId === "__root__"} setOver={(v) => setDragOverId(v ? "__root__" : null)} />
@@ -81,13 +81,21 @@ export function Toolbar() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters + sort in one popover */}
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant={nFilters ? "secondary" : "outline"} size="sm" className="gap-1.5"><Filter className="size-3.5" /> Filters {nFilters > 0 && <Badge variant="default" className="ml-0.5 h-4 min-w-4 justify-center rounded-full px-1 text-[10px]">{nFilters}</Badge>}</Button>
+            <Button variant={nFilters ? "secondary" : "outline"} size="sm" className="gap-1.5" aria-label="Filter and sort"><Filter className="size-3.5" /><span className="hidden md:inline">Filter</span>{nFilters > 0 && <Badge variant="default" className="ml-0.5 h-4 min-w-4 justify-center rounded-full px-1 text-[10px]">{nFilters}</Badge>}</Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[340px] space-y-3 p-3">
-            <div className="flex items-center justify-between"><div className="text-sm font-medium">Filter items</div>{nFilters > 0 && <Button variant="ghost" size="xs" onClick={() => setFilters({ type: undefined, matterId: undefined, practiceArea: undefined, tag: undefined, ownerId: undefined, from: undefined, to: undefined, status: undefined })}>Clear all</Button>}</div>
+          <PopoverContent align="end" className="w-[360px] space-y-3 p-3">
+            <div className="flex items-center justify-between"><div className="text-[12px] font-semibold">Sort</div><span className="text-[11px] text-muted-foreground">{SORT_LABEL[sort]} · {dir === "asc" ? "ascending" : "descending"}</span></div>
+            <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Sort by">
+              {(Object.keys(SORT_LABEL) as LibrarySort[]).map((k) => (
+                <button key={k} type="button" role="radio" aria-checked={sort === k} onClick={() => setSort(k, sort === k ? (dir === "asc" ? "desc" : "asc") : undefined)} className={cn("inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors cursor-pointer", sort === k ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>
+                  {SORT_LABEL[k]}{sort === k && (dir === "asc" ? <ArrowDownAZ className="size-3" /> : <ArrowUpDown className="size-3" />)}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between border-t pt-3"><div className="text-[12px] font-semibold">Filter</div>{nFilters > 0 && <Button variant="ghost" size="xs" onClick={() => setFilters({ type: undefined, matterId: undefined, practiceArea: undefined, tag: undefined, ownerId: undefined, from: undefined, to: undefined, status: undefined })}>Clear all</Button>}</div>
             <div className="grid grid-cols-2 gap-2">
               <FilterSelect label="Type" value={filters.type ?? ANY} onChange={(v) => setFilters({ type: v === ANY ? undefined : (v as LibraryItemType | "office") })} options={[{ value: ANY, label: "Any type" }, ...TYPE_OPTIONS.map((t) => ({ value: t, label: t === "office" ? "Office documents" : TYPE_LABEL[t] }))]} />
               <FilterSelect label="Matter" value={filters.matterId ?? ANY} onChange={(v) => setFilters({ matterId: v === ANY ? undefined : v })} options={[{ value: ANY, label: "Any matter" }, ...matters.map((m) => ({ value: m.id, label: m.shortName }))]} />
@@ -102,19 +110,6 @@ export function Toolbar() {
           </PopoverContent>
         </Popover>
 
-        {/* Sort */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="gap-1.5"><ArrowUpDown className="size-3.5" /><span className="hidden md:inline">{SORT_LABEL[sort]}</span></Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={sort} onValueChange={(v) => setSort(v as LibrarySort)}>
-              {(Object.keys(SORT_LABEL) as LibrarySort[]).map((s) => <DropdownMenuRadioItem key={s} value={s}>{SORT_LABEL[s]}</DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setSort(sort, dir === "asc" ? "desc" : "asc")}><ArrowDownAZ /> {dir === "asc" ? "Ascending" : "Descending"} · switch</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         {/* View */}
         <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "grid" | "list")} size="sm" variant="outline" className="rounded-md border p-0.5 [&>button]:border-0 [&>button]:shadow-none">
           <Tip label="Grid" shortcut="1"><ToggleGroupItem value="grid" aria-label="Grid view" size="xs"><LayoutGrid className="size-4" /></ToggleGroupItem></Tip>
@@ -123,7 +118,7 @@ export function Toolbar() {
 
         {/* Upload + New */}
         <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void actions.upload(e.target.files); e.target.value = ""; }} />
-        <Tip label="Upload files into this folder" shortcut="U"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="size-3.5" /> Upload</Button></Tip>
+        <Tip label="Upload files into this folder" shortcut="U"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} aria-label="Upload"><Upload className="size-3.5" /> <span className="hidden lg:inline">Upload</span></Button></Tip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button size="sm" className="gap-1"><FilePlus2 className="size-3.5" /> New <ChevronDown className="size-3.5 opacity-70" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

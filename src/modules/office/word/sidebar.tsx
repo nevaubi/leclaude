@@ -42,7 +42,7 @@ export function WordSidebar({ editor, tab, onTab, outline, currentHeadingId, onC
   return (
     <aside className="flex h-full w-[248px] shrink-0 flex-col border-r bg-background" aria-label="Document sidebar">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2">
-        <SegmentedControl ariaLabel="Sidebar" grow size="xs" value={tab} onChange={onTab} options={[{ id: "outline", label: "Outline", icon: ListTree, title: "Headings and word counts" }, { id: "find", label: "Find", icon: Search, title: "Find and replace", shortcut: "⌘F" }]} />
+        <SegmentedControl ariaLabel="Sidebar view" grow size="xs" value={tab} onChange={onTab} options={TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon, shortcut: t.shortcut }))} />
         <Tip label="Hide sidebar" shortcut="⌘⇧O"><Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Hide sidebar"><X className="size-3.5" /></Button></Tip>
       </div>
       {tab === "outline" ? <OutlinePanel editor={editor} outline={outline} currentHeadingId={currentHeadingId} /> : <FindReplacePanel editor={editor} focusKey={findFocusKey} />}
@@ -58,7 +58,7 @@ function OutlinePanel({ editor, outline, currentHeadingId }: { editor: Editor; o
     const dom = editor.view.nodeDOM(item.pos) as HTMLElement | null;
     dom?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
-  if (!outline.length) return <div className="p-3"><EmptyState compact icon={ListTree} title="No headings yet" description="Use the Style menu (Heading 1–3, ⌘⌥1–3) to build an outline, or ask the assistant to structure the document." /></div>;
+  if (!outline.length) return <PanelEmpty icon={ListTree} title="No headings yet" description="Use the Style menu (Heading 1–3, ⌘⌥1–3) to build an outline, or ask the assistant to structure the document." />;
   const total = outline.reduce((n, o) => n + o.words, 0);
   return (
     <div className="flex min-h-0 flex-1 flex-col">

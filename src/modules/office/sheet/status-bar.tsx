@@ -1,16 +1,18 @@
 "use client";
+/** Excel status bar: "Rows 1–100 · Page 1 of 1 · cells/formulas · errors … Sum/Avg/Min/Max/Count · comments · save state". */
 import * as React from "react";
 import { Loader2, MessageSquare, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OfficeStatusBar, StatusItem, pageOfLabel, rowRangeLabel } from "@/modules/office/shared/office-chrome";
 import { iterateRange, rangeSize } from "./a1";
 import { cellValueOf } from "./cell-render";
 import { formatValue, toNumber } from "./format";
 import { getStyle } from "./model";
 import { useSheetStore } from "./store";
 
-export interface StatusBarProps { firstRow: number; lastRow: number; pages: number; saveLabel: string; loading: boolean; comments: number; errors: number; saveState: string }
+export interface StatusBarProps { firstRow: number; lastRow: number; pages: number; saveLabel: string; loading: boolean; comments: number; errors: number; saveState: string; onComments?: () => void }
 
-export function StatusBar({ firstRow, lastRow, pages, saveLabel, loading, comments, errors, saveState }: StatusBarProps) {
+export function StatusBar({ firstRow, lastRow, pages, saveLabel, loading, comments, errors, saveState, onComments }: StatusBarProps) {
   const workbook = useSheetStore((s) => s.workbook);
   const computed = useSheetStore((s) => s.computed);
   const selection = useSheetStore((s) => s.selection);
@@ -41,26 +43,31 @@ export function StatusBar({ firstRow, lastRow, pages, saveLabel, loading, commen
   }, [selection.ranges, sheet, computed, workbook]);
 
   const fmt = (n: number) => formatValue(n, stats.numFmt && !/(yy|mmm|d)/i.test(stats.numFmt) ? { numFmt: stats.numFmt } : undefined).text;
-  const Item = ({ children, className, title }: { children: React.ReactNode; className?: string; title?: string }) => <span title={title} className={cn("flex items-center gap-1 whitespace-nowrap px-2", className)}>{children}</span>;
+  const cellCount = Object.keys(sheet.cells).length;
+  const formulaCount = Object.values(sheet.cells).filter((c) => c.f).length;
 
   return (
-    <div className="flex h-7 shrink-0 items-center overflow-hidden border-t bg-background text-[11px] text-muted-foreground divide-x">
-      <Item title="Visible rows">Rows <span className="tabular text-foreground">{firstRow}–{lastRow}</span></Item>
-      <Item title="Printed pages for the used range">Page 1 of <span className="tabular">{pages}</span></Item>
-      <Item title="Sheet size">{Object.keys(sheet.cells).length.toLocaleString()} cells · {Object.values(sheet.cells).filter((c) => c.f).length.toLocaleString()} formulas</Item>
-      {errors > 0 && <Item className="text-destructive" title="Cells with formula errors"><AlertTriangle className="size-3" /> {errors} error{errors === 1 ? "" : "s"}</Item>}
-      <div className="flex-1" />
-      {stats.numeric > 0 && (
+    <OfficeStatusBar
+      right={
         <>
-          <Item title="Sum of numeric cells in the selection">Sum <span className="tabular text-foreground">{fmt(stats.sum)}</span></Item>
-          <Item>Avg <span className="tabular text-foreground">{fmt(stats.avg)}</span></Item>
-          <Item>Min <span className="tabular text-foreground">{fmt(stats.min)}</span></Item>
-          <Item>Max <span className="tabular text-foreground">{fmt(stats.max)}</span></Item>
+          {stats.numeric > 0 && (
+            <>
+              <StatusItem title="Sum of numeric cells in the selection">Sum <span className="tabular text-foreground">{fmt(stats.sum)}</span></StatusItem>
+              <StatusItem hide="md">Avg <span className="tabular text-foreground">{fmt(stats.avg)}</span></StatusItem>
+              <StatusItem hide="lg">Min <span className="tabular text-foreground">{fmt(stats.min)}</span></StatusItem>
+              <StatusItem hide="lg">Max <span className="tabular text-foreground">{fmt(stats.max)}</span></StatusItem>
+            </>
+          )}
+          {stats.count > 0 && <StatusItem>Count <span className="tabular text-foreground">{stats.count}</span>{stats.cells > 1 && <span className="text-muted-foreground"> of {stats.cells.toLocaleString()}</span>}</StatusItem>}
+          {comments > 0 && <StatusItem onClick={onComments} title="Open comments"><MessageSquare className="size-3" /> <span className="tabular">{comments}</span></StatusItem>}
+          <StatusItem className={cn("min-w-[120px] justify-end", saveState === "error" && "text-destructive")} title="Save state">{loading ? <Loader2 className="size-3 animate-spin" /> : null}{saveLabel}</StatusItem>
         </>
-      )}
-      {stats.count > 0 && <Item>Count <span className="tabular text-foreground">{stats.count}</span>{stats.cells > 1 && <span className="text-muted-foreground"> of {stats.cells.toLocaleString()}</span>}</Item>}
-      {comments > 0 && <Item><MessageSquare className="size-3" /> <span className="tabular">{comments}</span></Item>}
-      <Item className={cn("min-w-[120px] justify-end", saveState === "error" && "text-destructive")}>{loading ? <Loader2 className="size-3 animate-spin" /> : null}{saveLabel}</Item>
-    </div>
+      }
+    >
+      <StatusItem title="Visible rows"><span className="tabular">{rowRangeLabel(firstRow, lastRow)}</span></StatusItem>
+      <StatusItem title="Printed pages for the used range"><span className="tabular">{pageOfLabel(1, pages)}</span></StatusItem>
+      <StatusItem hide="md" title="Sheet size"><span className="tabular">{cellCount.toLocaleString()}</span> cells · <span className="tabular">{formulaCount.toLocaleString()}</span> formulas</StatusItem>
+      {errors > 0 && <StatusItem className="text-destructive" title="Cells with formula errors"><AlertTriangle className="size-3" /> {errors} error{errors === 1 ? "" : "s"}</StatusItem>}
+    </OfficeStatusBar>
   );
 }

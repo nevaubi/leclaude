@@ -54,8 +54,8 @@ export function FolderTree({ className }: { className?: string }) {
   const matches = (n: FolderNode): boolean => !filterLower || n.name.toLowerCase().includes(filterLower) || n.children.some(matches);
 
   return (
-    <aside className={cn("flex h-full min-h-0 flex-col border-r bg-sidebar/60", className)}>
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
+    <aside className={cn("flex h-full min-h-0 flex-col border-r bg-sidebar/40", className)}>
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
         <LibraryIcon className="size-4 text-muted-foreground" />
         <button onClick={() => openFolder(null)} className="text-sm font-semibold hover:text-primary cursor-pointer">Library</button>
         <div className="flex-1" />
@@ -75,12 +75,12 @@ export function FolderTree({ className }: { className?: string }) {
         <input value={treeFilter} onChange={(e) => setTreeFilter(e.target.value)} placeholder="Filter folders…" className="h-7 w-full rounded-md border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30" />
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-2 py-2" aria-label="Library folders">
+      <nav className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-2 pb-2 pt-1" aria-label="Library folders">
         <div className="mb-2 space-y-0.5">
           {VIEWS.map((v) => {
             const active = view === v.id;
             return (
-              <button key={v.id} onClick={() => openView(v.id)} className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors cursor-pointer", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent")}>
+              <button key={v.id} onClick={() => openView(v.id)} className={cn("flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent")}>
                 <v.icon className={cn("size-4", active ? "text-sidebar-primary" : "text-muted-foreground")} />
                 <span className="flex-1 truncate text-left">{v.label}</span>
                 <span className="tabular text-[11px] text-muted-foreground">{tree?.views[v.countKey] ?? ""}</span>
@@ -88,7 +88,7 @@ export function FolderTree({ className }: { className?: string }) {
             );
           })}
         </div>
-        <div className="mb-1 px-2 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Folders</div>
+        <div className="mb-1 mt-1 px-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Folders</div>
         {!tree ? (
           <div className="space-y-1.5 px-1">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-6" />)}</div>
         ) : (
@@ -132,7 +132,7 @@ function TreeNode({ node, depth, expanded, toggle, activeId, onOpen, onDrop, dra
         onClick={() => onOpen(node.id)}
         onKeyDown={(e) => { if (e.key === "Enter") onOpen(node.id); if (e.key === "ArrowRight" && hasChildren && !isOpen) toggle(node.id); if (e.key === "ArrowLeft" && isOpen) toggle(node.id); }}
         tabIndex={0}
-        className={cn("group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1.5 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent", over && "ring-2 ring-primary/60 bg-primary/5")}
+        className={cn("group flex h-8 cursor-pointer items-center gap-1 rounded-md pr-1.5 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50", active ? "bg-sidebar-primary/10 text-sidebar-primary font-medium" : "text-sidebar-foreground/85 hover:bg-sidebar-accent", over && "ring-2 ring-primary/60 bg-primary/5")}
         style={{ paddingLeft: 6 + depth * 14 }}
       >
         <button
