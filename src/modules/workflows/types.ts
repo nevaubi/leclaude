@@ -18,6 +18,10 @@ export interface RunApproval {
   nodeId: ID;
   title: string;
   message: string;
+  /** "approval" (logic.approval) or "trust-gate" (an action blocked by untrusted AI input). */
+  kind?: "approval" | "trust-gate";
+  reasons?: string[];
+  stepIds?: string[];
   approverId?: ID;
   requestedAt: ISODate;
   decidedAt?: ISODate;
@@ -28,6 +32,8 @@ export interface RunApproval {
 
 /** Persisted run record: the shared WorkflowRun plus module extensions (all optional, backwards compatible). */
 export interface WorkflowRunRecord extends WorkflowRun {
+  /** Step ids whose trust gate was lifted by an approver. */
+  trustOverrides?: string[];
   workflowName?: string;
   workflowCategory?: string;
   triggeredById?: ID;

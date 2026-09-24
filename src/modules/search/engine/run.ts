@@ -21,6 +21,7 @@ import { runLane, type LaneResult } from "./lanes";
 import { planLanes } from "./planner";
 import { CORRECTION_INSTRUCTIONS, LANE_NOTE_HEADER, SYNTHESIS_FORMAT, SYNTHESIS_RULES } from "./prompts";
 import { assembleProvenance } from "./provenance";
+import { attachProvenance } from "@/lib/integrity/record";
 import { compactSource, mergeSources, numberSources, renderSourcesForPrompt } from "./sources";
 import { appendToThread, createThread, getThread } from "./threads";
 import type { AnswerBanner, LaneKind, ResearchLane, ResearchMessage, ResearchMode, ResearchSource, ResearchStreamEvent, ResearchThread, RunStats, VerificationSummary } from "./types";
@@ -230,6 +231,7 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   // --- provenance, persistence, audit --------------------------------------------
   const finalNumbered = numbered.map((s) => (cited.has(s.n ?? -1) ? s : { ...s, n: undefined }));
   const provenance = assembleProvenance({ sources: finalNumbered, verification, instructions: synthesisInstructions || undefined, question, model: deps.model, citationMismatches: citationChecks?.filter((c) => !c.matched).length ?? 0 });
+  try { attachProvenance({ kind: "research", recordId: runId, matterId: settings.matterId ?? undefined, title: question.slice(0, 140), href: `/search?thread=${thread.id}`, provenance }); } catch (e) { console.warn("[research] provenance sidecar failed", (e as Error).message); }
   const stats: RunStats = { sources: pool.length, read: pool.filter((s) => s.read).length, rounds, agents, durationMs: Date.now() - startedAt };
   const message: ResearchMessage = {
     id: `msg_${nanoid(8)}`,

@@ -168,7 +168,7 @@ export interface Deposition {
   pages: number;
   transcript: DepositionQA[];
   exhibits?: { id: string; description: string; bates?: string }[];
-  aiDigest?: { summary: string; keyAdmissions: string[]; themes: string[]; credibilityNotes?: string[]; followUps?: string[] };
+  aiDigest?: { summary: string; keyAdmissions: string[]; themes: string[]; credibilityNotes?: string[]; followUps?: string[]; provenance?: Provenance };
   status: "scheduled" | "transcribed" | "reviewed";
 }
 
@@ -245,7 +245,8 @@ export type WorkflowNodeType =
   | "trigger.manual" | "trigger.schedule" | "trigger.document_added" | "trigger.docket_update" | "trigger.email"
   | "ai.prompt" | "ai.extract" | "ai.classify" | "ai.summarize" | "ai.draft" | "ai.review" | "ai.research"
   | "data.search_library" | "data.search_ediscovery" | "data.fetch_url" | "data.legal_search"
-  | "logic.branch" | "logic.loop" | "logic.merge" | "logic.approval" | "logic.delay"
+  | "ai.verify" | "data.dedupe"
+  | "logic.branch" | "logic.loop" | "logic.merge" | "logic.approval" | "logic.delay" | "logic.review"
   | "action.create_task" | "action.create_event" | "action.save_document" | "action.notify" | "action.export" | "action.update_coding";
 
 export interface WorkflowNode {
