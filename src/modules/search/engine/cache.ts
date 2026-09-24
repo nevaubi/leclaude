@@ -58,3 +58,33 @@ export function sweepCache(now = Date.now()): number {
   for (const row of c.all()) if (now - new Date(row.fetchedAt).getTime() > SOURCE_CACHE_TTL_MS) { c.delete(row.id); n++; }
   return n;
 }
+
+/**
+ * Per-run shared read registry (constitution §14 "shared evidence + read registry"):
+ * lanes that read the same source concurrently share one in-flight fetch, and a source
+ * is never re-read once its text is in the run. Sits in front of the 24h persistent cache.
+ */
+export interface ReadRegistry {
+  /** Text already read in this run, by source id. */
+  texts: Map<string, string>;
+  /** Read (or join the in-flight read of) a source; `fetch` runs at most once per key. */
+  read<T extends { text: string }>(key: string, fetch: () => Promise<T>): Promise<T & { shared: boolean }>;
+  /** How many reads joined an in-flight fetch instead of fetching again. */
+  sharedReads: () => number;
+}
+
+export function createReadRegistry(texts: Map<string, string> = new Map()): ReadRegistry {
+  const inflight = new Map<string, Promise<{ text: string }>>();
+  let shared = 0;
+  return {
+    texts,
+    async read(key, fetch) {
+      const existing = inflight.get(key);
+      if (existing) { shared++; return { ...(await existing), shared: true } as never; }
+      const p = fetch().then((r) => { texts.set(key, r.text ?? ""); return r; }).finally(() => inflight.delete(key));
+      inflight.set(key, p);
+      return { ...(await p), shared: false } as never;
+    },
+    sharedReads: () => shared,
+  };
+}

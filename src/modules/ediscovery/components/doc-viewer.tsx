@@ -20,7 +20,7 @@ import { ReviewListContext } from "./review-tab";
 import { CodingPanel } from "./coding-panel";
 import { CODING_COLUMN_MIN_WIDTH, codingColumnWidth } from "./viewer-layout";
 import { SuggestedTab } from "./suggested-tab";
-import { DecisionCell, IssueChip, ProvenanceBadge, StateChip, TypeIcon, formatDateTime, formatShortDate } from "./shared";
+import { DecisionCell, IssueChip, StateChip, TypeIcon, formatDateTime, formatShortDate } from "./shared";
 import { NewRedactionPopover, RedactedSpan, RedactionPopover, type PendingRedaction } from "./redactions";
 import { cssToPageRect, dragRect, pageRectToCss, pageSpans, parsePageMap, splitRanges, type CssRect, type TextRangeMark } from "./review-helpers";
 import { applyCodingKey, codingKeyAction } from "./review-helpers";
@@ -382,7 +382,7 @@ function ImageView({ detail, redactions, redactMode, onCreated, onRemoved }: { d
 
   React.useEffect(() => {
     let alive = true;
-    let pdf: { destroy: () => Promise<void> } | null = null;
+    let pdf: { destroy?: () => unknown } | null = null;
     setSheets(null); setError(null);
     (async () => {
       try {
@@ -392,7 +392,7 @@ function ImageView({ detail, redactions, redactMode, onCreated, onRemoved }: { d
         const map = res.headers.get("X-Page-Map");
         const lib = await import("@/modules/office/pdf/pdfjs");
         const opened = await lib.openPdf(bytes);
-        pdf = opened;
+        pdf = opened as unknown as { destroy?: () => unknown };
         const pageMap = parsePageMap(map, opened.numPages);
         const out: Sheet[] = [];
         const seen = new Set<number>();
@@ -407,7 +407,7 @@ function ImageView({ detail, redactions, redactMode, onCreated, onRemoved }: { d
         }
       } catch (e) { if (alive) setError((e as Error).message); }
     })();
-    return () => { alive = false; void pdf?.destroy(); };
+    return () => { alive = false; void pdf?.destroy?.(); };
   }, [doc.id]);
 
   const hostAnchor = (clientX: number, clientY: number) => { const h = hostRef.current!.getBoundingClientRect(); return { x: clientX - h.left + hostRef.current!.scrollLeft, y: clientY - h.top + hostRef.current!.scrollTop }; };

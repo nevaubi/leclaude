@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Activity, Plus, Sparkles, Download, FileText, Search, X, Pencil, Trash2, MoreHorizontal, Loader2, CalendarRange, ListFilter, ShieldCheck, AlertOctagon, ChevronDown } from "lucide-react";
+import { Activity, Plus, Download, FileText, Search, X, Pencil, Trash2, MoreHorizontal, Loader2, CalendarRange, ListFilter, ListChecks, ShieldCheck, AlertOctagon, ChevronDown, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { readSSE } from "@/lib/ai/sse";
@@ -22,7 +22,8 @@ import type { DocRow, SearchResponse } from "../../types";
 import { TIMELINE_CATEGORIES, type AnalysisTabProps, type TimelineCategory, type TimelineFilters } from "../types";
 import { filterEvents, formatEventDate, sortEvents, sourceLabel } from "../chronology";
 import { TimelineSvg, CategoryLegend } from "./timeline-svg";
-import { KeyHint, ModelLabel, CategoryChip, CiteChip, NoKeyCallout, ProvenanceBadge, TabHeader, formatShortDate } from "./shared";
+import { KeyHint, ModelLabel, CategoryChip, CiteChip, NoKeyCallout, ProvenanceBadge, TabHeader, formatShortDate, useNarrowViewport } from "./shared";
+import { IntelInspector } from "./intel-inspector";
 import { api, downloadFile, exportMarkdownToWord, useOpenTestimony, useOverview, useTimeline } from "./use-analysis-data";
 
 type Src = TimelineEvent["sources"][number];
@@ -36,12 +37,16 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
   const [editing, setEditing] = React.useState<TimelineEvent | "new" | null>(null);
   const [extractOpen, setExtractOpen] = React.useState(false);
   const [showChart, setShowChart] = React.useState(true);
+  const [intelOpen, setIntelOpen] = React.useState(false);
+  const narrow = useNarrowViewport(1280);
   const rowRefs = React.useRef(new Map<string, HTMLTableRowElement>());
   const events = React.useMemo(() => sortEvents(filterEvents(tl.data?.events ?? [], filters)), [tl.data, filters]);
   const people = React.useMemo(() => new Map((tl.data?.people ?? []).map((p) => [p.id, p.name])), [tl.data]);
   const aiConfigured = !!overview.data?.aiConfigured;
 
   React.useEffect(() => { if (selectedId) rowRefs.current.get(selectedId)?.scrollIntoView({ block: "nearest" }); }, [selectedId]);
+  // Deep link: ?event=<id> (from a story fact or a review-queue row) selects the event once the chronology is loaded.
+  React.useEffect(() => { if (!tl.data) return; const id = new URL(window.location.href).searchParams.get("event"); if (id && tl.data.events.some((e) => e.id === id)) setSelectedId(id); }, [tl.data]);
 
   const patch = async (e: TimelineEvent, p: Partial<TimelineEvent>) => {
     tl.mutate((cur) => (cur ? { ...cur, events: cur.events.map((x) => (x.id === e.id ? { ...x, ...p } : x)) } : cur));
@@ -73,7 +78,8 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         actions={
           <>
             <Tip label="Toggle the visual timeline"><Button size="sm" variant="ghost" onClick={() => setShowChart((v) => !v)} className={cn(showChart && "bg-accent")} aria-pressed={showChart}><CalendarRange className="size-4" /> <span className="hidden md:inline">Timeline</span></Button></Tip>
-            <KeyHint configured={aiConfigured}><Button size="sm" variant="outline" onClick={() => setExtractOpen(true)}><Sparkles className="size-4" /> <span className="hidden lg:inline">Extract from documents</span><span className="lg:hidden">Extract</span></Button></KeyHint>
+            <Tip label="Judge, docket, regulatory and MDL intelligence for this matter"><Button size="sm" variant="ghost" onClick={() => setIntelOpen((v) => !v)} className={cn(intelOpen && "bg-accent")} aria-pressed={intelOpen}><Globe className="size-4" /> <span className="hidden md:inline">Intelligence</span></Button></Tip>
+            <KeyHint configured={aiConfigured}><Button size="sm" variant="outline" onClick={() => setExtractOpen(true)}><ListChecks className="size-4" /> <span className="hidden lg:inline">Extract from documents</span><span className="lg:hidden">Extract</span></Button></KeyHint>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><Download className="size-4" /> <span className="hidden md:inline">Export</span> <ChevronDown className="size-3.5 opacity-60" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -112,7 +118,8 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         {hasFilters && <Button size="xs" variant="ghost" onClick={() => setFilters({ categories: [] })}><X className="size-3.5" /> Clear</Button>}
       </TabHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+      <div className="relative flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-3">
         {showChart && (tl.loading && !tl.data ? <Skeleton className="h-[220px] shrink-0" /> : <TimelineSvg events={events} selectedId={selectedId} onSelect={setSelectedId} people={people} className="shrink-0" />)}
         <div className="min-h-0 flex-1 overflow-auto rounded-lg border scrollbar-thin">
           {tl.loading && !tl.data ? <div className="space-y-2 p-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div> : !events.length ? (
@@ -164,6 +171,8 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
             </table>
           )}
         </div>
+      </div>
+      {intelOpen && <div className={cn("shrink-0", narrow && "absolute inset-y-0 right-0 z-20 max-w-[85%] shadow-xl")}><IntelInspector matterId={matterId} onClose={() => setIntelOpen(false)} onMerged={() => tl.refresh()} /></div>}
       </div>
 
       <EventDialog open={!!editing} event={editing === "new" ? null : editing} matterId={matterId} people={tl.data?.people ?? []} onOpenChange={(o) => { if (!o) setEditing(null); }} onSaved={(e, isNew) => { tl.mutate((cur) => (cur ? { ...cur, events: isNew ? [...cur.events, e] : cur.events.map((x) => (x.id === e.id ? e : x)), total: cur.total + (isNew ? 1 : 0) } : cur)); setEditing(null); setSelectedId(e.id); }} />
@@ -286,7 +295,7 @@ function ExtractDialog({ open, onOpenChange, matterId, aiConfigured, onDone }: {
           <div className="relative flex-1"><Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search documents (defaults to hot documents)" className="h-8 pl-7 text-xs" /></div>
           <Select value={mode} onValueChange={(v) => setMode(v as "ai" | "metadata")}>
             <SelectTrigger size="sm" className="h-8 w-[210px]"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="ai" disabled={!aiConfigured}>AI — read the text (generateJSON)</SelectItem><SelectItem value="metadata">Metadata — one event per document</SelectItem></SelectContent>
+            <SelectContent><SelectItem value="ai" disabled={!aiConfigured}>Read the text and extract dated events</SelectItem><SelectItem value="metadata">Metadata only — one event per document</SelectItem></SelectContent>
           </Select>
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded-md border scrollbar-thin">
@@ -303,7 +312,7 @@ function ExtractDialog({ open, onOpenChange, matterId, aiConfigured, onDone }: {
         {result && <div className="rounded-md border bg-success/5 p-2.5 text-xs"><div className="font-medium">{result.added.length} new event{result.added.length === 1 ? "" : "s"} added · {result.merged} merged into existing entries · {result.extracted} extracted{result.ai ? " by the model" : " from metadata"}{result.duplicates ? ` · ${result.duplicates} duplicate${result.duplicates === 1 ? "" : "s"} dropped` : ""}{result.needsReview ? ` · ${result.needsReview} held for review` : ""}</div>{result.added.slice(0, 6).map((e) => <div key={e.id} className="mt-1 flex gap-2 text-muted-foreground"><span className="font-mono tabular">{e.date}</span><span className="truncate">{e.title}</span></div>)}{result.added.length > 6 && <div className="mt-1 text-muted-foreground">…and {result.added.length - 6} more</div>}</div>}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>{result ? "Close" : "Cancel"}</Button>
-          <Button onClick={run} disabled={running || !selected.size || (mode === "ai" && !aiConfigured)}>{running ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {mode === "ai" ? "Extract with AI" : "Add as events"} ({selected.size})</Button>
+          <Button onClick={run} disabled={running || !selected.size || (mode === "ai" && !aiConfigured)}>{running ? <Loader2 className="size-4 animate-spin" /> : <ListChecks className="size-4" />} {mode === "ai" ? "Extract events" : "Add as events"} ({selected.size})</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

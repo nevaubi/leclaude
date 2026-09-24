@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Sparkles, Loader2, Square, CheckCircle2 } from "lucide-react";
+import { ListChecks, Loader2, Square, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { readSSE } from "@/lib/ai/sse";
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Progress, ScoreBar } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Stat } from "@/components/ui/misc";
 import type { PredictProgressEvent } from "../types";
 import { useReview } from "./review-page";
 import { useReviewStore } from "./store";
@@ -16,6 +17,7 @@ import { NoKeyCallout } from "./shared";
 
 type Scope = "unscored" | "all_unreviewed" | "selected";
 
+/** Batch responsiveness prediction. Scores are suggestions only: they fill the Suggested column and never code a document. */
 export function PredictDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { matterId, aiConfigured, refreshStats, refreshList } = useReview();
   const selected = useReviewStore((s) => s.selected);
@@ -61,14 +63,14 @@ export function PredictDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     <Dialog open={open} onOpenChange={(v) => { if (!v && state.status === "running") stop(); onOpenChange(v); }}>
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Sparkles className="size-4 text-chart-3" /> Batch AI prediction</DialogTitle>
-          <DialogDescription>Scores documents for responsiveness (0–100) against this matter&apos;s coding protocol and issue-code rubric, ten documents per call on the fast model. Scores feed the AI score column, the &ldquo;AI: likely responsive&rdquo; view and the score facets.</DialogDescription>
+          <DialogTitle className="flex items-center gap-2"><ListChecks className="size-4 text-muted-foreground" /> Predict responsiveness</DialogTitle>
+          <DialogDescription>Scores documents 0–100 against this matter&apos;s coding protocol and issue-code rubric, ten per call on the fast model. Scores fill the Suggested column, the &ldquo;Likely responsive&rdquo; view and the score facet; they never code a document.</DialogDescription>
         </DialogHeader>
-        {state.noKey && <NoKeyCallout feature="Batch prediction and document analysis" />}
+        {state.noKey && <NoKeyCallout feature="Batch prediction and suggested coding" />}
         {state.status === "idle" && (
           <RadioGroup value={scope} onValueChange={(v) => setScope(v as Scope)} className="gap-2">
             {([
-              ["unscored", "Unreviewed documents without a score", "Only documents with no responsiveness decision and no AI score."],
+              ["unscored", "Unreviewed documents without a score", "Only documents with no responsiveness decision and no score."],
               ["all_unreviewed", "All unreviewed documents (re-score)", "Re-scores everything that still needs review."],
               ["selected", `Selected documents (${selected.length})`, "Scores the current selection, coded or not."],
             ] as [Scope, string, string][]).map(([v, label, hint]) => (
@@ -87,17 +89,17 @@ export function PredictDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               {state.status === "running" ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : state.status === "done" ? <CheckCircle2 className="size-4 text-success" /> : null}
             </div>
             {state.summary && (
-              <div className="grid grid-cols-4 gap-2 text-center">
-                {([["Scored", state.summary.scored], ["Likely responsive", state.summary.likelyResponsive], ["Uncertain", state.summary.uncertain], ["Likely non-resp.", state.summary.likelyNonResponsive]] as [string, number][]).map(([k, v]) => (
-                  <div key={k} className="rounded-md border bg-card p-2"><div className="tabular text-lg font-semibold">{v}</div><div className="text-[10.5px] uppercase tracking-wider text-muted-foreground">{k}</div></div>
-                ))}
-                <div className="col-span-4 text-right text-[11px] text-muted-foreground">{(state.summary.tookMs / 1000).toFixed(1)}s</div>
+              <div className="grid grid-cols-4 rounded-md border hairline-x">
+                <Stat size="sm" label="Scored" value={state.summary.scored} />
+                <Stat size="sm" label="Likely responsive" value={state.summary.likelyResponsive} />
+                <Stat size="sm" label="Uncertain" value={state.summary.uncertain} />
+                <Stat size="sm" label="Likely non-resp." value={state.summary.likelyNonResponsive} hint={`${(state.summary.tookMs / 1000).toFixed(1)}s`} />
               </div>
             )}
             {state.feed.length > 0 && (
               <ul className="max-h-56 divide-y overflow-auto rounded-md border text-xs scrollbar-thin">
                 {state.feed.map((f) => (
-                  <li key={f.docId} className="flex items-center gap-2 px-2.5 py-1.5 animate-fade-in">
+                  <li key={f.docId} className="flex h-7 items-center gap-2 px-2.5">
                     <span className="w-24 shrink-0 font-mono tabular">{f.bates}</span>
                     <ScoreBar value={f.aiScore ?? 0} className="shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-muted-foreground">{f.message}</span>
@@ -113,7 +115,7 @@ export function PredictDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           {state.status === "running" ? (
             <Button variant="outline" onClick={stop}><Square className="size-3.5" /> Stop</Button>
           ) : state.status === "idle" ? (
-            <><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={start} disabled={!aiConfigured && state.noKey}><Sparkles className="size-4" /> Start prediction</Button></>
+            <><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={start} disabled={!aiConfigured && state.noKey}>Start prediction</Button></>
           ) : (
             <><Button variant="ghost" onClick={() => setState({ status: "idle", done: 0, total: 0, scored: 0, feed: [], noKey: !aiConfigured })}>Run again</Button><Button onClick={() => onOpenChange(false)}>Close</Button></>
           )}

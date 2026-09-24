@@ -2,17 +2,20 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { aiConfig } from "@/lib/ai/config";
+import { currentUser } from "@/lib/current-user";
 import { MATTERS } from "@/lib/seed/ids";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReviewPage } from "@/modules/ediscovery/components/review-page";
+import { ensureReviewSeeded } from "@/modules/ediscovery/seed";
 import { REVIEW_TABS, type ReviewTab } from "@/modules/ediscovery/types";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "E-Discovery" };
 
-export default async function Page({ searchParams }: { searchParams: Promise<{ matter?: string; tab?: string; doc?: string; person?: string; q?: string; view?: string; custodian?: string }> }) {
+export default async function Page({ searchParams }: { searchParams: Promise<{ matter?: string; tab?: string; doc?: string; person?: string; q?: string; view?: string; custodian?: string; batch?: string; production?: string }> }) {
   const sp = await searchParams;
   const d = db();
+  ensureReviewSeeded(d);
   const counts = new Map<string, number>();
   for (const doc of d.edocs.all()) counts.set(doc.matterId, (counts.get(doc.matterId) ?? 0) + 1);
   const matters = d.matters
@@ -25,16 +28,17 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
   const requestedMatter = sp.matter ?? linkedDoc?.matterId;
   const matterId = requestedMatter && matters.some((m) => m.id === requestedMatter) ? requestedMatter : matters.find((m) => m.id === MATTERS.afff)?.id ?? matters[0]?.id ?? MATTERS.afff;
   // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module,
-  // `?view=privilege` (privilege-log tasks) opens the Codes & privilege tab on the log section and
-  // `?view=review` (Settings → Review queue) opens it on the "Needs review" queue.
+  // `?view=privilege` (privilege-log tasks) opens the Codes & privilege tab on the log section,
+  // `?view=review` (Settings → Review queue) opens it on the "Needs review" queue and
+  // `?view=production` (older links) opens the Productions tab.
   const requested = sp.tab ?? sp.view;
-  const isCodesSection = (v: string | undefined): v is "privilege" | "production" | "rules" | "review" => v === "privilege" || v === "production" || v === "rules" || v === "review";
-  // `?view=` names the section when it is a Codes & privilege section (with or without `?tab=codes`).
+  const isCodesSection = (v: string | undefined): v is "privilege" | "rules" | "review" => v === "privilege" || v === "rules" || v === "review";
   const codesSection = isCodesSection(sp.view) ? sp.view : isCodesSection(requested) ? requested : undefined;
-  const tab = (codesSection ? "codes" : REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
+  const tab = (codesSection ? "codes" : requested === "production" || sp.production ? "productions" : sp.batch && !requested ? "batches" : REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
   const reviewers = d.people
     .find((p) => p.organization === "Seeger Weiss LLP" && (p.role === "attorney" || p.role === "paralegal" || p.role === "staff"))
     .map((p) => ({ id: p.id, name: p.name, title: p.title }));
+  const user = currentUser((id) => d.people.get(id)?.name);
   return (
     <Suspense fallback={<ReviewSkeleton />}>
       <ReviewPage
@@ -45,9 +49,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
         initialDocId={linkedDoc?.id ?? sp.doc}
         initialQuery={sp.q}
         initialCustodian={sp.custodian}
+        initialBatchId={sp.batch}
+        initialProductionId={sp.production}
         aiConfigured={aiConfig().hasKey}
         reviewers={reviewers}
-        currentUserId="p_jwhitfield"
+        currentUserId={user.id}
       />
     </Suspense>
   );

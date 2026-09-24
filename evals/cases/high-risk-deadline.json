@@ -1,0 +1,15 @@
+{
+  "id": "high-risk-deadline",
+  "category": "verification",
+  "title": "A deadline claim is flagged as high-risk",
+  "constitution": "§24 high-risk legal fields (deadlines, statute of limitations) need stricter verification and human review",
+  "input": { "claim": "The answer to the amended complaint must be filed by October 3, 2026; the deadline runs from service on September 12.", "source": "Scheduling order: responsive pleadings are due within 21 days of service of the amended complaint." },
+  "expected": "The claim is tagged 'deadline' deterministically, marked highRisk on the Claim, and the verdict notes that a high-risk claim is not fully supported.",
+  "passCriteria": [
+    "tagHighRisk(claim) contains 'deadline'",
+    "applyQuoteGuard(...)[0].highRisk === true even when the model tagged no fields",
+    "buildVerdict(...).notes mentions high-risk review when the claim is not supported"
+  ],
+  "grading": "code",
+  "requiresModel": false
+}

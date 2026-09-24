@@ -188,7 +188,7 @@ export interface HistogramBar { key: string; label: string; count: number; selec
 /** Custodian bars for the rail chart: top `max` by count, the rest folded into "Others" (not clickable). */
 export function custodianBars(buckets: FacetBucket[], selected: string[], max = 8): (HistogramBar & { others?: boolean })[] {
   const sorted = [...buckets].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  const top = sorted.slice(0, max).map((b) => ({ key: b.value, label: b.label, count: b.count, selected: selected.includes(b.value) }));
+  const top: (HistogramBar & { others?: boolean })[] = sorted.slice(0, max).map((b) => ({ key: b.value, label: b.label, count: b.count, selected: selected.includes(b.value) }));
   const rest = sorted.slice(max);
   if (rest.length) top.push({ key: "__others", label: `Others (${rest.length})`, count: rest.reduce((n, b) => n + b.count, 0), selected: false, others: true });
   return top;

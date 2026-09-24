@@ -301,7 +301,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
     let res: InferenceResult;
     try {
-      res = await infer({ ...base, messages: history, previousResponseId, containerId }, forward, { onFallback });
+      // A copy per round: the provider (and any SDK retry) must never see later mutations of the live history.
+      res = await infer({ ...base, messages: history.slice(), previousResponseId, containerId }, forward, { onFallback });
     } catch (e) {
       throw mapConfigError(e);
     }

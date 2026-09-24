@@ -36,7 +36,7 @@ export function BatchesTab({ initialBatchId }: { initialBatchId?: string }) {
   const [status, setStatus] = React.useState<"open" | "all">("open");
   const [active, setActive] = React.useState<string | null>(initialBatchId ?? null);
   const [createOpen, setCreateOpen] = React.useState(false);
-  const rows = React.useMemo(() => (batches.data?.batches ?? []).filter((b) => (scope === "all" || b.assigneeId === currentUserId) && (status === "all" || b.status !== "complete")), [batches.data, scope, status]);
+  const rows = React.useMemo(() => (batches.data?.batches ?? []).filter((b) => (scope === "all" || b.assigneeId === currentUserId) && (status === "all" || b.status !== "complete")), [batches.data, scope, status, currentUserId]);
   const columns = React.useMemo<DataTableColumn<ReviewBatchSummary>[]>(() => [
     { id: "name", header: "Batch", width: 260, minWidth: 160, sortable: true, accessor: (b) => b.name, locked: true, render: (b) => <span className="flex min-w-0 items-center gap-1.5"><span className="truncate font-medium">{b.name}</span>{b.secondPass && <StateChip tone="muted">2nd pass</StateChip>}</span> },
     { id: "status", header: "Status", width: 100, sortable: true, accessor: (b) => b.status, render: (b) => <StateChip tone={STATUS_TONE[b.status]}>{statusLabel(b.status)}</StateChip> },

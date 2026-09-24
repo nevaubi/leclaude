@@ -58,8 +58,13 @@ function routeLabel(req: Request): string {
   try {
     return `${req.method} ${new URL(req.url).pathname}`;
   } catch {
-    return req.method;
+    return req.method ?? "GET";
   }
+}
+
+/** Handlers declared without a request parameter may be invoked as `GET()` (tests); authorize them as an anonymous GET. */
+function ensureRequest(req: Request | undefined): Request {
+  return req instanceof Request ? req : new Request("http://localhost/", { method: "GET" });
 }
 
 function clientIp(req: Request): string | undefined {
@@ -69,7 +74,8 @@ function clientIp(req: Request): string | undefined {
 }
 
 export function withAuth<H extends AnyRouteHandler, P extends Record<string, string | string[] | undefined> = Record<string, string>>(handler: H, opts: WithAuthOptions<P>): H {
-  const wrapped = async (req: Request, ctx?: RouteCtx<P>): Promise<Response> => {
+  const wrapped = async (rawReq: Request | undefined, ctx?: RouteCtx<P>): Promise<Response> => {
+    const req = ensureRequest(rawReq);
     const via = opts.via ?? routeLabel(req);
     const ip = clientIp(req);
     let principal: Principal;
@@ -97,7 +103,7 @@ export function withAuth<H extends AnyRouteHandler, P extends Record<string, str
     }
     if (!decision.allow) return forbiddenResponse(decision);
     try {
-      return await runWithPrincipal(principal, () => Promise.resolve(handler(req, ctx)), { decision, via });
+      return await runWithPrincipal(principal, () => Promise.resolve(handler(rawReq ?? req, ctx)), { decision, via });
     } catch (e) {
       if (isAuthError(e)) {
         const err = e as AuthError;

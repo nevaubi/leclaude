@@ -17,6 +17,8 @@ export interface CoverageInput {
 
 export interface CoverageDecision {
   complete: boolean;
+  /** True when the loop stops only because the round budget is spent while coverage is still thin (constitution §25 budget_exhausted). */
+  exhausted: boolean;
   reason: string;
   /** Deterministic refinements per lane kind for the next round (may be augmented by the model). */
   refinements: Partial<Record<LaneKind, string[]>>;

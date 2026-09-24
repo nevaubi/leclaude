@@ -2,6 +2,8 @@
  * Research engine contracts. Client-safe: shared by the server orchestrator,
  * the SSE route, the React hook/components, the seed and the tests.
  */
+import type { FailureKind, ResearchStopState, RunEvent, RunEventBase, RunMetrics, RunTerminalState } from "@/lib/ai/events";
+import type { CitationCheck as EvidenceCitationCheck, CitationState, TrustState } from "@/lib/evidence/types";
 import type { Provenance } from "@/lib/integrity/types";
 import type { Authority, SearchHit, SearchSettings, SearchSource } from "../types";
 
@@ -40,9 +42,28 @@ export interface ResearchLane {
   /** Cap on full-text reads per lane. */
   maxReads: number;
   round: number;
+  /** Lanes whose results this lane waits for and builds on (dependency-aware scheduling). */
+  dependsOn?: string[];
+  /** Wall-clock budget for the lane; the scheduler aborts it past this. */
+  timeoutMs?: number;
 }
 
-export type LaneStatus = "queued" | "retrieving" | "reading" | "done" | "error" | "stopped" | "skipped";
+export type LaneStatus = "queued" | "retrieving" | "reading" | "done" | "error" | "stopped" | "skipped" | "timeout";
+
+/** Compact per-lane outcome kept on the persisted message. */
+export interface LaneSummary {
+  id: string;
+  name: string;
+  kind: LaneKind;
+  status: LaneStatus;
+  sources: number;
+  read?: number;
+  durationMs: number;
+  round: number;
+  /** Set when the lane ended in error/timeout, or completed with a partial failure inside it. */
+  error?: string;
+  failure?: FailureKind;
+}
 
 // ---------------------------------------------------------------------------
 // Sources
@@ -94,6 +115,10 @@ export interface VerificationSummary {
   score: number;
   checkedAt: string;
   verdicts: ClaimVerdictView[];
+  /** sha256 of the exact answer text these verdicts were computed against (constitution §23). */
+  artifactHash?: string;
+  /** Which verification pass produced it (1 = draft, 2 = after correction). */
+  pass?: number;
 }
 
 export interface CitationCrossCheck {
@@ -103,6 +128,8 @@ export interface CitationCrossCheck {
   sourceN?: number;
   /** Resolved on CourtListener (network) even though no lane read it. */
   resolvedRemotely?: boolean;
+  /** Evidence-contract state: resolved (read source), requires_review (found/resolved but not read), unresolved (nowhere). */
+  state?: CitationState;
 }
 
 export interface RunStats {
@@ -116,6 +143,13 @@ export interface RunStats {
 export type ResearchMode = "deep" | "fast";
 
 export type AnswerBanner = "not-source-backed" | "no-api-key" | null;
+
+export interface CoverageSummary {
+  complete: boolean;
+  reason: string;
+  /** Claims that still lack support when the loop stopped. */
+  gaps: string[];
+}
 
 // ---------------------------------------------------------------------------
 // Threads and messages
@@ -135,7 +169,23 @@ export interface ResearchMessage {
   followUps?: string[];
   /** Citation numbers → source ids for this answer. */
   citeMap?: Record<number, string>;
-  lanes?: { id: string; name: string; kind: LaneKind; status: LaneStatus; sources: number; durationMs: number; round: number }[];
+  lanes?: LaneSummary[];
+  // --- run outcome (constitution §14, §23, §25, §36) ---
+  /** sha256 of `content` (canonical whitespace). Verification and citation checks bind to it. */
+  artifactHash?: string;
+  /** Answer text version within the run (1 = draft, +1 per rewrite). */
+  artifactVersion?: number;
+  terminal?: RunTerminalState;
+  stop?: ResearchStopState;
+  failure?: FailureKind;
+  failureMessage?: string;
+  metrics?: RunMetrics;
+  coverage?: CoverageSummary;
+  /** Evidence-contract citation check bound to `artifactHash`. */
+  citationCheck?: EvidenceCitationCheck;
+  /** Trust state derived at persist time from what was actually established for `artifactHash`. */
+  trust?: TrustState;
+  mode?: ResearchMode;
 }
 
 export interface ResearchPin {
@@ -164,25 +214,32 @@ export interface ResearchThread {
 }
 
 // ---------------------------------------------------------------------------
-// Stream events (in addition to the agent's text.delta/tool events)
+// Stream events: the §46 vocabulary (src/lib/ai/events.ts) specialised with the
+// research payloads the UI renders (full sources, the answer text, verdict summaries).
 // ---------------------------------------------------------------------------
 
+type Specialise<T extends RunEvent["type"], Extra> = Extract<RunEvent, { type: T }> & Extra;
+
+export interface RunOutcomePayload {
+  message: ResearchMessage;
+  sources: ResearchSource[];
+}
+
 export type ResearchStreamEvent =
-  | { type: "run.start"; runId: string; threadId: string; question: string; mode: ResearchMode; startedAt: number }
-  | { type: "plan"; round: number; lanes: ResearchLane[] }
-  | { type: "round.start"; round: number; reason?: string }
-  | { type: "lane.start"; laneId: string; round: number }
-  | { type: "lane.step"; laneId: string; step: number; label: string; status: LaneStatus }
-  | { type: "lane.source"; laneId: string; source: ResearchSource }
-  | { type: "lane.note"; laneId: string; note: string }
-  | { type: "lane.done"; laneId: string; status: LaneStatus; durationMs: number; sources: number; error?: string }
-  | { type: "synthesis.start"; round: number; sources: number }
-  | { type: "answer.text"; text: string; citeMap: Record<number, string>; stage: "draft" | "revised" | "final" }
-  | { type: "verify.start"; claims?: number }
-  | { type: "verify.done"; verification: VerificationSummary }
-  | { type: "correction"; changed: boolean; note: string }
-  | { type: "citecheck"; checks: CitationCrossCheck[] }
-  | { type: "round.done"; round: number; complete: boolean; reason: string }
-  | { type: "followups"; questions: string[] }
-  | { type: "answer.final"; message: ResearchMessage; sources: ResearchSource[] }
-  | { type: "run.done"; runId: string; threadId: string; stats: RunStats };
+  | Specialise<"plan.created", { lanes: ResearchLane[] }>
+  | Specialise<"source.found", { source: ResearchSource }>
+  | Specialise<"source.read", { source: ResearchSource }>
+  | Specialise<"lane.completed", { note?: string }>
+  | Specialise<"artifact.created", { text: string; citeMap: Record<number, string> }>
+  | Specialise<"verification.completed", { verification: VerificationSummary }>
+  | Specialise<"citation.checked", { checks: CitationCrossCheck[]; citationCheck: EvidenceCitationCheck }>
+  | Specialise<"run.partial", RunOutcomePayload>
+  | Specialise<"run.completed", RunOutcomePayload>
+  | Specialise<"run.failed", RunOutcomePayload>
+  | Specialise<"run.cancelled", RunOutcomePayload>
+  | Exclude<RunEvent, { type: "plan.created" | "source.found" | "source.read" | "lane.completed" | "artifact.created" | "verification.completed" | "citation.checked" | "run.partial" | "run.completed" | "run.failed" | "run.cancelled" }>;
+
+/** What engine code hands to the emitter (runId/at/seq are stamped for it). */
+export type ResearchEventInput = ResearchStreamEvent extends infer E ? (E extends RunEventBase ? Omit<E, keyof RunEventBase> : never) : never;
+
+export type ResearchTerminalEvent = Extract<ResearchStreamEvent, { type: "run.partial" | "run.completed" | "run.failed" | "run.cancelled" }>;

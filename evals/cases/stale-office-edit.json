@@ -1,0 +1,18 @@
+{
+  "id": "stale-office-edit",
+  "category": "trust",
+  "title": "Document changed after the proposal was verified and approved",
+  "constitution": "§23 answer-version binding (invalidate, reverify, store against the new hash); §44 stale office edit; §54 approval refers to a specific version",
+  "input": { "artifactId": "office_doc_eval_1", "v1": "The indemnity clause survives termination for three years.", "v2": "The indemnity clause survives termination for five years." },
+  "expected": "After the edit the record rebinds to the new hash, the earlier verification and approval stop counting, and stale verification or review for the old hash is refused.",
+  "passCriteria": [
+    "state after verify+approve on v1 === 'human_approved'",
+    "touchArtifact(v2).state === 'source_linked'",
+    "isVerificationCurrent(v2 hash, record.verification) === false",
+    "recordVerification(old-hash verdict) throws StaleVerificationError",
+    "recordReview(old-hash decision) throws StaleVerificationError",
+    "recordVerification(new-hash verdict) → 'verified'"
+  ],
+  "grading": "code",
+  "requiresModel": false
+}

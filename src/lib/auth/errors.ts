@@ -25,7 +25,7 @@ export class AuthError extends Error {
   }
 
   static forbidden(reason: string) {
-    return new AuthError(403, "Forbidden", reason);
+    return new AuthError(403, `Forbidden: ${reason}`, reason);
   }
 }
 

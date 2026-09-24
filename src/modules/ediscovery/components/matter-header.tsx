@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { CalendarClock, ChevronDown, Database, Flame, ShieldAlert, Sparkles, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, Database, Flame, ListChecks, ShieldAlert, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tip } from "@/components/ui/tooltip";
@@ -65,7 +65,7 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[12px]">
                 <dt className="flex items-center gap-1.5 text-muted-foreground"><Users className="size-3.5" /> Client</dt><dd className="truncate">{matter?.client ?? "—"}</dd>
                 <dt className="flex items-center gap-1.5 text-muted-foreground"><Users className="size-3.5" /> Custodians</dt><dd className="tabular">{stats.custodians}</dd>
-                <dt className="flex items-center gap-1.5 text-muted-foreground"><Sparkles className="size-3.5" /> AI scored</dt><dd className="tabular">{stats.aiScored.toLocaleString()} <span className="text-muted-foreground">of {stats.total.toLocaleString()}</span></dd>
+                <dt className="flex items-center gap-1.5 text-muted-foreground"><ListChecks className="size-3.5" /> Suggested scores</dt><dd className="tabular">{stats.aiScored.toLocaleString()} <span className="text-muted-foreground">of {stats.total.toLocaleString()}</span></dd>
                 <dt className="flex items-center gap-1.5 text-muted-foreground"><Database className="size-3.5" /> Index</dt><dd className="tabular">{stats.indexed.docs.toLocaleString()} docs{stats.indexed.embedded ? ` · ${stats.indexed.embedded.toLocaleString()} embedded` : " · keyword only"}</dd>
                 <dt className="text-muted-foreground">Reviewed</dt><dd className="tabular">{stats.reviewed.toLocaleString()} / {stats.total.toLocaleString()} · {stats.needsReview.toLocaleString()} remaining</dd>
               </dl>

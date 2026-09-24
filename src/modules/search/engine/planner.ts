@@ -5,7 +5,7 @@
  */
 import type { SearchSettings, SearchSource } from "../types";
 import { toCourtListenerSyntax } from "../query-builder";
-import type { LaneKind, ResearchLane, ResearchMode } from "./types";
+import type { LaneKind, ResearchLane, ResearchMode, ResearchSource } from "./types";
 
 export interface PlanInput {
   question: string;
@@ -67,6 +67,9 @@ export function contraryQuery(base: string): string {
   return `${base} AND (distinguish* OR reject* OR "we disagree" OR "contrary" OR "declined to follow" OR dissent*)`;
 }
 
+/** Per-lane wall-clock budgets (ms). Deep lanes run a bounded agent; later rounds are narrower. */
+const LANE_TIMEOUT: Record<LaneKind, number> = { controlling: 110_000, contrary: 90_000, regulatory: 90_000, record: 90_000, secondary: 90_000, fast: 40_000 };
+
 export function planLanes(input: PlanInput): ResearchLane[] {
   const round = input.round ?? 1;
   const base = retrievalQuery(input.question);
@@ -85,6 +88,7 @@ export function planLanes(input: PlanInput): ResearchLane[] {
     round,
     intel: intelFeeds(kind, sources),
     note: intelFeeds(kind, sources) ? INTEL_LANE_NOTE[kind] : undefined,
+    timeoutMs: round > 1 ? Math.min(LANE_TIMEOUT[kind], 75_000) : LANE_TIMEOUT[kind],
   });
 
   if (input.mode === "fast") {
@@ -101,7 +105,32 @@ export function planLanes(input: PlanInput): ResearchLane[] {
   if (!lanes.length) lanes.push(mk("controlling", ["caselaw"], [base], 6, 4));
   // Later rounds only re-run lanes that received refinements (the thin ones); round 1 keeps everything.
   const planned = round > 1 && input.refinements ? lanes.filter((l) => input.refinements?.[l.kind]?.length) : lanes;
-  return (planned.length ? planned : lanes).slice(0, 5);
+  const out = (planned.length ? planned : lanes).slice(0, 5);
+  // The contrary lane builds on what the controlling lane found (authority that rejects or limits it), so it waits for it.
+  const controlling = out.find((l) => l.kind === "controlling");
+  const contrary = out.find((l) => l.kind === "contrary");
+  if (controlling && contrary) contrary.dependsOn = [controlling.id];
+  return out;
+}
+
+/**
+ * Extra queries a dependent lane runs once its dependencies have settled. The contrary
+ * lane targets the leading authorities the controlling lane read: decisions that
+ * distinguish, reject or limit them are the adverse authority a litigator must see.
+ */
+export function priorQueries(lane: Pick<ResearchLane, "kind">, priors: { sources: Pick<ResearchSource, "kind" | "title" | "read" | "authority">[] }[]): string[] {
+  if (lane.kind !== "contrary") return [];
+  const cases = priors.flatMap((p) => p.sources).filter((s) => s.kind === "caselaw" && s.title.includes(" v. "));
+  const ranked = [...cases].sort((a, b) => Number(b.read) - Number(a.read) || Number(b.authority === "binding") - Number(a.authority === "binding"));
+  const out: string[] = [];
+  for (const c of ranked) {
+    const name = c.title.replace(/[",]/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 6).join(" ");
+    if (!name) continue;
+    const q = `"${name}" AND (distinguish* OR reject* OR "declined to follow" OR limited OR overrul*)`;
+    if (!out.includes(q)) out.push(q);
+    if (out.length >= 2) break;
+  }
+  return out;
 }
 
 /** Tools relevant to a lane, filtered against what the toolkit exposes. */

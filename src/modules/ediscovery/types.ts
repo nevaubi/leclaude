@@ -5,7 +5,7 @@
 import type { CodingDecision, DocType, EDocument, IssueCode, PrivilegeLogEntry, ProductionSet, Redaction, ReviewBatch, ReviewLayout, SavedSearchRecord, SearchTermReport } from "@/lib/types/domain";
 import type { BatchProgress, DisagreementReport } from "./batch-pure";
 
-export type ReviewTab = "review" | "batches" | "depositions" | "cross" | "timeline" | "people" | "conflicts" | "productions" | "codes";
+export type ReviewTab = "review" | "batches" | "depositions" | "cross" | "timeline" | "story" | "people" | "conflicts" | "productions" | "codes";
 
 export const REVIEW_TABS: { id: ReviewTab; label: string }[] = [
   { id: "review", label: "Review" },
@@ -13,6 +13,7 @@ export const REVIEW_TABS: { id: ReviewTab; label: string }[] = [
   { id: "depositions", label: "Depositions" },
   { id: "cross", label: "Cross-analysis" },
   { id: "timeline", label: "Timeline" },
+  { id: "story", label: "Story" },
   { id: "people", label: "People & graph" },
   { id: "conflicts", label: "Conflicts" },
   { id: "productions", label: "Productions" },

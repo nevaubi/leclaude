@@ -84,7 +84,7 @@ describe("extractCitations", () => {
     expect(JSON.stringify(found)).not.toMatch(/"state"/);
   });
   it("handles a 200k-character artifact without throwing and in bounded time", () => {
-    const big = Array.from({ length: 1500 }, (_, i) => `Paragraph ${i}: the witness said so at ${((i % 200) + 1)}:${(i % 24) + 1} and cited MFC-00${String(41877 + (i % 90)).padStart(5, "0")}. `).join("\n");
+    const big = Array.from({ length: 3200 }, (_, i) => `Paragraph ${i}: the witness said so at ${((i % 200) + 1)}:${(i % 24) + 1} and cited MFC-00${String(41877 + (i % 90)).padStart(5, "0")}. `).join("\n");
     expect(big.length).toBeGreaterThan(200_000);
     const started = Date.now();
     const found = extractCitations(big);

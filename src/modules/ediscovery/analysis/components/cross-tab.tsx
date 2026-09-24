@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { GitBranch, Sparkles, Loader2, Search, Table2, Download, FileText, Trash2, AlertTriangle, ScrollText, Files, ArrowRight, Users } from "lucide-react";
+import { GitBranch, ListChecks, Loader2, Search, Table2, Download, FileText, Trash2, AlertTriangle, ScrollText, Files, ArrowRight, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Conflict } from "@/lib/types/domain";
 import { type AnalysisTabProps, type CrossExcerpt, type FactMatrix } from "../types";
 import { highlightTerms } from "../transcript";
-import { KeyHint, ModelLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, TabHeader, kindLabel, formatShortDate } from "./shared";
+import { Inspector } from "@/components/ui/inspector";
+import { KeyValueList } from "@/components/ui/form";
+import { KeyHint, ModelLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, TabHeader, kindLabel, formatShortDate, useNarrowViewport } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useCross, useDepositions, useFactMatrices, useOpenTestimony, useOverview } from "./use-analysis-data";
 
 function Highlighted({ text, re }: { text: string; re: RegExp | null }) {
@@ -77,7 +79,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
           <>
             <Tip label="Build a topics × sources matrix from the excerpts below"><Button size="sm" variant="outline" onClick={() => setMatrixOpen((v) => !v)} className={cn(matrixOpen && "bg-accent")} aria-pressed={matrixOpen}><Table2 className="size-4" /> <span className="hidden md:inline">Fact matrix</span> {matrices.data?.matrices.length ? <span className="rounded bg-muted px-1 text-[10px] tabular">{matrices.data.matrices.length}</span> : null}</Button></Tip>
             <KeyHint configured={aiConfigured}>
-              <Button size="sm" onClick={findContradictions} disabled={finding || !testimony.length}>{finding ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} <span className="hidden md:inline">Find contradictions</span><span className="md:hidden">Contradictions</span>{selected.size ? ` (${selected.size})` : ""}</Button>
+              <Button size="sm" onClick={findContradictions} disabled={finding || !testimony.length}>{finding ? <Loader2 className="size-4 animate-spin" /> : <ListChecks className="size-4" />} <span className="hidden md:inline">Find contradictions</span><span className="md:hidden">Contradictions</span>{selected.size ? ` (${selected.size})` : ""}</Button>
             </KeyHint>
           </>
         }
@@ -192,17 +194,22 @@ function ConflictLine({ c, fresh }: { c: Conflict; fresh?: boolean }) {
 // ---------------------------------------------------------------------------
 
 function FactMatrixSection({ matterId, topic, witnessId, aiConfigured, matrices, loading, onChanged, onOpenDocument }: { matterId: string; topic: string; witnessId?: string; aiConfigured: boolean; matrices: FactMatrix[]; loading: boolean; onChanged: () => void; onOpenDocument?: (id: string) => void }) {
+  const openTestimony = useOpenTestimony();
+  const narrow = useNarrowViewport(1280);
   const [building, setBuilding] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [cell, setCell] = React.useState<{ topic: string; sourceId: string } | null>(null);
   const active = matrices.find((m) => m.id === activeId) ?? matrices[0];
+  React.useEffect(() => { setCell(null); }, [active?.id]);
+  const unresolved = React.useMemo(() => new Set((active?.provenance?.verification?.unresolvedCites ?? []).map((u) => u.toUpperCase())), [active]);
   const build = async () => {
     if (!topic) { toast.info("Enter a topic first"); return; }
     setBuilding(true);
     try {
       const r = await api<{ matrix: FactMatrix }>("/api/ediscovery/analysis/fact-matrix", { method: "POST", json: { matterId, topic, witnessId } });
       onChanged(); setActiveId(r.matrix.id);
-      toast.success("Fact matrix built", { description: `${r.matrix.topics.length} topics × ${r.matrix.sources.length} sources` });
-    } catch (e) { if (isNoKey(e)) toast.error("OpenAI key required", { description: "Fact matrices are generated with generateJSON." }); else toast.error("Matrix failed", { description: (e as Error).message }); }
+      toast.success("Fact matrix built", { description: `${r.matrix.topics.length} topics × ${r.matrix.sources.length} sources · cells verified against their sources` });
+    } catch (e) { if (isNoKey(e)) toast.error("OpenAI key required", { description: "Fact matrices are built by the model and verified against the record." }); else toast.error("Matrix failed", { description: (e as Error).message }); }
     finally { setBuilding(false); }
   };
   const remove = async (m: FactMatrix) => {
@@ -212,48 +219,70 @@ function FactMatrixSection({ matterId, topic, witnessId, aiConfigured, matrices,
     const head = `| Topic | ${m.sources.map((s) => `${s.label} (${s.cite})`).join(" | ")} |`;
     const sep = `|---|${m.sources.map(() => "---").join("|")}|`;
     const rows = m.topics.map((t) => `| ${t} | ${m.sources.map((s) => { const c = m.cells.find((x) => x.topic === t && x.sourceId === s.id); return c ? `${c.position} (${c.cite}) [${c.stance}]` : "—"; }).join(" | ")} |`);
-    return `# Fact matrix — ${m.topic}\n\nGenerated ${formatShortDate(m.createdAt.slice(0, 10))} · ${m.topics.length} topics × ${m.sources.length} sources\n\n${[head, sep, ...rows].join("\n")}\n`;
+    return `# Fact matrix — ${m.topic}\n\nBuilt ${formatShortDate(m.createdAt.slice(0, 10))} · ${m.topics.length} topics × ${m.sources.length} sources\n\n${[head, sep, ...rows].join("\n")}\n`;
   };
   const exportCsv = (m: FactMatrix) => {
-    const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-    const lines = [["Topic", ...m.sources.map((s) => `${s.label} (${s.cite})`)].map(cell).join(",")];
-    for (const t of m.topics) lines.push([t, ...m.sources.map((s) => { const c = m.cells.find((x) => x.topic === t && x.sourceId === s.id); return c ? `${c.position} (${c.cite}) [${c.stance}]` : ""; })].map(cell).join(","));
+    const cellText = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const lines = [["Topic", ...m.sources.map((s) => `${s.label} (${s.cite})`)].map(cellText).join(",")];
+    for (const t of m.topics) lines.push([t, ...m.sources.map((s) => { const c = m.cells.find((x) => x.topic === t && x.sourceId === s.id); return c ? `${c.position} (${c.cite}) [${c.stance}]` : ""; })].map(cellText).join(","));
     const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     downloadFile(url);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
-  const STANCE: Record<string, string> = { supports: "border-l-success bg-success/5", contradicts: "border-l-destructive bg-destructive/5", neutral: "border-l-border", silent: "border-l-border text-muted-foreground" };
+  const openSource = (s: FactMatrix["sources"][number], cite?: string) => (s.kind === "document" ? onOpenDocument?.(s.id) : openTestimony(s.id, cite ?? s.cite));
+  const STANCE: Record<string, string> = { supports: "text-success", contradicts: "text-destructive", neutral: "text-muted-foreground", silent: "text-muted-foreground" };
+  const selectedCell = active && cell ? active.cells.find((x) => x.topic === cell.topic && x.sourceId === cell.sourceId) ?? null : null;
+  const selectedSource = active && cell ? active.sources.find((s) => s.id === cell.sourceId) ?? null : null;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 text-sm font-semibold">Fact matrix {active && <ProvenanceBadge record={active} compact={false} />}</div>
-        <span className="hidden text-xs text-muted-foreground xl:inline">Topics × sources for “{topic || "…"}”. Each cell is what the source says, with a cite and stance relative to the client.</span>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5">
+        <div className="flex items-center gap-1.5 text-[12.5px] font-semibold">Fact matrix {active && <ProvenanceBadge record={active} compact={false} />}</div>
+        <span className="hidden text-[11.5px] text-muted-foreground xl:inline">Topics × sources for “{topic || "…"}”; each cell is what the source says, its cite and its stance for the client.</span>
         <div className="flex-1" />
-        {matrices.length > 1 && <Select value={active?.id ?? ""} onValueChange={setActiveId}><SelectTrigger size="sm" className="h-8 w-[260px]"><SelectValue placeholder="Saved matrices" /></SelectTrigger><SelectContent>{matrices.map((m) => <SelectItem key={m.id} value={m.id}>{m.topic} · {formatShortDate(m.createdAt.slice(0, 10))}</SelectItem>)}</SelectContent></Select>}
-        {active && <><Button size="sm" variant="outline" onClick={() => exportCsv(active)}><Download className="size-4" /> CSV</Button><Button size="sm" variant="outline" onClick={() => exportMarkdownToWord({ title: `Fact matrix — ${active.topic}`, markdown: toMarkdown(active), matterId, tags: ["fact-matrix", "ediscovery"] })}><FileText className="size-4" /> Word</Button><Tip label="Delete this matrix"><Button size="icon-sm" variant="ghost" onClick={() => remove(active)} aria-label="Delete matrix"><Trash2 className="size-4" /></Button></Tip></>}
-        <KeyHint configured={aiConfigured}><Button size="sm" onClick={build} disabled={building || !topic}>{building ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Generate for “{topic.slice(0, 24)}{topic.length > 24 ? "…" : ""}”</Button></KeyHint>
+        {matrices.length > 1 && <Select value={active?.id ?? ""} onValueChange={setActiveId}><SelectTrigger size="xs" className="h-7 w-[240px]"><SelectValue placeholder="Saved matrices" /></SelectTrigger><SelectContent>{matrices.map((m) => <SelectItem key={m.id} value={m.id}>{m.topic} · {formatShortDate(m.createdAt.slice(0, 10))}</SelectItem>)}</SelectContent></Select>}
+        {active && <><Button size="xs" variant="outline" onClick={() => exportCsv(active)}><Download className="size-3.5" /> CSV</Button><Button size="xs" variant="outline" onClick={() => exportMarkdownToWord({ title: `Fact matrix — ${active.topic}`, markdown: toMarkdown(active), matterId, tags: ["fact-matrix", "ediscovery"] })}><FileText className="size-3.5" /> Word</Button><Tip label="Delete this matrix"><Button size="icon-xs" variant="ghost" onClick={() => remove(active)} aria-label="Delete matrix"><Trash2 className="size-3.5" /></Button></Tip></>}
+        <KeyHint configured={aiConfigured}><Button size="xs" onClick={build} disabled={building || !topic}>{building ? <Loader2 className="size-3.5 animate-spin" /> : <ListChecks className="size-3.5" />} Build for “{topic.slice(0, 24)}{topic.length > 24 ? "…" : ""}”</Button></KeyHint>
       </div>
-      {loading && !matrices.length ? <Skeleton className="h-40" /> : !active ? (
-        <div className="flex flex-1 items-center justify-center"><EmptyState icon={Table2} title="No fact matrix yet" description={aiConfigured ? "Generate one for the current topic; it is saved with the matter and exportable to CSV or Word." : "Fact matrices are generated with the OpenAI Responses API. Add OPENAI_API_KEY to enable."} /></div>
+      {loading && !matrices.length ? <Skeleton className="m-3 h-40" /> : !active ? (
+        <div className="flex flex-1 items-center justify-center"><EmptyState icon={Table2} title="No fact matrix yet" description={aiConfigured ? "Build one for the current topic; every cell is verified against its source, saved with the matter and exportable to CSV or Word." : "Fact matrices are built by the model. Add OPENAI_API_KEY to enable."} /></div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto rounded-lg border scrollbar-thin">
-          <table className="w-full min-w-[900px] border-collapse text-[12px]">
-            <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
-              <tr>
-                <th className="w-[200px] border-b border-r px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Topic</th>
-                {active.sources.map((s) => <th key={s.id} className="border-b border-r px-3 py-2 text-left align-top font-medium"><div className="flex items-center gap-1.5"><CiteChip cite={s.cite} kind={s.kind} onClick={s.kind === "document" ? () => onOpenDocument?.(s.id) : undefined} /></div><div className="mt-1 line-clamp-2 text-[11px] font-normal text-muted-foreground">{s.label}</div></th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {active.topics.map((t) => (
-                <tr key={t} className="align-top">
-                  <th className="border-b border-r bg-card px-3 py-2 text-left font-medium">{t}</th>
-                  {active.sources.map((s) => { const c = active.cells.find((x) => x.topic === t && x.sourceId === s.id); return <td key={s.id} className={cn("border-b border-r border-l-2 px-3 py-2 leading-relaxed", STANCE[c?.stance ?? "silent"])}>{c ? <><div>{c.position}</div><div className="mt-1 flex items-center gap-1.5"><span className="font-mono text-[10px] text-muted-foreground">{c.cite}</span><span className={cn("rounded px-1 text-[9.5px] uppercase tracking-wider", c.stance === "supports" ? "bg-success/12 text-success" : c.stance === "contradicts" ? "bg-destructive/12 text-destructive" : "bg-muted text-muted-foreground")}>{c.stance}</span></div></> : <span className="text-muted-foreground">—</span>}</td>; })}
+        <div className="relative flex min-h-0 flex-1">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto scrollbar-thin">
+            <table className="w-max min-w-full border-collapse text-[12px]">
+              <thead className="sticky top-0 z-10 bg-background">
+                <tr className="grid-head">
+                  <th className="sticky left-0 z-20 w-[200px] min-w-[200px] border-b border-r bg-background px-3 py-1.5 text-left">Topic</th>
+                  {active.sources.map((s) => <th key={s.id} className="min-w-[220px] max-w-[300px] border-b border-r px-3 py-1.5 text-left align-top font-medium text-foreground"><CiteChip cite={s.cite} kind={s.kind} onClick={() => openSource(s)} /><div className="mt-0.5 line-clamp-2 text-[11px] font-normal text-muted-foreground">{s.label}</div></th>)}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {active.topics.map((t) => (
+                  <tr key={t} className="align-top">
+                    <th className="sticky left-0 z-10 border-b border-r bg-background px-3 py-1.5 text-left font-medium">{t}</th>
+                    {active.sources.map((s) => {
+                      const c = active.cells.find((x) => x.topic === t && x.sourceId === s.id);
+                      const sel = cell?.topic === t && cell?.sourceId === s.id;
+                      return (
+                        <td key={s.id} className={cn("border-b border-r px-3 py-1.5 leading-snug", c && "cursor-pointer hover:bg-accent/50", sel && "bg-primary/8")} onClick={() => c && setCell({ topic: t, sourceId: s.id })}>
+                          {c ? <><div className="line-clamp-3">{c.position}</div><div className="mt-1 flex items-center gap-1.5"><CiteChip cite={c.cite} kind={s.kind} unresolved={unresolved.has(c.cite.toUpperCase())} onClick={() => openSource(s, c.cite)} /><span className={cn("text-[10.5px]", STANCE[c.stance])}>{c.stance}</span></div></> : <span className="text-muted-foreground/60">—</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {selectedCell && selectedSource && (
+            <div className={cn("shrink-0", narrow && "absolute inset-y-0 right-0 z-20 max-w-[85%] shadow-xl")}>
+              <Inspector title={selectedCell.topic} subtitle={selectedSource.label} width={340} onClose={() => setCell(null)}>
+                <div className="border-b px-3 py-2"><KeyValueList dense labelWidth={76} items={[{ label: "Source", value: <CiteChip cite={selectedSource.cite} kind={selectedSource.kind} onClick={() => openSource(selectedSource, selectedCell.cite)} /> }, { label: "Cite", value: <CiteChip cite={selectedCell.cite} kind={selectedSource.kind} unresolved={unresolved.has(selectedCell.cite.toUpperCase())} onClick={() => openSource(selectedSource, selectedCell.cite)} /> }, { label: "Stance", value: <span className={STANCE[selectedCell.stance]}>{selectedCell.stance} — relative to the client&apos;s position</span> }, { label: "Cite check", value: unresolved.has(selectedCell.cite.toUpperCase()) ? "did not resolve against the record" : "resolves against the record", muted: false }]} /></div>
+                <div className="px-3 py-2 text-[12.5px] leading-relaxed">{selectedCell.position}</div>
+                <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">Built {formatShortDate(active.createdAt.slice(0, 10))} <ProvenanceBadge record={active} compact={false} className="ml-1 align-middle" /></div>
+              </Inspector>
+            </div>
+          )}
         </div>
       )}
     </div>

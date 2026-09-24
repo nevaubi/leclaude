@@ -150,8 +150,8 @@ export class EventStreamDecoder {
       const total = view.getUint32(0);
       const headersLen = view.getUint32(4);
       const preludeCrc = view.getUint32(8);
-      if (total < 16 || headersLen > total - 16) throw new EventStreamDecodeError(`invalid frame lengths (total ${total}, headers ${headersLen})`);
       if (crc32(this.buffer.subarray(0, 8)) !== preludeCrc) throw new EventStreamDecodeError("prelude CRC mismatch");
+      if (total < 16 || headersLen > total - 16) throw new EventStreamDecodeError(`invalid frame lengths (total ${total}, headers ${headersLen})`);
       if (this.buffer.length < total) break; // wait for the rest of the frame
       const frame = this.buffer.subarray(0, total);
       const messageCrc = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(total - 4);

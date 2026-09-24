@@ -1,0 +1,11 @@
+{
+  "id": "nonexistent-document",
+  "category": "citations",
+  "title": "Citation to a document that exists in no matter",
+  "constitution": "§23 allowed states (unresolved, not a guess); §47 distinguish 'no result' from other failures",
+  "input": { "cites": ["QQQ-0000001", "Nobody Dep. 12:3", "Exhibit Nobody-9", "ECF No. 987654", "999 F.3d 1"], "scope": "every seeded matter" },
+  "expected": "Each cite is 'unresolved' with a reason — not 'requires_review' (nothing is ambiguous) and not 'resolved'.",
+  "passCriteria": ["every Citation.state === 'unresolved'", "every Citation.ref === undefined", "every reason is non-empty"],
+  "grading": "code",
+  "requiresModel": false
+}

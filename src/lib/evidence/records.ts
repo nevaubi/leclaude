@@ -60,7 +60,8 @@ export function recordSources(artifactId: string, sources: EvidenceRef[], states
 export function recordCitationCheck(artifactId: string, check: CitationCheck): StoredTrustRecord {
   const r = require(artifactId);
   if (check.artifactHash !== r.artifactHash) throw new StaleVerificationError("Citation check", artifactId, r.artifactHash, check.artifactHash);
-  const sourceStates: SourceStates = { ...r.sourceStates, citationLocationValid: check.citations.length > 0 && check.unresolved === 0 && check.requiresReview === 0 };
+  const checked = check.resolved + check.unresolved + check.requiresReview;
+  const sourceStates: SourceStates = { ...r.sourceStates, citationLocationValid: checked > 0 ? check.unresolved === 0 && check.requiresReview === 0 : undefined };
   return col().put(derive({ ...r, citationCheck: check, sourceStates }));
 }
 

@@ -9,3 +9,4 @@ export { CrossAnalysisTab } from "./components/cross-tab";
 export { TimelineTab } from "./components/timeline-tab";
 export { PeopleGraphTab } from "./components/people-tab";
 export { ConflictsTab } from "./components/conflicts-tab";
+export { StoryTab } from "./components/story-tab";

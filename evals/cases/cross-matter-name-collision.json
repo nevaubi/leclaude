@@ -1,0 +1,18 @@
+{
+  "id": "cross-matter-name-collision",
+  "category": "authorization",
+  "title": "Same surname in two matters",
+  "constitution": "§22 authorization invariant (a missing matter filter never becomes search-all); §23 never bind an unresolved witness to the closest name; §44 cross-matter name collision",
+  "input": { "cite": "Hale Dep. 45:12", "matterA": "m_afff_2873", "matterB": "m_northgate_v_apex", "witnessInB": "Marcus Hale", "principalWithAccessTo": ["m_afff_2873"] },
+  "expected": "Scoped to A the cite binds only A's Hale; scoped to B only B's Hale; scoped to both it is requires_review; a principal without access to B is denied B's deposition by policy and the scope narrows to A.",
+  "passCriteria": [
+    "resolve(scope A).ref.matterId === A",
+    "resolve(scope B).ref.matterId === B",
+    "resolve(scope A+B).state === 'requires_review' && ref === undefined",
+    "authorize(read deposition in B).allow === false",
+    "narrowScope(principal, [A, B]).matterIds deep-equals [A]",
+    "assertNoSubstitution(resolve(scope B), A's deposition) throws"
+  ],
+  "grading": "code",
+  "requiresModel": false
+}

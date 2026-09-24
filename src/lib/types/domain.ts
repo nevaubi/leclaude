@@ -498,9 +498,39 @@ export interface Workflow {
   tags?: string[];
 }
 
+/**
+ * Terminal states of a workflow run (constitution §14). Identical to
+ * `RunTerminalState` in src/lib/ai/providers/types.ts; the workflows module
+ * asserts the two unions stay equal at compile time.
+ */
+export type WorkflowRunTerminalStatus = "succeeded" | "partial" | "budget_exhausted" | "verification_failed" | "cancelled" | "failed";
+export type WorkflowRunStatus = "queued" | "running" | "waiting_approval" | WorkflowRunTerminalStatus;
+
+/** Distinct failure kinds recorded on steps and runs (constitution §47). */
+export type WorkflowFailureKind =
+  | "no_result" | "provider_outage" | "rate_limit" | "timeout" | "cancelled" | "auth" | "malformed_output" | "incomplete_model_result"
+  | "tool_failure" | "verification_failed" | "budget_exhausted" | "not_configured" | "step_error" | "interrupted" | "unknown";
+
+/** Why a step was skipped: only failure-driven skips make a run `partial`. */
+export type WorkflowSkipReason = "inactive_path" | "upstream_failed" | "run_failed" | "run_cancelled" | "budget_exhausted" | "trust_gate" | "trust_gate_rejected" | "approval_rejected" | "interrupted";
+
+/** Per-step cost and latency telemetry (constitution §36, §42). Tokens come from the executor's model calls; cache counts when the provider exposes them. */
+export interface WorkflowStepTelemetry {
+  input: number;
+  output: number;
+  total: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  calls: number;
+  costUsd: number;
+  latencyMs?: number;
+  provider?: string;
+  model?: string;
+}
+
 export interface WorkflowRunStep {
   nodeId: ID;
-  status: "pending" | "running" | "succeeded" | "failed" | "skipped" | "waiting_approval";
+  status: "pending" | "running" | "succeeded" | "failed" | "skipped" | "waiting_approval" | "cancelled";
   startedAt?: ISODate;
   finishedAt?: ISODate;
   input?: unknown;
@@ -508,17 +538,28 @@ export interface WorkflowRunStep {
   error?: string;
   logs?: string[];
   tokens?: number;
+  /** Wall-clock time of the last attempt (startedAt → finishedAt). */
+  durationMs?: number;
+  /** 1-based attempt number of the last execution. */
+  attempt?: number;
+  /** Idempotency key of the last attempt: `<runId>:<nodeId>[:i<iteration>]:<attempt>`. */
+  stepKey?: string;
+  failureKind?: WorkflowFailureKind;
+  skipReason?: WorkflowSkipReason;
+  telemetry?: WorkflowStepTelemetry;
 }
 
 export interface WorkflowRun {
   id: ID;
   workflowId: ID;
-  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "waiting_approval";
+  status: WorkflowRunStatus;
   inputs: Record<string, unknown>;
   steps: WorkflowRunStep[];
   outputs?: Record<string, unknown>;
   startedAt: ISODate;
   finishedAt?: ISODate;
+  /** Same instant as `finishedAt`; set when the run reaches a terminal state. */
+  endedAt?: ISODate;
   triggeredBy: "manual" | "schedule" | "event" | "api";
   matterId?: ID;
 }

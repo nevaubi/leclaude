@@ -30,7 +30,7 @@ export function ProductionsTab({ initialProductionId }: { initialProductionId?: 
   const productions = useProductions(matterId);
   const [active, setActive] = React.useState<string | null>(initialProductionId ?? null);
   const [createOpen, setCreateOpen] = React.useState(false);
-  const rows = productions.data?.productions ?? [];
+  const rows = React.useMemo(() => productions.data?.productions ?? [], [productions.data]);
   React.useEffect(() => { if (!active && rows.length) setActive(rows[0].id); }, [rows, active]);
   const columns = React.useMemo<DataTableColumn<ProductionSummary2>[]>(() => [
     { id: "name", header: "Production", width: 240, minWidth: 140, sortable: true, accessor: (p) => p.name, locked: true, render: (p) => <span className="truncate font-medium">{p.name}</span> },

@@ -1,0 +1,11 @@
+{
+  "id": "oversized-artifact",
+  "category": "robustness",
+  "title": "A 200k-character artifact",
+  "constitution": "§36 performance without sacrificing evidence integrity; §47 failure model",
+  "input": { "paragraphs": 3000, "minChars": 200000, "budgetMs": 10000 },
+  "expected": "The artifact hashes (sync and async agree) and its citations are checked without throwing, within the time budget, with resolved and unresolved cites counted correctly.",
+  "passCriteria": ["artifact.length >= 200000", "artifactHashSync === await artifactHash", "checkCitations completes in < budgetMs", "resolved > 0 && unresolved > 0"],
+  "grading": "code",
+  "requiresModel": false
+}

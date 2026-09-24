@@ -24,7 +24,8 @@ export type CitationType = ParsedCitation["type"];
 /** Uppercase tokens that look like Bates prefixes but are case numbers, standards or rule cites. */
 export const NOT_BATES_PREFIXES: ReadonlySet<string> = new Set(["MDL", "ECF", "DKT", "DOC", "NO", "CIV", "CV", "CR", "CASE", "ISO", "RFC", "USC", "CFR", "FR", "PL", "HR", "SB", "HB", "FY", "CY", "Q", "VOL", "ID", "PMID", "DOI", "NCT", "SKU", "PO", "RE"]);
 
-const BATES_PREFIX = "[A-Z]{2,}[A-Z0-9]*(?:[-_][A-Z]{2,}[A-Z0-9]*)*";
+/** Lazy so a separator-less token (ABC000123456) splits as the shortest letter prefix plus the longest digit run. */
+const BATES_PREFIX = "[A-Z]{2,}[A-Z0-9]*?(?:[-_][A-Z]{2,}[A-Z0-9]*?)*?";
 const BATES_RE = new RegExp(`\\b(${BATES_PREFIX})([-_ ]?)(\\d{4,9})\\b`, "g");
 const BATES_RANGE_RE = new RegExp(`^\\s*(?:[–—-]|to|through)\\s*(?:(${BATES_PREFIX})[-_ ]?)?(\\d{4,9})\\b`);
 
@@ -39,6 +40,16 @@ const REPORTER_RE = /\b(\d{1,4})\s+(U\.\s?S\.|S\.\s?Ct\.|L\.\s?Ed\.(?:\s?2d)?|F\
 const NOT_REPORTERS: ReadonlySet<string> = new Set(["Jan.", "Feb.", "Mar.", "Apr.", "Jun.", "Jul.", "Aug.", "Sep.", "Sept.", "Oct.", "Nov.", "Dec.", "No.", "Nos.", "Vol.", "Ch.", "Sec.", "Art.", "Fig.", "Tab.", "Ex.", "Exh.", "Pt.", "Para.", "Id.", "Dep.", "Tr.", "Ed.", "Rev."]);
 
 const ROMAN: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+
+/** Words that precede a cite but are not part of a witness name ("See Voss Dep.", "Compare Hale Tr."). */
+const LEAD_IN_RE = /^(?:(?:See|Cf\.?|Compare|Also|And|But|Per|At|In|On|The|Id\.?|Accord|Citing|Quoting|Contra|E\.g\.?|Generally|Trial|Hearing|Plaintiffs?|Defendants?|Joint|Pl\.?|Def\.?)\s+)+/i;
+
+/** Strip lead-in words from a captured name; returns the name and how many characters were dropped. */
+function stripLeadIn(name: string): { name: string; dropped: number } {
+  const m = LEAD_IN_RE.exec(name);
+  if (!m || m[0].length >= name.length) return { name, dropped: 0 };
+  return { name: name.slice(m[0].length), dropped: m[0].length };
+}
 
 function volumeNumber(v: string | undefined): number | undefined {
   if (!v) return undefined;
@@ -120,17 +131,18 @@ function depositions(text: string, spans: Span[]) {
     const re = new RegExp(src.source, "g");
     let m: RegExpExecArray | null;
     while ((m = re.exec(text))) {
-      const start = m.index;
-      const end = start + m[0].length;
+      const stripped = src === DEPO_RE ? stripLeadIn(m[1]) : { name: m[1], dropped: 0 };
+      const start = m.index + stripped.dropped;
+      const end = m.index + m[0].length;
       if (overlaps(spans, start, end)) continue;
-      const witness = m[1].trim();
+      const witness = stripped.name.trim();
       const volume = volumeNumber(m[2]);
       const page = Number(m[3]);
       const line = Number(m[4]);
       const pageEnd = m[5] ? Number(m[5]) : undefined;
       const lineEnd = m[6] ? Number(m[6]) : undefined;
       const key = `depo:${surnameOf(witness)}:${volume ?? ""}:${page}:${line}:${pageEnd ?? ""}:${lineEnd ?? ""}`;
-      spans.push({ start, end, cite: { type: "deposition", raw: m[0].trim(), witness, volume, page, line, pageEnd, lineEnd, key } });
+      spans.push({ start, end, cite: { type: "deposition", raw: text.slice(start, end).trim(), witness, volume, page, line, pageEnd, lineEnd, key } });
     }
   }
 }
@@ -155,14 +167,20 @@ function exhibits(text: string, spans: Span[]) {
   const re = new RegExp(EXHIBIT_RE.source, "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
-    const start = m.index;
-    const end = start + m[0].length;
+    const end = m.index + m[0].length;
+    const captured = m[1]?.trim();
+    // "See Ex. 3": a leading capitalized word is only a witness when it is not a citation lead-in.
+    const isLeadIn = !!captured && (LEAD_IN_RE.test(`${captured} `) || /^Deposition$/i.test(captured));
+    let start = m.index;
+    if (isLeadIn) {
+      // group 1 opens the match, so the raw cite begins after the lead-in word and the whitespace that follows it
+      const rest = m[0].slice(captured!.length);
+      start += captured!.length + (rest.length - rest.trimStart().length);
+    }
     if (overlaps(spans, start, end)) continue;
-    const witness = m[1]?.trim();
+    const witness = isLeadIn ? undefined : captured;
     const exhibit = m[2];
-    // "See Ex. 3": a leading capitalized word is only a witness when it looks like a name (no common lead-ins).
-    const lead = witness && /^(See|Cf|Compare|Also|And|But|Per|At|In|On|The|Id|Accord|Citing|Quoting|Contra|Trial|Hearing|Deposition|Plaintiffs?|Defendants?|Joint|Pl|Def)\.?$/i.test(witness) ? undefined : witness;
-    spans.push({ start, end, cite: { type: "exhibit", raw: m[0].trim(), witness: lead, exhibit, key: `ex:${lead ? surnameOf(lead) : ""}:${exhibit.toLowerCase()}` } });
+    spans.push({ start, end, cite: { type: "exhibit", raw: text.slice(start, end).trim(), witness, exhibit, key: `ex:${witness ? surnameOf(witness) : ""}:${exhibit.toLowerCase()}` } });
   }
 }
 

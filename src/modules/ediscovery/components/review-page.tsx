@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronRight, FileSearch, Keyboard, RefreshCw, Sparkles, Maximize2, Minimize2, Loader2, MoreHorizontal } from "lucide-react";
+import { ChevronRight, FileSearch, Keyboard, RefreshCw, ListChecks, Maximize2, Minimize2, Loader2, MoreHorizontal, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
@@ -12,11 +12,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CountChip } from "@/components/ui/misc";
 import { REVIEW_TABS, type ReviewTab, type SavedViewCounts } from "../types";
-import { DepositionsTab, CrossAnalysisTab, TimelineTab, PeopleGraphTab, ConflictsTab } from "../analysis";
+import { DepositionsTab, CrossAnalysisTab, TimelineTab, PeopleGraphTab, ConflictsTab, StoryTab } from "../analysis";
 import { useReviewStore } from "./store";
 import { api, useIssueCodes, useReviewQueueCount, useStats } from "./use-review-data";
 import { MatterHeader } from "./matter-header";
 import { ReviewTab as ReviewTabView } from "./review-tab";
+import { BatchesTab } from "./batches-tab";
+import { ProductionsTab } from "./productions-tab";
 import { CodesTab, type CodesSection } from "./codes-tab";
 import { PredictDialog } from "./predict-dialog";
 import { Kbd } from "./shared";
@@ -36,7 +38,7 @@ interface ReviewContextValue {
   viewCounts: SavedViewCounts[] | null;
   refreshIssueCodes: () => void;
   refreshStats: () => void;
-  /** Ask the review list (and its facets) to refetch, e.g. after batch prediction changed AI scores. */
+  /** Ask the review list (and its facets) to refetch, e.g. after batch prediction changed scores. */
   refreshList: () => void;
   openDocument: (id: string) => void;
   setTab: (tab: ReviewTab) => void;
@@ -62,6 +64,9 @@ export interface ReviewPageProps {
   initialDocId?: string;
   initialQuery?: string;
   initialCustodian?: string;
+  /** `?batch=` opens the batch in the Batches tab; `?production=` likewise. */
+  initialBatchId?: string;
+  initialProductionId?: string;
   aiConfigured: boolean;
   reviewers: Reviewer[];
   currentUserId: string;
@@ -74,12 +79,20 @@ function writeUrl(params: Record<string, string | null | undefined>) {
   window.history.replaceState(window.history.state, "", url.toString());
 }
 
+const SHORTCUTS: [string, string][] = [
+  ["j / k", "Next / previous document"], ["Enter", "Open the active document"], ["Space", "Toggle selection"], ["Shift + ↑↓", "Extend the selection"],
+  ["⌘ A", "Select all in view"], ["Esc", "Close viewer / clear selection"], ["r / n", "Responsive / non-responsive"], ["p / h", "Toggle privileged / hot"],
+  ["1 – 9", "Toggle issue codes (rubric order)"], ["x", "Next uncoded document"], ["⌘ S", "Save coding and advance"], ["f", "Full-screen viewer"],
+  ["[ / ]", "Previous / next in the viewer"], ["/", "Focus search"], ["?", "This help"],
+];
+
 export function ReviewPage(props: ReviewPageProps) {
   const [matterId, setMatterId] = React.useState(props.initialMatterId);
   const [tab, setTabState] = React.useState<ReviewTab>(props.initialTab);
   const [predictOpen, setPredictOpen] = React.useState(false);
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [indexing, setIndexing] = React.useState(false);
+  const [nearDups, setNearDups] = React.useState(false);
   const store = useReviewStore();
   const setActiveMatterId = useShellStore((s) => s.setActiveMatterId);
   const stats = useStats(matterId);
@@ -120,8 +133,17 @@ export function ReviewPage(props: ReviewPageProps) {
     } catch (e) { toast.error("Index rebuild failed", { description: (e as Error).message }); }
     finally { setIndexing(false); }
   };
+  const detectNearDups = async () => {
+    setNearDups(true);
+    try {
+      const r = await api<{ pairs: number; updated: number; groups: number }>("/api/ediscovery/near-dups", { method: "POST", json: { matterId } });
+      toast.success(`Near-duplicates: ${r.pairs} pair${r.pairs === 1 ? "" : "s"} in ${r.groups} cluster${r.groups === 1 ? "" : "s"}`, { description: `${r.updated} document${r.updated === 1 ? "" : "s"} updated (MinHash over word shingles, 50% similarity).` });
+      useReviewStore.getState().bumpList();
+    } catch (e) { toast.error("Detection failed", { description: (e as Error).message }); }
+    finally { setNearDups(false); }
+  };
 
-  // Global shortcuts for the page.
+  // Global shortcuts for the page (coding keys and grid navigation live in the review tab).
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -129,7 +151,6 @@ export function ReviewPage(props: ReviewPageProps) {
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.getAttribute("role") === "combobox");
       if (e.key === "?" && !typing) { e.preventDefault(); setHelpOpen((o) => !o); }
       if (e.key === "/" && !typing) { e.preventDefault(); document.getElementById("ediscovery-search")?.focus(); }
-      if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-7]$/.test(e.key)) { const t2 = REVIEW_TABS[Number(e.key) - 1]; if (t2) setTabState(t2.id); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -171,7 +192,8 @@ export function ReviewPage(props: ReviewPageProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="More actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuItem onClick={() => setPredictOpen(true)}><Sparkles /> AI predict responsiveness<span className="ml-auto text-[10px] text-muted-foreground">batch</span></DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPredictOpen(true)}><ListChecks /> Predict responsiveness<span className="ml-auto text-[10px] text-muted-foreground">batch</span></DropdownMenuItem>
+            <DropdownMenuItem onClick={detectNearDups} disabled={nearDups}>{nearDups ? <Loader2 className="animate-spin" /> : <Copy />} Detect near-duplicates</DropdownMenuItem>
             <DropdownMenuItem onClick={rebuildIndex} disabled={indexing}>{indexing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Rebuild search index</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setHelpOpen(true)}><Keyboard /> Keyboard shortcuts<span className="ml-auto text-[10px] text-muted-foreground">?</span></DropdownMenuItem>
@@ -183,19 +205,18 @@ export function ReviewPage(props: ReviewPageProps) {
         {!fullscreen && (
           <>
             <MatterHeader matter={matter} stats={stats.data} loading={stats.loading} onOpenCodes={() => setTabState("codes")} onOpenHot={() => { useReviewStore.getState().setView("hot"); setTabState("review"); }} onOpenPrivileged={() => { useReviewStore.getState().setView("privileged"); setTabState("review"); }} />
-            <nav className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b px-2 no-scrollbar" aria-label="Workspace tabs">
-              {REVIEW_TABS.map((t, i) => (
+            <nav className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-2 no-scrollbar" aria-label="Workspace tabs">
+              {REVIEW_TABS.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setTabState(t.id)}
-                  className={cn("relative flex h-9 shrink-0 items-center gap-1.5 px-3 text-[13px] font-medium transition-colors cursor-pointer", tab === t.id ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                  className={cn("relative flex h-9 shrink-0 items-center gap-1.5 px-2.5 text-[12.5px] font-medium transition-colors cursor-pointer", tab === t.id ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
                   aria-current={tab === t.id ? "page" : undefined}
                 >
                   {t.label}
                   {t.id === "review" && stats.data && <CountChip>{stats.data.total.toLocaleString()}</CountChip>}
                   {t.id === "codes" && !!queue.pending && <Tip label={`${queue.pending} AI record${queue.pending === 1 ? "" : "s"} need review`}><CountChip tone="warning">{queue.pending}</CountChip></Tip>}
-                  <span className="sr-only">shortcut {i + 1}</span>
-                  {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />}
+                  {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-primary" />}
                 </button>
               ))}
             </nav>
@@ -203,11 +224,14 @@ export function ReviewPage(props: ReviewPageProps) {
         )}
         <div className="min-h-0 flex-1">
           {tab === "review" && <ReviewTabView key={matterId} />}
+          {tab === "batches" && <BatchesTab key={matterId} initialBatchId={props.initialBatchId} />}
           {tab === "depositions" && <DepositionsTab matterId={matterId} onOpenDocument={openDocument} />}
           {tab === "cross" && <CrossAnalysisTab matterId={matterId} onOpenDocument={openDocument} />}
           {tab === "timeline" && <TimelineTab matterId={matterId} onOpenDocument={openDocument} />}
+          {tab === "story" && <StoryTab matterId={matterId} onOpenDocument={openDocument} />}
           {tab === "people" && <PeopleGraphTab matterId={matterId} onOpenDocument={openDocument} />}
           {tab === "conflicts" && <ConflictsTab matterId={matterId} onOpenDocument={openDocument} />}
+          {tab === "productions" && <ProductionsTab key={matterId} initialProductionId={props.initialProductionId} />}
           {tab === "codes" && <CodesTab key={matterId} initialSection={props.initialCodesSection} />}
         </div>
       </div>
@@ -215,13 +239,9 @@ export function ReviewPage(props: ReviewPageProps) {
       <PredictDialog open={predictOpen} onOpenChange={setPredictOpen} />
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent size="md">
-          <DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Review faster without leaving the keyboard.</DialogDescription></DialogHeader>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            {([
-              ["j / k", "Next / previous document"], ["Enter", "Open selected document"], ["Space", "Toggle selection"], ["Shift + click", "Select a range"],
-              ["Esc", "Close viewer / clear selection"], ["Ctrl/⌘ + S", "Save coding and advance"], ["Ctrl/⌘ + A", "Select all in view"], ["F", "Full-screen viewer"],
-              ["/", "Focus search"], ["1 – 7", "Switch workspace tab"], ["R / N / P / H", "Responsive / Non-resp. / Privileged / Hot (viewer)"], ["?", "This help"],
-            ] as [string, string][]).map(([k, v]) => (
+          <DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Review faster without leaving the keyboard. Coding keys act on the selection, or on the active document.</DialogDescription></DialogHeader>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px]">
+            {SHORTCUTS.map(([k, v]) => (
               <React.Fragment key={k}><div className="flex items-center gap-1 text-xs">{k.split(" / ").map((x, i) => <React.Fragment key={x}>{i > 0 && <span className="text-muted-foreground">/</span>}<Kbd>{x}</Kbd></React.Fragment>)}</div><div className="text-muted-foreground">{v}</div></React.Fragment>
             ))}
           </div>

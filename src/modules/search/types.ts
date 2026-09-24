@@ -4,6 +4,8 @@
  */
 import type { CodingDecision } from "@/lib/types/domain";
 import type { Provenance } from "@/lib/integrity/types";
+import type { FailureKind, ResearchStopState, RunMetrics, RunTerminalState } from "@/lib/ai/events";
+import type { TrustState } from "@/lib/evidence/types";
 import type { AnswerBanner, ResearchMode, ResearchSource, RunStats } from "./engine/types";
 
 export type SearchSource = "caselaw" | "statutes" | "regulations" | "federal_register" | "dockets" | "web" | "library" | "ediscovery";
@@ -166,6 +168,14 @@ export interface SearchRun {
   banner?: Exclude<AnswerBanner, null>;
   followUps?: string[];
   sources?: ResearchSource[];
+  // --- run outcome (constitution §14, §23, §25, §36); never reduced to "done" ---
+  terminal?: RunTerminalState;
+  stop?: ResearchStopState;
+  failure?: FailureKind;
+  metrics?: RunMetrics;
+  /** sha256 of the persisted answer text; verification on the run binds to it. */
+  artifactHash?: string;
+  trust?: TrustState;
 }
 
 /** SSE events emitted by /api/search/run: see engine/types.ts (ResearchStreamEvent) plus the agent's text/tool events. */
