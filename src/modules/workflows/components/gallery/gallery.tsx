@@ -98,34 +98,30 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
   };
 
   const mineColumns = React.useMemo<DataTableColumn<WorkflowListItem>[]>(() => [
-    { id: "name", header: "Workflow", minWidth: 220, sortable: true, accessor: (w) => w.name, render: (w) => (
-      <span className="flex min-w-0 items-center gap-2">
+    { id: "name", header: "Workflow", minWidth: 200, sortable: true, accessor: (w) => w.name, render: (w) => (
+      <span className="flex min-w-0 items-center gap-2" title={w.description}>
         <NodeTypeStrip types={w.nodeTypes} max={4} className="hidden shrink-0 xl:flex" />
-        <span className="min-w-0">
-          <span className="block truncate font-medium">{w.name}</span>
-          <span className="block truncate text-[10.5px] text-muted-foreground">{CATEGORY_LABEL[w.category] ?? w.category}{w.description ? ` · ${w.description}` : ""}</span>
-        </span>
+        <span className="truncate font-medium">{w.name}</span>
       </span>
     ) },
+    { id: "category", header: "Category", width: 110, minWidth: 80, sortable: true, accessor: (w) => w.category, render: (w) => <span className="truncate text-muted-foreground">{CATEGORY_LABEL[w.category] ?? w.category}</span> },
     { id: "status", header: "Status", width: 96, minWidth: 80, sortable: true, accessor: (w) => w.status, render: (w) => <WorkflowStatusBadge status={w.status} /> },
-    { id: "schedule", header: "Schedule", width: 170, minWidth: 120, sortable: true, accessor: (w) => (w.schedule ? describeSchedule(w.schedule) : ""), render: (w) => w.schedule ? <span className="block min-w-0"><span className="block truncate text-muted-foreground">{describeSchedule(w.schedule)}</span>{w.nextRunAt && <span className="block truncate text-[10.5px] text-muted-foreground">next <RelativeTime value={w.nextRunAt} /></span>}</span> : <span className="text-muted-foreground">Manual</span> },
-    { id: "lastRun", header: "Last run", width: 150, minWidth: 110, sortable: true, accessor: (w) => w.lastRunAt ?? "", render: (w) => w.lastRunAt ? <span className="flex min-w-0 items-center gap-1.5">{w.lastRunStatus && <RunStatusBadge status={w.lastRunStatus} />}<span className="truncate text-[10.5px] text-muted-foreground"><RelativeTime value={w.lastRunAt} /></span></span> : <span className="text-muted-foreground">Never</span> },
+    { id: "schedule", header: "Schedule", width: 150, minWidth: 110, sortable: true, accessor: (w) => (w.schedule ? describeSchedule(w.schedule) : ""), render: (w) => <span className="truncate text-muted-foreground">{w.schedule ? describeSchedule(w.schedule) : "Manual"}</span> },
+    { id: "next", header: "Next", width: 100, minWidth: 80, sortable: true, defaultHidden: true, accessor: (w) => w.nextRunAt ?? "", render: (w) => <span className="truncate text-muted-foreground">{w.nextRunAt ? <RelativeTime value={w.nextRunAt} /> : "—"}</span> },
+    { id: "lastRun", header: "Last run", width: 190, minWidth: 130, sortable: true, accessor: (w) => w.lastRunAt ?? "", render: (w) => w.lastRunAt ? <span className="flex min-w-0 items-center gap-1.5">{w.lastRunStatus && <RunStatusBadge status={w.lastRunStatus} />}<span className="truncate text-[11px] text-muted-foreground"><RelativeTime value={w.lastRunAt} /></span></span> : <span className="text-muted-foreground">Never</span> },
+    { id: "description", header: "Description", width: 260, minWidth: 120, defaultHidden: true, accessor: (w) => w.description ?? "", render: (w) => <span className="truncate text-muted-foreground">{w.description}</span> },
     { id: "runs", header: "Runs", width: 64, minWidth: 50, align: "right", sortable: true, accessor: (w) => w.runsCount ?? 0, render: (w) => <span className="tabular">{w.runsCount ?? 0}</span> },
     { id: "approval", header: "Review", width: 70, minWidth: 60, defaultHidden: true, accessor: (w) => (w.hasApproval ? 1 : 0), render: (w) => (w.hasApproval ? <span className="inline-flex items-center gap-1 text-muted-foreground"><UserCheck className="size-3" /> yes</span> : <span className="text-muted-foreground">—</span>) },
     { id: "tags", header: "Tags", width: 180, minWidth: 100, defaultHidden: true, accessor: (w) => (w.tags ?? []).join(" "), render: (w) => <span className="truncate text-muted-foreground">{(w.tags ?? []).join(" · ")}</span> },
   ], []);
 
   const systemColumns = React.useMemo<DataTableColumn<WorkflowListItem>[]>(() => [
-    { id: "name", header: "Automation", minWidth: 220, sortable: true, accessor: (w) => w.name, render: (w) => (
-      <span className="min-w-0">
-        <span className="block truncate font-medium">{w.name}</span>
-        <span className="block truncate text-[10.5px] text-muted-foreground">{w.description}</span>
-      </span>
-    ) },
+    { id: "name", header: "Automation", minWidth: 200, sortable: true, accessor: (w) => w.name, render: (w) => <span className="truncate font-medium" title={w.description}>{w.name}</span> },
+    { id: "description", header: "What it does", minWidth: 200, accessor: (w) => w.description ?? "", render: (w) => <span className="truncate text-muted-foreground" title={w.description}>{w.description}</span> },
     { id: "enabled", header: "On", width: 56, minWidth: 50, sortable: true, accessor: (w) => (w.status === "active" ? 1 : 0), render: (w) => <span onClick={(e) => e.stopPropagation()}><Switch size="sm" checked={w.status === "active"} onCheckedChange={(v) => patch(w.id, { status: v ? "active" : "draft" }, v ? `${w.name} on` : `${w.name} paused`)} aria-label={`${w.name} enabled`} /></span> },
     { id: "schedule", header: "Schedule", width: 160, minWidth: 110, sortable: true, accessor: (w) => (w.schedule ? describeSchedule(w.schedule) : ""), render: (w) => <span className="truncate text-muted-foreground">{w.schedule ? describeSchedule(w.schedule) : "Manual"}</span> },
     { id: "next", header: "Next", width: 110, minWidth: 80, sortable: true, accessor: (w) => w.nextRunAt ?? "", render: (w) => <span className="truncate text-muted-foreground">{w.nextRunAt ? <RelativeTime value={w.nextRunAt} /> : "—"}</span> },
-    { id: "lastRun", header: "Last run", width: 170, minWidth: 120, sortable: true, accessor: (w) => w.lastRunAt ?? "", render: (w) => w.lastRunAt ? <span className="flex min-w-0 items-center gap-1.5">{w.lastRunStatus && <RunStatusBadge status={w.lastRunStatus} />}<span className="truncate text-[10.5px] text-muted-foreground"><RelativeTime value={w.lastRunAt} /></span></span> : <span className="text-muted-foreground">Never</span> },
+    { id: "lastRun", header: "Last run", width: 190, minWidth: 130, sortable: true, accessor: (w) => w.lastRunAt ?? "", render: (w) => w.lastRunAt ? <span className="flex min-w-0 items-center gap-1.5">{w.lastRunStatus && <RunStatusBadge status={w.lastRunStatus} />}<span className="truncate text-[11px] text-muted-foreground"><RelativeTime value={w.lastRunAt} /></span></span> : <span className="text-muted-foreground">Never</span> },
     { id: "error", header: "Last error", width: 220, minWidth: 120, defaultHidden: true, accessor: (w) => w.lastRunError ?? "", render: (w) => <span className="truncate text-destructive">{w.lastRunError ?? ""}</span> },
     { id: "runs", header: "Runs", width: 64, minWidth: 50, align: "right", sortable: true, accessor: (w) => w.runsCount ?? 0, render: (w) => <span className="tabular">{w.runsCount ?? 0}</span> },
     { id: "steps", header: "Steps", width: 64, minWidth: 50, align: "right", defaultHidden: true, accessor: (w) => w.nodeCount, render: (w) => <span className="tabular">{w.nodeCount}</span> },
@@ -153,7 +149,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
         </div>
 
         {/* Tabs + filters: one 36px toolbar. */}
-        <div className="toolbar hairline-b flex shrink-0 flex-wrap items-center gap-2 px-4 md:px-5">
+        <div className="hairline-b flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-1 md:px-5">
           <Tabs value={tab} onValueChange={(v) => setTab(v as GalleryTab)}>
             <TabsList variant="underline" className="h-9 border-0">
               <TabsTrigger value="mine" className="text-xs">My workflows <span className="ml-1 tabular text-muted-foreground">{mine.filter((w) => w.status !== "archived").length}</span></TabsTrigger>

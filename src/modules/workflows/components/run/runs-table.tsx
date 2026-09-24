@@ -25,7 +25,8 @@ export function runColumns(opts: { workflowId?: string; compact?: boolean }): Da
   const cols: DataTableColumn<RunSummary>[] = [
     { id: "status", header: "Status", width: 150, minWidth: 120, sortable: true, accessor: (r) => r.status, render: (r) => <RunStatusBadge status={r.status} /> },
   ];
-  if (!opts.workflowId) cols.push({ id: "workflow", header: "Workflow", width: 260, minWidth: 160, sortable: true, accessor: (r) => r.workflowName ?? "", render: (r) => <span className="block min-w-0"><span className="block truncate font-medium">{r.workflowName}</span>{r.currentStep ? <span className="block truncate text-[10.5px] text-muted-foreground">at {r.currentStep}</span> : r.error ? <span className="block truncate text-[10.5px] text-destructive">{r.error}</span> : null}</span> });
+  if (!opts.workflowId) cols.push({ id: "workflow", header: "Workflow", width: 220, minWidth: 140, sortable: true, accessor: (r) => r.workflowName ?? "", render: (r) => <span className="truncate font-medium" title={r.workflowName}>{r.workflowName}</span> });
+  cols.push({ id: "note", header: "Step · note", width: 220, minWidth: 120, accessor: (r) => r.currentStep ?? r.error ?? "", render: (r) => r.currentStep ? <span className="truncate text-muted-foreground" title={r.currentStep}>at {r.currentStep}</span> : r.error ? <span className="truncate text-destructive" title={r.error}>{r.error}</span> : <span className="text-muted-foreground">—</span> });
   cols.push({ id: "progress", header: "Progress", width: 150, minWidth: 120, accessor: (r) => r.stepCounts.succeeded, render: (r) => {
     const done = r.stepCounts.succeeded + r.stepCounts.failed + r.stepCounts.skipped;
     const pct = r.stepTotal ? Math.round((done / r.stepTotal) * 100) : 0;
