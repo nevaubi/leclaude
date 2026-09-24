@@ -139,6 +139,8 @@ export interface EDocument {
   coding: CodingDecision;
   isDuplicateOf?: ID;
   nearDuplicateIds?: ID[];
+  /** Estimated Jaccard similarity per near-duplicate id (MinHash over word shingles), 0..1. */
+  nearDuplicateScores?: Record<ID, number>;
   source?: string; // collection source
   tags?: string[];
 }
@@ -236,7 +238,166 @@ export interface PrivilegeLogEntry {
   docType: DocType;
   basis: string;
   description: string; // privilege-safe description
-  status: "draft" | "final";
+  /** Workflow: draft (generated / first pass) → review (second-level check) → final (served). */
+  status: "draft" | "review" | "final";
+  /** Description template applied when the entry was drafted (see ediscovery/privilege.ts DESCRIPTION_TEMPLATES). */
+  templateId?: string;
+}
+
+// ---------------- E-Discovery review workflow (batches, saved searches, layouts, redactions, productions) ----------------
+
+/** Where a document set came from (a saved query or an explicit selection), so it can be re-run or audited. */
+export interface DocSetSource {
+  kind: "search" | "selection" | "all";
+  q?: string;
+  view?: string;
+  filters?: Record<string, string[]>;
+  savedSearchId?: ID;
+}
+
+export interface ReviewBatchQcDecision {
+  reviewerId: ID;
+  at: ISODate;
+  /** Coding as the QC reviewer saw it before deciding (first-pass call). */
+  firstPass: Pick<CodingDecision, "responsive" | "privileged" | "hot" | "issues" | "reviewerId">;
+  /** The QC reviewer's call. */
+  qc: Pick<CodingDecision, "responsive" | "privileged" | "hot" | "issues">;
+  agree: boolean;
+}
+
+export interface ReviewBatch {
+  id: ID;
+  matterId: ID;
+  name: string;
+  description?: string;
+  docIds: ID[];
+  source: DocSetSource;
+  assigneeId?: ID;
+  priority: "low" | "normal" | "high";
+  dueAt?: ISODate;
+  status: "open" | "in_progress" | "qc" | "complete";
+  /** Percent of the batch sampled for quality control (0 = no QC). */
+  qcSamplePercent: number;
+  /** Deterministic sample drawn when the batch was created (or when QC started). */
+  qcSampleIds: ID[];
+  /** Second-pass batches re-review documents another reviewer already coded. */
+  secondPass: boolean;
+  qcDecisions: Record<ID, ReviewBatchQcDecision>;
+  createdBy: ID;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+  completedAt?: ISODate;
+}
+
+export interface SavedSearchRecord {
+  id: ID;
+  matterId: ID;
+  name: string;
+  description?: string;
+  q: string;
+  view?: string;
+  filters?: Record<string, string[]>;
+  sort?: string;
+  dir?: "asc" | "desc";
+  semantic?: boolean;
+  ownerId: ID;
+  /** Shared with the matter team (otherwise private to the owner). */
+  shared: boolean;
+  lastRunCount?: number;
+  lastRunAt?: ISODate;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+/** A saved review-grid layout (column set, widths, density) per user. */
+export interface ReviewLayout {
+  id: ID;
+  userId: ID;
+  matterId?: ID;
+  name: string;
+  hiddenColumns: string[];
+  columnWidths: Record<string, number>;
+  density: "compact" | "comfortable";
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+export type RedactionReason = "privilege" | "pii" | "phi" | "confidential" | "trade-secret" | "non-responsive" | "other";
+
+export interface Redaction {
+  id: ID;
+  matterId: ID;
+  docId: ID;
+  /** `text`: a character range in the extracted text; `page`: a rectangle (0..1 normalised) on a page. */
+  kind: "text" | "page";
+  start?: number;
+  end?: number;
+  page?: number;
+  rect?: { x: number; y: number; w: number; h: number };
+  reason: RedactionReason;
+  /** Text burned into the box ("REDACTED — PRIVILEGED"). */
+  label: string;
+  note?: string;
+  /** The redacted text, kept so the log can be reviewed before production (never exported). */
+  quote?: string;
+  createdBy: ID;
+  createdAt: ISODate;
+}
+
+export interface ProductionQcReport {
+  ranAt: ISODate;
+  privilegedInSet: { docId: ID; bates: string }[];
+  missingFamily: { docId: ID; bates: string; missingId: ID; missingBates: string }[];
+  unredactedPii: { docId: ID; bates: string; pattern: string; sample: string }[];
+  uncoded: { docId: ID; bates: string }[];
+  redactedDocs: number;
+  ok: boolean;
+}
+
+export interface ProductionSet {
+  id: ID;
+  matterId: ID;
+  name: string;
+  /** Volume label written into the load files ("VOL001"). */
+  volume: string;
+  status: "draft" | "qc" | "final";
+  prefix: string;
+  padding: number;
+  startNumber: number;
+  /** Confidentiality stamp burned into every page (empty = none). */
+  stampText: string;
+  /** Frozen document set, in production order. */
+  docIds: ID[];
+  /** Production Bates assignment per document. */
+  bates: Record<ID, { begin: string; end: string; pages: number }>;
+  source: DocSetSource;
+  qc?: ProductionQcReport;
+  createdBy: ID;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+  finalizedAt?: ISODate;
+  notes?: string;
+}
+
+export interface SearchTermReportRow {
+  term: string;
+  /** Total hits (occurrences) across matching documents. */
+  hits: number;
+  uniqueDocs: number;
+  /** Documents including family members of the hits. */
+  withFamilies: number;
+  families: number;
+  warnings?: string[];
+}
+
+export interface SearchTermReport {
+  id?: ID;
+  matterId: ID;
+  ranAt: ISODate;
+  rows: SearchTermReportRow[];
+  totalUnique: number;
+  totalWithFamilies: number;
+  corpus: number;
 }
 
 // ---------------- Workflows ----------------

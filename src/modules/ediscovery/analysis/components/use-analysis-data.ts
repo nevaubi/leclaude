@@ -6,7 +6,7 @@ import type { Conflict, Deposition, Relationship, TimelineEvent } from "@/lib/ty
 import { ApiError, api, useFetch } from "../../components/use-review-data";
 import { useReview } from "../../components/review-page";
 import { pageLineOf } from "../transcript";
-import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, ObjectionRuling, ObjectionSummary, PersonDetail, TranscriptHit } from "../types";
+import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, CrossReference, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, MatterIntelPanel, ObjectionRuling, ObjectionSummary, PersonDetail, Story, StorySummary, TranscriptHit, TranscriptImportRecord } from "../types";
 
 export { ApiError, api, useFetch, pageLineOf };
 
@@ -123,4 +123,42 @@ export function useLatest<T>(v: T) {
   const ref = React.useRef(v);
   ref.current = v;
   return ref;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: stories, transcript imports, cross references, intelligence panel
+// ---------------------------------------------------------------------------
+
+export function useStories(matterId: string) {
+  return useFetch<{ stories: StorySummary[] }>(`an:stories:${matterId}`, () => api(`/api/ediscovery/analysis/stories?matter=${enc(matterId)}`));
+}
+
+export interface StoryDetail { story: Story; sources: { docs: { id: string; bates: string; subject: string; date: string }[]; depositions: { id: string; witnessName: string; indexes: number[] }[] } }
+export function useStory(id: string | null) {
+  return useFetch<StoryDetail>(id ? `an:story:${id}` : null, () => api(`/api/ediscovery/analysis/stories/${enc(id!)}`));
+}
+
+export function useCrossReferences(depositionId: string | null) {
+  return useFetch<{ references: CrossReference[]; groups: { key: string; docId?: string; bates?: string; label: string; best: number; hits: CrossReference[] }[]; total: number }>(depositionId ? `an:xref:${depositionId}` : null, () => api(`/api/ediscovery/analysis/depositions/${enc(depositionId!)}/cross-references`));
+}
+
+export function useTranscriptImports(matterId: string) {
+  return useFetch<{ imports: TranscriptImportRecord[] }>(`an:imports:${matterId}`, () => api(`/api/ediscovery/analysis/depositions/import?matter=${enc(matterId)}`));
+}
+
+export function useIntelPanel(matterId: string, enabled = true) {
+  return useFetch<MatterIntelPanel>(enabled ? `an:intel:${matterId}` : null, () => api(`/api/ediscovery/analysis/intel?matter=${enc(matterId)}`));
+}
+
+/** Download text content generated in the browser (CSV / Markdown). */
+export function downloadText(filename: string, body: string, mime = "text/plain;charset=utf-8") {
+  const blob = new Blob([body], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

@@ -3,6 +3,12 @@ import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { jsonError } from "@/lib/ai/sse";
 import { AIConfigError } from "@/lib/ai/config";
+import { ensureReviewSeeded } from "./seed-review";
+
+/** Make sure the review-workflow records (batches, saved searches, productions…) exist on databases seeded before phase 3. */
+export function ensureReview() {
+  ensureReviewSeeded(db());
+}
 
 /** Resolve `?matter=` (or `?matterId=`) and validate it exists. */
 export function matterFrom(req: NextRequest, body?: { matterId?: string } | null): { matterId: string } | { error: Response } {

@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import type { EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain";
-import type { AIAnalysis, DocRow, MatterStats, SavedViewCounts, SearchRequest, SearchResponse, SimilarDoc, PrivilegeLogRow, ProductionSummary } from "../types";
+import type { AIAnalysis, DocRow, MatterStats, SavedViewCounts, SearchRequest, SearchResponse, SimilarDoc, PrivilegeLogRow, ProductionSummary, ReviewBatchSummary, SavedSearchRecord, ReviewLayout, Redaction, ProductionSummary2, DocHistoryEntry, DisagreementReport } from "../types";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string) { super(message); this.name = "ApiError"; }
@@ -155,6 +155,52 @@ export function useReviewQueueCount(matterId: string) {
 
 export function useRules(matterId: string) {
   return useFetch<{ rules: string }>(`rules:${matterId}`, () => api(`/api/ediscovery/rules?matter=${encodeURIComponent(matterId)}`));
+}
+
+export function useBatches(matterId: string) {
+  return useFetch<{ batches: ReviewBatchSummary[] }>(`batches:${matterId}`, () => api(`/api/ediscovery/batches?matter=${encodeURIComponent(matterId)}`));
+}
+
+export function useBatch(id: string | null) {
+  return useFetch<{ batch: ReviewBatchSummary & { disagreements: DisagreementReport } }>(id ? `batch:${id}` : null, () => api(`/api/ediscovery/batches/${encodeURIComponent(id!)}`));
+}
+
+export function useSavedSearches(matterId: string) {
+  return useFetch<{ searches: SavedSearchRecord[] }>(`saved:${matterId}`, () => api(`/api/ediscovery/saved-searches?matter=${encodeURIComponent(matterId)}`));
+}
+
+export function useLayouts(matterId: string) {
+  return useFetch<{ layouts: ReviewLayout[] }>(`layouts:${matterId}`, () => api(`/api/ediscovery/layouts?matter=${encodeURIComponent(matterId)}`));
+}
+
+export function useRedactions(docId: string | null) {
+  return useFetch<{ redactions: Redaction[] }>(docId ? `redactions:${docId}` : null, () => api(`/api/ediscovery/redactions?doc=${encodeURIComponent(docId!)}`));
+}
+
+export function useMatterRedactions(matterId: string) {
+  return useFetch<{ redactions: Redaction[] }>(`redactions:m:${matterId}`, () => api(`/api/ediscovery/redactions?matter=${encodeURIComponent(matterId)}`));
+}
+
+export function useProductions(matterId: string) {
+  return useFetch<{ productions: ProductionSummary2[] }>(`productions:${matterId}`, () => api(`/api/ediscovery/productions?matter=${encodeURIComponent(matterId)}`));
+}
+
+export function useDocHistory(docId: string | null, enabled: boolean) {
+  return useFetch<{ history: DocHistoryEntry[]; batches: { id: string; name: string; qc: boolean }[]; redactions: Redaction[] }>(docId && enabled ? `history:${docId}` : null, () => api(`/api/ediscovery/docs/${encodeURIComponent(docId!)}/history`));
+}
+
+/** Browser download of a fetched file (blob URL). */
+export async function downloadFile(url: string, fallbackName: string) {
+  const res = await fetch(url);
+  if (!res.ok) throw new ApiError((await res.json().catch(() => ({ error: res.statusText })) as { error?: string }).error ?? res.statusText, res.status);
+  const blob = await res.blob();
+  const name = res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ?? fallbackName;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  return name;
 }
 
 export type { PrivilegeLogEntry };

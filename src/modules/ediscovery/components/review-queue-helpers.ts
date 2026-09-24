@@ -22,6 +22,7 @@ export const KIND_LABEL: Record<ProvenanceKind, string> = {
   "library.compare": "Clause comparison",
   research: "Research answer",
   "intel.job": "Intelligence job",
+  "story.draft": "Story narrative",
 };
 
 /** Order groups appear in: the record types a reviewer must clear before production first. */

@@ -4,10 +4,11 @@ import { audit } from "@/lib/integrity/audit";
 import { matterFrom } from "@/modules/ediscovery/api-utils";
 import { listPrivilegeLog } from "@/modules/ediscovery/service";
 import { privilegeLogCsv, privilegeLogMarkdown } from "@/modules/ediscovery/privilege";
+import { privilegeLogXlsx } from "@/modules/ediscovery/privilege-xlsx";
 
 export const runtime = "nodejs";
 
-/** ?matter=&format=csv|markdown — CSV downloads; markdown is returned as JSON for the client to convert with markdownToDoc → POST /api/office/docs. */
+/** ?matter=&format=csv|xlsx|markdown — CSV/XLSX download; markdown is returned as JSON for the client to convert with markdownToDoc → POST /api/office/docs. */
 export async function GET(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
@@ -16,6 +17,10 @@ export async function GET(req: NextRequest) {
   const format = req.nextUrl.searchParams.get("format") ?? "csv";
   const stamp = new Date().toISOString().slice(0, 10);
   audit("export", { kind: "privilegeLog", label: `privilege log (${rows.length} entries)`, matterId: m.matterId }, { format, count: rows.length });
+  if (format === "xlsx") {
+    const bytes = privilegeLogXlsx(rows, { matterName: matter.name, caption: matter.caption, generatedAt: stamp });
+    return new Response(new Uint8Array(bytes), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="privilege-log-${matter.slug}-${stamp}.xlsx"`, "Content-Length": String(bytes.byteLength) } });
+  }
   if (format === "markdown") {
     return Response.json({ title: `Privilege Log — ${matter.shortName} — ${stamp}`, markdown: privilegeLogMarkdown(rows, matter.name, matter.caption), count: rows.length });
   }

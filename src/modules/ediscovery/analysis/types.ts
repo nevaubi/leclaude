@@ -55,6 +55,12 @@ export interface Designation {
   endLine: number;
   purpose: "affirmative" | "counter" | "impeachment" | "objection";
   note?: string;
+  /** For counter-designations: the designation this one answers. */
+  counterTo?: string;
+  /** Objection lodged against the designation (by the other side), with the court's ruling when entered. */
+  objection?: { basis: string; note?: string; ruling?: "pending" | "sustained" | "overruled" };
+  /** Party offering the designation. */
+  party?: "plaintiff" | "defendant";
   createdAt: string;
   createdBy: string;
 }
@@ -236,4 +242,137 @@ export function formatPageLine(page: number, line: number) {
 
 export function formatRange(d: Pick<Designation, "startPage" | "startLine" | "endPage" | "endLine">) {
   return `${formatPageLine(d.startPage, d.startLine)}–${formatPageLine(d.endPage, d.endLine)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: transcript import, cross references, stories, intelligence panels
+// ---------------------------------------------------------------------------
+
+export type TranscriptFormat = "page-line" | "page-numbered" | "loose";
+
+export interface ParseIssue {
+  /** Where the issue was seen (page:line when known, otherwise the raw line number). */
+  at: string;
+  kind: "unnumbered" | "out-of-order" | "line-overflow" | "answer-without-question" | "unknown-speaker" | "no-page-markers" | "orphan-objection" | "empty";
+  message: string;
+  /** Raw source line for the preview. */
+  sample?: string;
+}
+
+export interface ParsedTranscript {
+  format: TranscriptFormat;
+  transcript: DepositionQA[];
+  pages: number;
+  firstPage: number;
+  /** 0..1 — how much of the record carried explicit page:line numbering and parsed cleanly. */
+  confidence: number;
+  issues: ParseIssue[];
+  speakers: { label: string; count: number; role: "examiner" | "defender" | "witness" | "reporter" | "other" }[];
+  exhibits: { id: string; description: string; bates?: string }[];
+  meta: { witnessName?: string; date?: string; takenBy?: string; defendingBy?: string; volume?: number; caseCaption?: string };
+  stats: { questions: number; answers: number; objections: number; colloquy: number; rawLines: number; numberedLines: number };
+}
+
+/** Record of an import (module-private collection `ediscovery_transcript_imports`). */
+export interface TranscriptImportRecord {
+  id: string;
+  matterId: string;
+  depositionId: string;
+  sourceName?: string;
+  sourceKind: "txt" | "ptx" | "docx" | "paste";
+  format: TranscriptFormat;
+  confidence: number;
+  issues: ParseIssue[];
+  qaCount: number;
+  pages: number;
+  importedAt: string;
+  importedBy: string;
+}
+
+/** A document referenced in testimony: by Bates, by exhibit number, or by a distinctive subject match. */
+export interface CrossReference {
+  index: number;
+  page: number;
+  line: number;
+  kind: "bates" | "exhibit" | "subject" | "date";
+  docId?: string;
+  bates?: string;
+  label: string;
+  /** What in the testimony triggered the match. */
+  match: string;
+  confidence: number;
+}
+
+export type StoryEvidence =
+  | { kind: "document"; docId?: string; bates: string; excerpt?: string }
+  | { kind: "testimony"; depositionId: string; witness?: string; page: number; line: number; endPage?: number; endLine?: number; excerpt?: string }
+  | { kind: "intel"; docId: string; title?: string; url?: string; excerpt?: string }
+  | { kind: "event"; eventId: string; title?: string };
+
+export interface StoryFact {
+  id: string;
+  order: number;
+  date: string; // ISO date
+  dateEnd?: string;
+  precision?: "day" | "month" | "year";
+  text: string;
+  evidence: StoryEvidence[];
+  confidence: number; // 0..1
+  disputed?: boolean;
+  /** Where the fact came from when it was built rather than typed. */
+  origin?: "timeline" | "testimony" | "intel" | "user" | "ai";
+  originId?: string;
+  personIds?: string[];
+  tags?: string[];
+  verified?: boolean;
+}
+
+export interface Story {
+  id: string;
+  matterId: string;
+  title: string;
+  theme?: string;
+  facts: StoryFact[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  /** Latest AI narrative draft, with its provenance (verified, cite-checked, gated). */
+  narrative?: { text: string; provenance?: unknown; generatedAt: string };
+  meta?: { seeded?: boolean; [k: string]: unknown };
+}
+
+export interface StorySummary extends Omit<Story, "facts" | "narrative"> {
+  factCount: number;
+  disputed: number;
+  unverified: number;
+  from?: string;
+  to?: string;
+  hasNarrative: boolean;
+}
+
+export interface StoryCiteReport {
+  storyId: string;
+  checked: number;
+  resolved: number;
+  unresolved: { factId: string; cite: string; reason: string }[];
+}
+
+/** Intelligence for a matter, aggregated for the analysis views (empty states when sources are off). */
+export interface MatterIntelPanel {
+  matterId: string;
+  available: boolean;
+  sources: { enabled: number; total: number; disabled: string[] };
+  judge: null | { id: string; name: string; court?: string; documents: number; tendencies: { motion: string; label: string; total: number; grantRate: number | null }[]; recent: { id: string; title: string; date?: string; kind: string; url?: string }[]; href: string };
+  docket: { id: string; title: string; date?: string; kind: string; docketNumber?: string; url?: string; confidence: number; flagged: boolean }[];
+  regulatory: { at: string; title: string; kind?: string; confidence: number; docIds: string[] }[];
+  mdl: null | { id: string; name: string; number?: string; court?: string; status?: string; detail?: string; updatedAt?: string; href: string; flagged: boolean };
+  chronology: { entries: number; merged: number; alreadyOnTimeline: number };
+  generatedAt: string;
+}
+
+export function formatCite(e: StoryEvidence): string {
+  if (e.kind === "document") return e.bates;
+  if (e.kind === "testimony") return `${e.witness ? `${e.witness.split(" ").pop()} ` : ""}${formatPageLine(e.page, e.line)}${e.endPage != null && e.endLine != null && (e.endPage !== e.page || e.endLine !== e.line) ? `–${formatPageLine(e.endPage, e.endLine)}` : ""}`;
+  if (e.kind === "intel") return e.title ?? e.docId;
+  return e.title ?? e.eventId;
 }

@@ -223,3 +223,139 @@ export function transcriptText(dep: Pick<Deposition, "witnessName" | "transcript
   if (text.length > max) text = text.slice(0, max) + "\n…[truncated]";
   return text;
 }
+
+// ---------------------------------------------------------------------------
+// Designation math (page:line arithmetic for designations, counters, objections)
+// ---------------------------------------------------------------------------
+
+export type PageLineRange = Pick<Designation, "startPage" | "startLine" | "endPage" | "endLine">;
+
+/** Absolute line index (page 1 line 1 = 1) so ranges can be compared and measured. */
+export function absoluteLine(page: number, line: number, linesPerPage = LINES_PER_PAGE) {
+  return (page - 1) * linesPerPage + line;
+}
+
+/** Inclusive length of a range in transcript lines. */
+export function rangeLines(r: PageLineRange, linesPerPage = LINES_PER_PAGE) {
+  const n = normalizeRange(r);
+  return Math.max(0, absoluteLine(n.endPage, n.endLine, linesPerPage) - absoluteLine(n.startPage, n.startLine, linesPerPage) + 1);
+}
+
+export function rangesOverlap(a: PageLineRange, b: PageLineRange) {
+  const x = normalizeRange(a), y = normalizeRange(b);
+  return comparePageLine(x.startPage, x.startLine, y.endPage, y.endLine) <= 0 && comparePageLine(y.startPage, y.startLine, x.endPage, x.endLine) <= 0;
+}
+
+/** Lines shared by two ranges (0 when disjoint). */
+export function overlapLines(a: PageLineRange, b: PageLineRange, linesPerPage = LINES_PER_PAGE) {
+  if (!rangesOverlap(a, b)) return 0;
+  const x = normalizeRange(a), y = normalizeRange(b);
+  const start = Math.max(absoluteLine(x.startPage, x.startLine, linesPerPage), absoluteLine(y.startPage, y.startLine, linesPerPage));
+  const end = Math.min(absoluteLine(x.endPage, x.endLine, linesPerPage), absoluteLine(y.endPage, y.endLine, linesPerPage));
+  return Math.max(0, end - start + 1);
+}
+
+/** Merge overlapping or touching ranges into the minimal disjoint set, sorted. */
+export function mergeRanges<T extends PageLineRange>(ranges: T[], linesPerPage = LINES_PER_PAGE): PageLineRange[] {
+  const sorted = ranges.map(normalizeRange).sort((a, b) => comparePageLine(a.startPage, a.startLine, b.startPage, b.startLine));
+  const out: PageLineRange[] = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && absoluteLine(r.startPage, r.startLine, linesPerPage) <= absoluteLine(last.endPage, last.endLine, linesPerPage) + 1) {
+      if (comparePageLine(r.endPage, r.endLine, last.endPage, last.endLine) > 0) { last.endPage = r.endPage; last.endLine = r.endLine; }
+    } else out.push({ ...r });
+  }
+  return out;
+}
+
+export interface DesignationTotals {
+  count: number;
+  /** Distinct lines covered (overlaps counted once) per purpose and overall. */
+  lines: Record<Designation["purpose"] | "all", number>;
+  byPurpose: Record<Designation["purpose"], number>;
+  /** Counter-designations that cite a designation not in the list. */
+  danglingCounters: number;
+  /** Counters whose range does not touch the designation they answer. */
+  detachedCounters: number;
+  objections: { total: number; sustained: number; overruled: number; pending: number };
+  /** Estimated playback: a 25-line page of video runs about 90 seconds. */
+  estimatedMinutes: number;
+}
+
+/** Totals for a designation list: distinct lines by purpose, counter integrity and objection rulings. */
+export function designationTotals(list: Designation[], linesPerPage = LINES_PER_PAGE): DesignationTotals {
+  const purposes: Designation["purpose"][] = ["affirmative", "counter", "impeachment", "objection"];
+  const byPurpose = Object.fromEntries(purposes.map((p) => [p, 0])) as Record<Designation["purpose"], number>;
+  const lines = { all: 0, affirmative: 0, counter: 0, impeachment: 0, objection: 0 } as DesignationTotals["lines"];
+  for (const p of purposes) {
+    const rs = list.filter((d) => d.purpose === p);
+    byPurpose[p] = rs.length;
+    lines[p] = mergeRanges(rs, linesPerPage).reduce((a, r) => a + rangeLines(r, linesPerPage), 0);
+  }
+  lines.all = mergeRanges(list, linesPerPage).reduce((a, r) => a + rangeLines(r, linesPerPage), 0);
+  const ids = new Set(list.map((d) => d.id));
+  let danglingCounters = 0, detachedCounters = 0;
+  for (const d of list) {
+    if (d.purpose !== "counter" || !d.counterTo) continue;
+    const target = list.find((x) => x.id === d.counterTo);
+    if (!target || !ids.has(d.counterTo)) { danglingCounters++; continue; }
+    // A counter must sit within ±2 pages of the designation it completes.
+    const near = Math.abs(absoluteLine(d.startPage, d.startLine, linesPerPage) - absoluteLine(target.endPage, target.endLine, linesPerPage)) <= linesPerPage * 2 || rangesOverlap(d, target) || Math.abs(absoluteLine(target.startPage, target.startLine, linesPerPage) - absoluteLine(d.endPage, d.endLine, linesPerPage)) <= linesPerPage * 2;
+    if (!near) detachedCounters++;
+  }
+  const objections = { total: 0, sustained: 0, overruled: 0, pending: 0 };
+  for (const d of list) {
+    if (!d.objection) continue;
+    objections.total++;
+    if (d.objection.ruling === "sustained") objections.sustained++;
+    else if (d.objection.ruling === "overruled") objections.overruled++;
+    else objections.pending++;
+  }
+  return { count: list.length, lines, byPurpose, danglingCounters, detachedCounters, objections, estimatedMinutes: Math.round((lines.all / linesPerPage) * 1.5 * 10) / 10 };
+}
+
+/** Designations that would play at trial: affirmative + counter, minus ranges struck by a sustained objection. */
+export function playableRanges(list: Designation[], linesPerPage = LINES_PER_PAGE): PageLineRange[] {
+  const struck = list.filter((d) => d.objection?.ruling === "sustained");
+  const keep = list.filter((d) => (d.purpose === "affirmative" || d.purpose === "counter") && d.objection?.ruling !== "sustained");
+  const out: PageLineRange[] = [];
+  for (const r of mergeRanges(keep, linesPerPage)) {
+    // subtract struck ranges
+    let pieces: PageLineRange[] = [r];
+    for (const s of struck) {
+      pieces = pieces.flatMap((p) => {
+        if (!rangesOverlap(p, s)) return [p];
+        const n = normalizeRange(s);
+        const res: PageLineRange[] = [];
+        if (comparePageLine(p.startPage, p.startLine, n.startPage, n.startLine) < 0) {
+          const end = stepBack(n.startPage, n.startLine, linesPerPage);
+          res.push({ startPage: p.startPage, startLine: p.startLine, endPage: end.page, endLine: end.line });
+        }
+        if (comparePageLine(p.endPage, p.endLine, n.endPage, n.endLine) > 0) {
+          const start = stepForward(n.endPage, n.endLine, linesPerPage);
+          res.push({ startPage: start.page, startLine: start.line, endPage: p.endPage, endLine: p.endLine });
+        }
+        return res;
+      });
+    }
+    out.push(...pieces);
+  }
+  return out;
+}
+
+function stepBack(page: number, line: number, linesPerPage: number) {
+  return line > 1 ? { page, line: line - 1 } : { page: page - 1, line: linesPerPage };
+}
+function stepForward(page: number, line: number, linesPerPage: number) {
+  return line < linesPerPage ? { page, line: line + 1 } : { page: page + 1, line: 1 };
+}
+
+/** Parse "24:05-26:12", "24:5 – 26:12" or "24:05" into a range. */
+export function parseRange(s: string): PageLineRange | null {
+  const m = s.trim().match(/^(\d{1,4})\s*:\s*(\d{1,2})(?:\s*[-–—to]+\s*(\d{1,4})\s*:\s*(\d{1,2}))?$/i);
+  if (!m) return null;
+  const startPage = Number(m[1]), startLine = Number(m[2]);
+  const endPage = m[3] ? Number(m[3]) : startPage, endLine = m[4] ? Number(m[4]) : startLine;
+  if (startLine < 1 || startLine > LINES_PER_PAGE || endLine < 1 || endLine > LINES_PER_PAGE) return null;
+  return normalizeRange({ startPage, startLine, endPage, endLine });
+}

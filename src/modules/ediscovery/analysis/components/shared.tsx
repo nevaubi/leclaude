@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { AlertTriangle, CircleCheck, CircleDot, CircleX, FileText, Flag, Gavel, HelpCircle, KeyRound, Lock, Quote, ScrollText, Sparkles, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CircleCheck, CircleDot, CircleX, FileText, Flag, Gavel, Globe, HelpCircle, KeyRound, Lock, Quote, ScrollText, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,20 +80,29 @@ export function CategoryChip({ category, className }: { category: TimelineCatego
 }
 
 /** Citation chip: Bates → opens the document; page:line → jumps to the deposition. */
-export function CiteChip({ cite, kind, onClick, className, title }: { cite: string; kind: "document" | "deposition" | "external"; onClick?: () => void; className?: string; title?: string }) {
-  const Icon = kind === "document" ? FileText : kind === "deposition" ? ScrollText : Quote;
-  const cls = cn("inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-px font-mono text-[10.5px] leading-4 whitespace-nowrap transition-colors", kind === "document" ? "bg-chart-1/8 text-chart-1 border-chart-1/25" : kind === "deposition" ? "bg-chart-2/10 text-chart-2 border-chart-2/25" : "bg-muted text-muted-foreground border-border", onClick && "cursor-pointer hover:bg-accent hover:text-accent-foreground", className);
-  const inner = <><Icon className="size-3 shrink-0" /><span className="truncate">{cite}</span></>;
-  if (onClick) return <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} className={cls} title={title ?? (kind === "document" ? "Open document" : "Open in transcript")}>{inner}</button>;
+export function CiteChip({ cite, kind, onClick, className, title, unresolved }: { cite: string; kind: "document" | "deposition" | "external" | "intel"; onClick?: () => void; className?: string; title?: string; unresolved?: boolean }) {
+  const Icon = kind === "document" ? FileText : kind === "deposition" ? ScrollText : kind === "intel" ? Globe : Quote;
+  const cls = cn("inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-px font-mono text-[10.5px] leading-4 whitespace-nowrap transition-colors", kind === "document" ? "bg-chart-1/8 text-chart-1 border-chart-1/25" : kind === "deposition" ? "bg-chart-2/10 text-chart-2 border-chart-2/25" : "bg-muted text-muted-foreground border-border", unresolved && "border-dashed border-warning/60 text-warning-foreground dark:text-warning", onClick && "cursor-pointer hover:bg-accent hover:text-accent-foreground", className);
+  const inner = <><Icon className="size-3 shrink-0" /><span className="truncate">{cite}</span>{unresolved && <span className="text-[9px] uppercase tracking-wider">verify</span>}</>;
+  if (onClick) return <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} className={cls} title={title ?? (unresolved ? "Cite not found in the record" : kind === "document" ? "Open document" : kind === "intel" ? "Open intelligence record" : "Open in transcript")}>{inner}</button>;
   return <span className={cls} title={title}>{inner}</span>;
 }
 
-export function AiButtonHint({ configured, children }: { configured: boolean; children: React.ReactElement }) {
+/** Wrap a model-backed action: when no key is configured the button explains what is missing instead of failing. */
+export function KeyHint({ configured, children }: { configured: boolean; children: React.ReactElement }) {
   return configured ? children : <Tip label={<span className="flex items-center gap-1"><KeyRound className="size-3" /> OPENAI_API_KEY required</span>}>{children}</Tip>;
 }
 
-export function AiLabel({ className }: { className?: string }) {
-  return <span className={cn("inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary", className)}><Sparkles className="size-3" /> AI</span>;
+/** Quiet "by model" marker for records the model created; trust itself is carried by ProvenanceBadge. */
+export function ModelLabel({ className }: { className?: string }) {
+  return <span className={cn("text-[10.5px] text-muted-foreground", className)} title="Created by the model; verify before relying on it">model</span>;
+}
+
+/** Confidence as tabular text ("92%"); dims below the review gate. */
+export function ConfidenceText({ value, className }: { value: number | undefined; className?: string }) {
+  if (value == null || !Number.isFinite(value)) return <span className={cn("text-[11px] text-muted-foreground", className)}>—</span>;
+  const pct = Math.round(value * 100);
+  return <span className={cn("tabular text-[11px]", pct < 70 ? "text-warning-foreground dark:text-warning" : "text-muted-foreground", className)}>{pct}%</span>;
 }
 
 export function ListSkeleton({ rows = 6, className }: { rows?: number; className?: string }) {

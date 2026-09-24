@@ -5,9 +5,13 @@
  *   "monitoring well" custodian:hale type:email date:2002-07
  *   MFC-0041877–MFC-0041999            (Bates range, en dash, hyphen or "to")
  *   from:kaine date:2001-03-01..2001-03-31   -draft
+ *   liver w/5 study            (proximity: within 5 words, either order)
+ *   "rat study" pre/3 results  (ordered proximity: left before right within 3 words)
+ *   hot:yes priv:wp responsive:no hasattachment:yes dupes:near family:MFC-0041877 thread:t_whitfield
  *
- * Adjacent terms are implicitly AND-ed. `-term` is NOT. Field prefixes:
- * custodian:, type:, from:, to:, cc:, subject:, date:, bates:, issue:, tag:, hash:.
+ * Adjacent terms are implicitly AND-ed. `-term` is NOT. Precedence: NOT > w/N, pre/N > AND > OR.
+ * Field prefixes (Everlaw-style fielded lists): bates, family, thread, custodian, from, to, cc,
+ * subject, date, type, issue, tag, hot, priv, responsive, hasattachment, dupes, pages, reviewer, hash, id.
  */
 
 export type QueryNode =
@@ -18,10 +22,33 @@ export type QueryNode =
   | { kind: "field"; field: QueryField; value: string }
   | { kind: "bates"; start: BatesNumber; end: BatesNumber }
   | { kind: "date"; from?: string; to?: string }
+  | { kind: "prox"; left: QueryNode; right: QueryNode; distance: number; ordered: boolean }
   | { kind: "empty" };
 
-export type QueryField = "custodian" | "type" | "from" | "to" | "cc" | "subject" | "date" | "bates" | "issue" | "tag" | "hash" | "id";
-const FIELDS: QueryField[] = ["custodian", "type", "from", "to", "cc", "subject", "date", "bates", "issue", "tag", "hash", "id"];
+export type QueryField = "custodian" | "type" | "from" | "to" | "cc" | "subject" | "date" | "bates" | "issue" | "tag" | "hash" | "id" | "family" | "thread" | "hot" | "priv" | "responsive" | "hasattachment" | "dupes" | "pages" | "reviewer";
+const FIELDS: QueryField[] = ["custodian", "type", "from", "to", "cc", "subject", "date", "bates", "issue", "tag", "hash", "id", "family", "thread", "hot", "priv", "responsive", "hasattachment", "dupes", "pages", "reviewer"];
+/** Field names shown in syntax help, with the values they accept. */
+export const QUERY_FIELDS: { field: QueryField; hint: string }[] = [
+  { field: "bates", hint: "MFC-0041877 or a range MFC-0041877–MFC-0041999" },
+  { field: "family", hint: "Bates or id of any family member (parent + attachments)" },
+  { field: "thread", hint: "thread id, or a Bates/id of a message in the thread" },
+  { field: "custodian", hint: "name or id (substring)" },
+  { field: "from", hint: "sender (substring)" },
+  { field: "to", hint: "recipient (substring)" },
+  { field: "cc", hint: "cc recipient (substring)" },
+  { field: "subject", hint: "subject (substring, quote phrases)" },
+  { field: "date", hint: "2001, 2001-03, 2001-03-14, a..b, >a, <b" },
+  { field: "type", hint: "email, memo, report, spreadsheet, presentation…" },
+  { field: "issue", hint: "issue code, e.g. TOX-01" },
+  { field: "tag", hint: "document tag" },
+  { field: "hot", hint: "yes | no" },
+  { field: "priv", hint: "yes | no | none | ac | wp | ci | jd (basis)" },
+  { field: "responsive", hint: "yes | no | none (uncoded)" },
+  { field: "hasattachment", hint: "yes | no" },
+  { field: "dupes", hint: "yes | no | exact | near" },
+  { field: "pages", hint: "3, >10, <=2, 2..5" },
+  { field: "reviewer", hint: "reviewer id or name (substring)" },
+];
 
 export interface BatesNumber { prefix: string; number: number; width: number; raw: string }
 
@@ -99,7 +126,10 @@ type Token =
   | { t: "phrase"; v: string }
   | { t: "word"; v: string }
   | { t: "field"; f: QueryField; v: string }
+  | { t: "prox"; n: number; ordered: boolean }
   | { t: "bates"; start: BatesNumber; end: BatesNumber };
+
+const PROX_RE = /^(w|pre|near)\/(\d{1,3})$/i;
 
 const RANGE_RE = /^([A-Za-z]{2,8}[-_]?\d{4,10})\s*(?:–|—|-|to)\s*((?:[A-Za-z]{2,8}[-_]?)?\d{4,10})/i;
 
@@ -155,6 +185,8 @@ function tokenize(input: string, warnings: string[]): Token[] {
     if (up === "OR" || up === "||") { tokens.push({ t: "or" }); continue; }
     if (up === "NOT" || up === "!") { tokens.push({ t: "not" }); continue; }
     if (word.startsWith("-") && word.length > 1) { tokens.push({ t: "not" }); tokens.push(...tokenize(word.slice(1), warnings)); continue; }
+    const pm = word.match(PROX_RE);
+    if (pm) { tokens.push({ t: "prox", n: Math.max(1, Number(pm[2])), ordered: pm[1].toLowerCase() === "pre" }); continue; }
     const colon = word.indexOf(":");
     if (colon > 0) {
       const f = word.slice(0, colon).toLowerCase() as QueryField;
@@ -217,7 +249,20 @@ class Parser {
       const child = this.parseNot();
       return child.kind === "empty" ? child : { kind: "not", child };
     }
-    return this.parseAtom();
+    return this.parseProx();
+  }
+
+  /** `a w/5 b`, `"x y" pre/3 z`: proximity binds tighter than the implicit AND. */
+  parseProx(): QueryNode {
+    let left = this.parseAtom();
+    while (this.peek()?.t === "prox") {
+      const op = this.next() as { t: "prox"; n: number; ordered: boolean };
+      const right = this.parseAtom();
+      if (left.kind === "empty") { left = right; continue; }
+      if (right.kind === "empty") { this.warnings.push(`Missing right operand for ${op.ordered ? "pre" : "w"}/${op.n}`); continue; }
+      left = { kind: "prox", left, right, distance: op.n, ordered: op.ordered };
+    }
+    return left;
   }
 
   parseAtom(): QueryNode {
@@ -245,6 +290,9 @@ class Parser {
       case "and":
       case "or":
       case "not":
+        return { kind: "empty" };
+      case "prox":
+        this.warnings.push(`Missing left operand for ${tk.ordered ? "pre" : "w"}/${tk.n}`);
         return { kind: "empty" };
     }
   }
@@ -309,6 +357,7 @@ function collect(node: QueryNode, negated: boolean, terms: string[], fields: Par
     case "term": if (!negated) terms.push(node.value); break;
     case "and": case "or": node.children.forEach((c) => collect(c, negated, terms, fields, bates)); break;
     case "not": collect(node.child, !negated, terms, fields, bates); break;
+    case "prox": collect(node.left, negated, terms, fields, bates); collect(node.right, negated, terms, fields, bates); break;
     case "field": fields.push({ field: node.field, value: node.value }); break;
     case "bates": bates.push({ start: node.start, end: node.end }); break;
     case "date": fields.push({ field: "date", value: `${node.from ?? ""}..${node.to ?? ""}` }); break;
@@ -337,6 +386,67 @@ export interface Searchable {
   issues: string; // lowercased codes joined
   tags: string;
   hash: string;
+  // Fielded-list values (all optional so hand-built projections in tests keep working).
+  hot?: boolean;
+  privileged?: boolean | null;
+  privilegeBasis?: string;
+  responsive?: boolean | null;
+  attachments?: number;
+  isAttachment?: boolean;
+  /** Family key: the parent's id (or own id for a parent), plus every member's Bates, lowercased and space-joined. */
+  family?: string;
+  /** Thread id plus the Bates/ids of the messages in the thread, lowercased and space-joined. */
+  thread?: string;
+  isDuplicate?: boolean;
+  nearDuplicates?: number;
+  pages?: number;
+  reviewer?: string;
+  /** Lazily tokenised haystack for proximity searches. */
+  words?: string[];
+}
+
+const WORD_RE = /[a-z0-9][a-z0-9'’\-]*/g;
+
+/** Word tokens of a lowercased haystack (cached on the projection). */
+export function wordsOf(doc: Searchable): string[] {
+  if (!doc.words) doc.words = doc.haystack.match(WORD_RE) ?? [];
+  return doc.words;
+}
+
+/** Start positions where a term (a word or a phrase of words) occurs in the word list. */
+export function termPositions(words: string[], term: string): number[] {
+  const parts = term.toLowerCase().match(WORD_RE) ?? [];
+  if (!parts.length) return [];
+  const out: number[] = [];
+  for (let i = 0; i + parts.length <= words.length; i++) {
+    let ok = true;
+    for (let j = 0; j < parts.length; j++) { if (words[i + j] !== parts[j]) { ok = false; break; } }
+    if (ok) out.push(i);
+  }
+  return out;
+}
+
+/** True when some occurrence of `left` sits within `distance` words of some occurrence of `right` (ordered: left first). */
+export function withinDistance(left: number[], right: number[], distance: number, ordered: boolean): boolean {
+  if (!left.length || !right.length) return false;
+  for (const a of left) for (const b of right) {
+    const d = ordered ? b - a : Math.abs(b - a);
+    if (d >= (ordered ? 1 : 0) && d <= distance && !(a === b)) return true;
+  }
+  return false;
+}
+
+const YES = new Set(["yes", "y", "true", "1"]);
+const NO = new Set(["no", "n", "false", "0"]);
+function yesNo(v: string): boolean | null { return YES.has(v) ? true : NO.has(v) ? false : null; }
+
+function numberMatch(n: number | undefined, v: string): boolean {
+  if (n == null) return false;
+  const range = v.match(/^(\d+)\.\.(\d+)$/);
+  if (range) return n >= Number(range[1]) && n <= Number(range[2]);
+  const cmp = v.match(/^(>=|<=|>|<)(\d+)$/);
+  if (cmp) { const x = Number(cmp[2]); return cmp[1] === ">" ? n > x : cmp[1] === ">=" ? n >= x : cmp[1] === "<" ? n < x : n <= x; }
+  return /^\d+$/.test(v) && n === Number(v);
 }
 
 export function matchesQuery(doc: Searchable, node: QueryNode): boolean {
@@ -348,6 +458,12 @@ export function matchesQuery(doc: Searchable, node: QueryNode): boolean {
     case "not": return !matchesQuery(doc, node.child);
     case "bates": return batesInRange(doc.bates, node, doc.batesEnd);
     case "date": return (!node.from || doc.date >= node.from) && (!node.to || doc.date <= node.to);
+    case "prox": {
+      // Proximity only makes sense between terms; anything else degrades to AND.
+      if (node.left.kind !== "term" || node.right.kind !== "term") return matchesQuery(doc, node.left) && matchesQuery(doc, node.right);
+      const words = wordsOf(doc);
+      return withinDistance(termPositions(words, node.left.value), termPositions(words, node.right.value), node.distance, node.ordered);
+    }
     case "field": {
       const v = node.value;
       switch (node.field) {
@@ -361,6 +477,30 @@ export function matchesQuery(doc: Searchable, node: QueryNode): boolean {
         case "tag": return doc.tags.includes(v);
         case "hash": return doc.hash.startsWith(v);
         case "id": return doc.id.toLowerCase() === v;
+        case "family": return (doc.family ?? "").split(" ").includes(v) || (doc.family ?? "").includes(v);
+        case "thread": return (doc.thread ?? "").split(" ").includes(v) || (doc.thread ?? "").includes(v);
+        case "hot": { const b = yesNo(v); return b == null ? true : !!doc.hot === b; }
+        case "priv": {
+          if (v === "none" || v === "uncoded") return doc.privileged == null;
+          const b = yesNo(v);
+          if (b != null) return b ? doc.privileged === true : doc.privileged !== true;
+          const basis: Record<string, string> = { ac: "attorney-client", "attorney-client": "attorney-client", wp: "work-product", "work-product": "work-product", ci: "common-interest", "common-interest": "common-interest", jd: "joint-defense", "joint-defense": "joint-defense" };
+          return doc.privileged === true && (doc.privilegeBasis ?? "attorney-client") === (basis[v] ?? v);
+        }
+        case "responsive": {
+          if (v === "none" || v === "uncoded" || v === "null") return doc.responsive == null;
+          const b = yesNo(v);
+          return b == null ? true : doc.responsive === b;
+        }
+        case "hasattachment": { const b = yesNo(v); return b == null ? true : ((doc.attachments ?? 0) > 0) === b; }
+        case "dupes": {
+          if (v === "exact") return !!doc.isDuplicate;
+          if (v === "near") return (doc.nearDuplicates ?? 0) > 0;
+          const b = yesNo(v);
+          return b == null ? true : (!!doc.isDuplicate || (doc.nearDuplicates ?? 0) > 0) === b;
+        }
+        case "pages": return numberMatch(doc.pages, v);
+        case "reviewer": return (doc.reviewer ?? "").includes(v);
         default: return true;
       }
     }

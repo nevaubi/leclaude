@@ -7,6 +7,9 @@ import { HALE_DEPOSITION } from "./seed-depo-hale";
 import { PRYCE_DEPOSITION } from "./seed-depo-pryce";
 import { AFFF_TIMELINE } from "./seed-timeline";
 import { AFFF_CONFLICTS } from "./seed-conflicts";
+import { AFFF_STORY } from "./seed-story";
+import { LIU_DEPOSITION, LIU_IMPORT } from "./seed-transcript-sample";
+import type { Story, TranscriptImportRecord } from "./types";
 import { EXTRA_PEOPLE, EXTRA_PEOPLE_IDS as X } from "./seed-people";
 import { KLEIN, RAMAN, obj, qa } from "./seed-helpers";
 import { resolvePersonName } from "./graph";
@@ -61,7 +64,7 @@ export const SCHEDULED_DEPOSITIONS: Deposition[] = [
   { id: "dep_afff_suarez_v1", matterId: M, witnessId: P.martinSuarez, witnessName: "Martin Suarez", witnessTitle: "Regulatory Affairs Counsel, Meridian Fluorochem Corp.", date: "2026-10-21", takenBy: "Rebecca Klein (Plaintiffs' Executive Committee)", defendingBy: "Jordan Whitfield (Seeger Weiss LLP)", location: "Seeger Weiss LLP, Charleston — Conference Room 4B", volume: 1, pages: 0, transcript: [], exhibits: [], status: "scheduled" },
 ];
 
-export const AFFF_DEPOSITIONS: Deposition[] = [HALE_DEPOSITION, VOSS_DEPOSITION, PRYCE_DEPOSITION, BROOKS_DEPOSITION, ...SCHEDULED_DEPOSITIONS];
+export const AFFF_DEPOSITIONS: Deposition[] = [HALE_DEPOSITION, VOSS_DEPOSITION, PRYCE_DEPOSITION, BROOKS_DEPOSITION, LIU_DEPOSITION, ...SCHEDULED_DEPOSITIONS];
 
 // ---------------------------------------------------------------------------
 // Relationships: explicit org chart / engagement edges plus edges derived
@@ -155,10 +158,16 @@ export function seedAnalysis(db: Database) {
   const docs = db.edocs.find((d) => d.matterId === M);
   db.relationships.putMany([...EXPLICIT_RELATIONSHIPS, ...deriveEmailRelationships(docs, people)]);
   db.conflicts.putMany(AFFF_CONFLICTS);
+  db.collection<TranscriptImportRecord>("ediscovery_transcript_imports").putMany([LIU_IMPORT]);
+  // Keep a reviewer's edits: the seeded story is only written when absent.
+  const stories = db.collection<Story>("ediscovery_stories");
+  if (!stories.has(AFFF_STORY.id)) stories.put(AFFF_STORY);
 }
 
 export const ANALYSIS_SEED_IDS = {
-  depositions: { voss: VOSS_DEPOSITION.id, hale: HALE_DEPOSITION.id, pryce: PRYCE_DEPOSITION.id, brooks: BROOKS_DEPOSITION.id, haleVol2: "dep_afff_hale_v2", suarez: "dep_afff_suarez_v1" },
+  depositions: { voss: VOSS_DEPOSITION.id, hale: HALE_DEPOSITION.id, pryce: PRYCE_DEPOSITION.id, brooks: BROOKS_DEPOSITION.id, liu: LIU_DEPOSITION.id, haleVol2: "dep_afff_hale_v2", suarez: "dep_afff_suarez_v1" },
+  story: AFFF_STORY.id,
+  transcriptImport: LIU_IMPORT.id,
   conflicts: AFFF_CONFLICTS.map((c) => c.id),
   timelineCount: AFFF_TIMELINE.length,
   extraPeople: EXTRA_PEOPLE.map((p) => p.id),

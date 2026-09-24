@@ -19,6 +19,8 @@ import { formatPageLine } from "./types";
 import { transcriptText } from "./transcript";
 import { createConflict, crossAnalysis, exhibitDocuments, getDeposition, listEvents, listKnowledgeMaps, mergeEvents, saveFactMatrix, saveKnowledgeMap, setDigest } from "./service";
 import { resolvePersonName } from "./graph";
+import { getStory, storySources, updateStory } from "./service-stories";
+import { storyFactsText } from "./stories";
 
 export { AIConfigError };
 
@@ -496,3 +498,54 @@ Produce a "who knew what, when" map for the topic. For each person with evidence
 }
 
 export function exhibitDocs(dep: Deposition) { return exhibitDocuments(dep); }
+
+// ---------------------------------------------------------------------------
+// Story narrative draft
+// ---------------------------------------------------------------------------
+
+export interface StoryDraftResult { text: string; provenance: Provenance; unresolvedCites: string[] }
+
+/**
+ * Draft a narrative from a story's facts. The model may only use the facts and
+ * their evidence; the draft is claim-verified against the cited documents and
+ * transcripts, every Bates / page:line cite is cross-checked, low-confidence
+ * output is gated for review and the provenance is attached to the story.
+ */
+export async function draftStoryNarrative(storyId: string, opts: { audience?: "brief" | "opening" | "memo"; signal?: AbortSignal } & VerifyOpt = {}): Promise<StoryDraftResult> {
+  requireKey();
+  const story = getStory(storyId);
+  if (!story) throw Object.assign(new Error(`No story ${storyId}`), { status: 404 });
+  if (!story.facts.length) throw Object.assign(new Error("The story has no facts to draft from"), { status: 400 });
+  const d = db();
+  const src = storySources(story);
+  const docs = src.docs.map((x) => d.edocs.get(x.id)).filter((x): x is EDocument => !!x).slice(0, 16);
+  const deps = src.depositions.map((x) => ({ dep: d.depositions.get(x.id)!, indexes: x.indexes })).filter((x) => !!x.dep);
+  const audience = opts.audience ?? "memo";
+  const form = audience === "opening" ? "an opening-statement narrative (plain, chronological, no citations in the prose but a bracketed cite after each paragraph)" : audience === "brief" ? "a statement of facts for a brief (numbered paragraphs, record cite after every sentence)" : "an internal factual memo (headed sections, cite after every factual sentence)";
+  const instructions = `You are a senior litigator at ${FIRM_NAME} in ${matterLine(story.matterId)}
+${todayLine()}
+${LEGAL_STYLE_RULES}
+Write ${form} from the numbered facts below. Use only those facts and the excerpts provided; every factual sentence carries the Bates number or witness page:line from the fact's evidence. Mark disputed facts as disputed. Do not add facts, dates or characterisations that are not in the record. Markdown.`;
+  const input = `Story: ${story.title}${story.theme ? ` — ${story.theme}` : ""}
+
+## Facts
+${storyFactsText(story)}
+
+## Documents cited
+${docs.map((x) => docBlock(x, 2000)).join("\n\n---\n\n") || "(none)"}
+
+## Testimony cited
+${deps.map(({ dep, indexes }) => `### ${dep.witnessName}\n${transcriptText(dep, { indexes, maxChars: 8000 })}`).join("\n\n") || "(none)"}`;
+  const res = await generateText({ instructions, input, maxOutputTokens: 4000, signal: opts.signal });
+  const title = `Narrative — ${story.title}`;
+  const target = { kind: "story", id: story.id, label: title, matterId: story.matterId };
+  const sources: ProvenanceSource[] = [...documentSources(docs), ...deps.map(({ dep }) => depositionSource(dep))];
+  let provenance = recordGeneration({ surface: "ediscovery.story", instructions, input, sources, target, usage: res.usage ? { input: res.usage.input_tokens, output: res.usage.output_tokens, total: res.usage.total_tokens } : undefined });
+  const verifySources: VerifySource[] = [{ title: "Story facts", text: storyFactsText(story, 20_000) }, ...docVerifySources(docs, 2500), ...deps.map(({ dep, indexes }) => ({ title: `${dep.witnessName} deposition`, text: transcriptText(dep, { indexes, maxChars: 8000 }) }))];
+  const pages = deps.flatMap(({ dep }) => dep.transcript.map((q) => q.page));
+  const narrative = await verifyNarrative(provenance, { answer: res.text, sources: verifySources, cites: { bates: matterBates(story.matterId), pages }, verify: opts.verify, signal: opts.signal, maxClaims: 30 }, target);
+  provenance = gateReview(narrative.provenance);
+  updateStory(story.id, { narrative: { text: narrative.text, provenance, generatedAt: new Date().toISOString() } });
+  attachProvenance({ kind: "story.draft", recordId: story.id, matterId: story.matterId, title, href: `${tabHref(story.matterId, "story")}&story=${story.id}`, provenance });
+  return { text: narrative.text, provenance, unresolvedCites: narrative.unresolvedCites };
+}

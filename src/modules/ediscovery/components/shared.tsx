@@ -1,9 +1,8 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Mail, FileText, FileBarChart2, Presentation, Table2, FileSignature, ScrollText, MessageSquare, StickyNote, Image as ImageIcon, FileAudio2, File, Flame, ShieldAlert, CircleCheck, CircleDashed, CircleX, KeyRound, type LucideIcon } from "lucide-react";
+import { Mail, FileText, FileBarChart2, Presentation, Table2, FileSignature, ScrollText, MessageSquare, StickyNote, Image as ImageIcon, FileAudio2, File, KeyRound, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CodingDecision, DocType, IssueCode } from "@/lib/types/domain";
 import { TrustBadge } from "@/components/ai/trust-badge";
@@ -47,22 +46,36 @@ export function IssueChip({ code, codes, size = "sm", onRemove, className }: { c
   );
 }
 
-/** Coding badges shown in the table: Responsive / Needs review / Privileged / Hot. */
-export function CodingBadges({ coding, compact }: { coding: CodingDecision; compact?: boolean }) {
-  const base = "gap-1 px-1.5 py-0 h-[18px] text-[10.5px] rounded";
+/** One-line decision summary ("Responsive · Privileged (WP) · Hot", or "Needs review"). */
+export function decisionSummary(coding: CodingDecision): string {
+  const parts: string[] = [];
+  parts.push(coding.responsive === true ? "Responsive" : coding.responsive === false ? "Non-responsive" : "Needs review");
+  if (coding.privileged === true) parts.push(`Privileged${coding.privilegeBasis ? ` (${{ "attorney-client": "AC", "work-product": "WP", "common-interest": "CI", "joint-defense": "JD" }[coding.privilegeBasis]})` : ""}`);
+  if (coding.hot) parts.push("Hot");
+  return parts.join(" · ");
+}
+
+/**
+ * Compact decision cell for grid rows: three fixed slots — R / NR / ? (responsiveness),
+ * P (privileged), H (hot). Muted letters, tone only for the decision states so the
+ * column reads at a glance without badge stacking.
+ */
+export function DecisionCell({ coding, className }: { coding: CodingDecision; className?: string }) {
+  const slot = "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[3px] px-1 text-[10.5px] font-semibold leading-none tabular";
+  const resp = coding.responsive === true ? { t: "R", cls: "bg-success/12 text-success", label: "Responsive" } : coding.responsive === false ? { t: "NR", cls: "bg-muted text-muted-foreground", label: "Non-responsive" } : { t: "?", cls: "bg-warning/18 text-warning-foreground dark:text-warning", label: "Needs review" };
   return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap">
-      {coding.responsive === true ? (
-        <Badge variant="success" className={base}><CircleCheck className="size-3" />{compact ? "R" : "Responsive"}</Badge>
-      ) : coding.responsive === false ? (
-        <Badge variant="muted" className={base}><CircleX className="size-3" />{compact ? "NR" : "Non-resp."}</Badge>
-      ) : (
-        <Badge variant="warning" className={base}><CircleDashed className="size-3" />{compact ? "?" : "Needs review"}</Badge>
-      )}
-      {coding.privileged === true && <Badge variant="info" className={base}><ShieldAlert className="size-3" />{compact ? "P" : "Privileged"}</Badge>}
-      {coding.hot && <Badge variant="destructive" className={base}><Flame className="size-3" />{compact ? "H" : "Hot"}</Badge>}
+    <span className={cn("inline-flex items-center gap-0.5 whitespace-nowrap", className)} title={decisionSummary(coding)} aria-label={decisionSummary(coding)}>
+      <span className={cn(slot, resp.cls)}>{resp.t}</span>
+      <span className={cn(slot, coding.privileged === true ? "bg-info/12 text-info" : "text-muted-foreground/35")}>P</span>
+      <span className={cn(slot, coding.hot ? "bg-destructive/12 text-destructive" : "text-muted-foreground/35")}>H</span>
     </span>
   );
+}
+
+/** Coding badges: kept for existing call sites; renders the compact decision cell. */
+export function CodingBadges({ coding, compact }: { coding: CodingDecision; compact?: boolean }) {
+  if (compact) return <DecisionCell coding={coding} />;
+  return <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px]"><DecisionCell coding={coding} /><span className="text-muted-foreground">{decisionSummary(coding)}</span></span>;
 }
 
 export function NoKeyCallout({ feature = "AI features", compact }: { feature?: string; compact?: boolean }) {

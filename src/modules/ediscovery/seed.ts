@@ -10,6 +10,8 @@ import { NORTHGATE_DOCS, NG_CUSTODIANS } from "./seed-docs-northgate";
 import { indexTextFor, templatePrivilegeDescription } from "./privilege";
 import { CODING_RULES_KEY, DEFAULT_CODING_RULES } from "./rules";
 import { seedAnalysis } from "./analysis/seed";
+import { seedReview, ensureReviewSeeded, REVIEW_SEED_VERSION } from "./seed-review";
+import { detectNearDuplicates, nearDuplicateMap } from "./near-dup";
 
 /** Issue codes per matter (stable ids: ic_<matter-short>_<code>). */
 export const AFFF_ISSUE_CODES: IssueCode[] = [
@@ -81,7 +83,32 @@ export function seedEdiscovery(db: Database) {
   // Keyword index (no embeddings without a key); synchronous when embed:false.
   void indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((d) => ({ id: d.id, text: indexTextFor(d), meta: { matterId: d.matterId, custodianId: d.custodianId, type: d.type, date: d.date, bates: d.bates } })), { embed: false }).catch((e) => console.error("[seed:ediscovery] index", e));
   seedAnalysis(db);
+  seedNearDuplicates(db, docs);
+  seedReview(db);
+  db.kv.set("ediscovery:review:seed:version", REVIEW_SEED_VERSION);
 }
+
+/** Populate MinHash near-duplicate links (and scores) on top of the hand-linked drafts. Exact duplicates are excluded. */
+export function seedNearDuplicates(db: Database, docs: EDocument[]) {
+  for (const matterId of [AFFF, NORTHGATE]) {
+    const set = docs.filter((d) => d.matterId === matterId);
+    const res = detectNearDuplicates(set.map((d) => ({ id: d.id, text: d.text })), { threshold: 0.5 });
+    const byId = new Map(set.map((d) => [d.id, d]));
+    const map = nearDuplicateMap(res.pairs.filter((p) => { const a = byId.get(p.a), b = byId.get(p.b); return !(a?.isDuplicateOf === p.b || b?.isDuplicateOf === p.a || a?.hash === b?.hash); }));
+    const updates: EDocument[] = [];
+    for (const d of set) {
+      const detected = map.get(d.id) ?? {};
+      const ids = Array.from(new Set([...(d.nearDuplicateIds ?? []), ...Object.keys(detected)]));
+      if (!ids.length) continue;
+      const scores: Record<string, number> = {};
+      for (const id of ids) scores[id] = detected[id] ?? 0.9;
+      updates.push({ ...d, nearDuplicateIds: ids, nearDuplicateScores: scores });
+    }
+    if (updates.length) db.edocs.putMany(updates);
+  }
+}
+
+export { ensureReviewSeeded };
 
 /** Stable ids exported for other modules and tests. */
 export const EDISCOVERY_SEED_IDS = {

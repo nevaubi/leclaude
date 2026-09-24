@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Search, ScrollText, Sparkles, Highlighter, Download, FileText, Loader2, RefreshCw, X, Gavel, Paperclip, Flag, CalendarClock, ChevronRight, Trash2, Pencil, Check, BookOpenText, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Search, ScrollText, Highlighter, Download, FileText, Loader2, RefreshCw, X, Gavel, Paperclip, Flag, CalendarClock, ChevronRight, Trash2, Pencil, Check, BookOpenText, PanelRightClose, PanelRightOpen, ListChecks, Link2, Upload, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Markdown } from "@/components/ai/markdown";
 import type { Deposition, DepositionQA } from "@/lib/types/domain";
 import { OBJECTION_RULINGS, QA_FLAGS, formatPageLine, formatRange, type AnalysisTabProps, type Designation, type DepositionSummary, type ObjectionRuling, type QAFlag } from "../types";
-import { resolvePageLine } from "../transcript";
+import { designationTotals, resolvePageLine } from "../transcript";
+import { OBJECTION_BASES } from "../types";
 import { TranscriptViewer } from "./transcript-viewer";
-import { FLAG_STYLES, FlagBadge, ListSkeleton, NoKeyCallout, ObjectionBadge, AiLabel, AiButtonHint, ProvenanceBadge, formatShortDate, typingTarget, useNarrowViewport, OBJECTION_STYLES } from "./shared";
+import { FLAG_STYLES, FlagBadge, ListSkeleton, NoKeyCallout, ObjectionBadge, KeyHint, ProvenanceBadge, formatShortDate, typingTarget, useNarrowViewport, OBJECTION_STYLES } from "./shared";
+import { ImportTranscriptDialog } from "./import-dialog";
+import { CrossReferencesPanel } from "./cross-references-panel";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useDeposition, useDepositions, useOverview, useTranscriptSearch, type DepositionDetail } from "./use-analysis-data";
 
-type SidePanel = "digest" | "designations" | "objections" | "exhibits" | "flags";
+type SidePanel = "digest" | "designations" | "objections" | "exhibits" | "references" | "flags";
 
 const STATUS_BADGE: Record<Deposition["status"], { label: string; variant: "success" | "info" | "muted" }> = { reviewed: { label: "Reviewed", variant: "success" }, transcribed: { label: "Transcribed", variant: "info" }, scheduled: { label: "Scheduled", variant: "muted" } };
 
@@ -34,6 +37,7 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
   const [jumpIndex, setJumpIndex] = React.useState<number | string | null>(null);
   const [q, setQ] = React.useState("");
   const [outlineOpen, setOutlineOpen] = React.useState(false);
+  const [importOpen, setImportOpen] = React.useState(false);
   const list = React.useMemo(() => deps.data?.depositions ?? [], [deps.data]);
 
   React.useEffect(() => {
@@ -77,10 +81,11 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
             )
           )}
         </div>
-        <div className="border-t p-2">
-          <AiButtonHint configured={!!overview.data?.aiConfigured}>
-            <Button size="sm" variant="outline" className="w-full justify-start" onClick={() => setOutlineOpen(true)}><BookOpenText className="size-4" /> Prepare outline for next witness <AiLabel className="ml-auto" /></Button>
-          </AiButtonHint>
+        <div className="grid grid-cols-2 gap-1.5 border-t p-2">
+          <Button size="sm" variant="outline" className="justify-start" onClick={() => setImportOpen(true)}><Upload className="size-4" /> Import</Button>
+          <KeyHint configured={!!overview.data?.aiConfigured}>
+            <Button size="sm" variant="outline" className="justify-start" onClick={() => setOutlineOpen(true)}><BookOpenText className="size-4" /> Prepare outline</Button>
+          </KeyHint>
         </div>
       </aside>
       <div className="min-w-0 flex-1">
@@ -91,6 +96,7 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         )}
       </div>
       <OutlineDialog open={outlineOpen} onOpenChange={setOutlineOpen} matterId={matterId} depositions={list} aiConfigured={!!overview.data?.aiConfigured} />
+      <ImportTranscriptDialog open={importOpen} onOpenChange={setImportOpen} matterId={matterId} depositions={list} onImported={(dep) => { deps.refresh(); overview.refresh(); setSelectedId(dep.id); setJumpIndex(null); }} />
     </div>
   );
 }
@@ -111,7 +117,7 @@ function DepositionRow({ d, active, onClick }: { d: DepositionSummary; active: b
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             <Badge variant={s.variant} className="h-[16px] px-1 py-0 text-[10px]">{s.label}</Badge>
-            {d.hasDigest && <Badge variant="accent" className="h-[16px] gap-0.5 px-1 py-0 text-[10px]"><Sparkles className="size-2.5" /> digest</Badge>}
+            {d.hasDigest && <span className="text-[10px] text-muted-foreground">digest</span>}
             {d.flagCounts.admission > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] text-success"><FLAG_STYLES.admission.icon className="size-2.5" />{d.flagCounts.admission}</span>}
             {d.flagCounts.contradiction > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive"><FLAG_STYLES.contradiction.icon className="size-2.5" />{d.flagCounts.contradiction}</span>}
             {d.designationCount > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] text-chart-2"><Highlighter className="size-2.5" />{d.designationCount}</span>}
@@ -300,9 +306,9 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <AiButtonHint configured={aiConfigured}>
-              <Button size="sm" variant={dep.aiDigest ? "outline" : "default"} onClick={() => runDigest(!!dep.aiDigest)} disabled={digesting || !transcript.length}>{digesting ? <Loader2 className="size-4 animate-spin" /> : dep.aiDigest ? <RefreshCw className="size-4" /> : <Sparkles className="size-4" />} {dep.aiDigest ? "Re-digest" : "AI digest"}</Button>
-            </AiButtonHint>
+            <KeyHint configured={aiConfigured}>
+              <Button size="sm" variant={dep.aiDigest ? "outline" : "default"} onClick={() => runDigest(!!dep.aiDigest)} disabled={digesting || !transcript.length}>{digesting ? <Loader2 className="size-4 animate-spin" /> : dep.aiDigest ? <RefreshCw className="size-4" /> : <ListChecks className="size-4" />} {dep.aiDigest ? "Re-digest" : "Digest"}</Button>
+            </KeyHint>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button size="sm" variant="outline" disabled={!detail.data?.designations.length}><Download className="size-4" /> Designations</Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -359,7 +365,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
           {panelVisible && (
           <aside className={cn("flex w-[340px] shrink-0 flex-col border-l bg-background", narrow && "absolute inset-y-0 right-0 z-20 max-w-[85%] shadow-xl")} aria-label="Deposition side panel">
             <nav className="flex shrink-0 items-center gap-0 overflow-x-auto border-b px-1 no-scrollbar" aria-label="Deposition panels">
-              {([["digest", "Digest", Sparkles], ["designations", "Designations", Highlighter], ["objections", "Objections", Gavel], ["exhibits", "Exhibits", Paperclip], ["flags", "Flags", Flag]] as [SidePanel, string, React.ElementType][]).map(([id, label, Icon]) => (
+              {([["digest", "Digest", ListChecks], ["designations", "Designations", Highlighter], ["objections", "Objections", Gavel], ["exhibits", "Exhibits", Paperclip], ["references", "References", Link2], ["flags", "Flags", Flag]] as [SidePanel, string, React.ElementType][]).map(([id, label, Icon]) => (
                 <button key={id} type="button" onClick={() => setPanel(id)} className={cn("relative flex h-8 shrink-0 items-center gap-1 px-1.5 text-[11.5px] font-medium transition-colors cursor-pointer", panel === id ? "text-foreground" : "text-muted-foreground hover:text-foreground")} aria-current={panel === id ? "true" : undefined} title={label}>
                   <Icon className="size-3.5" />{label}
                   {panel === id && <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-primary" />}
@@ -371,6 +377,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
               {panel === "digest" && <DigestPanel dep={dep} digesting={digesting} noKey={noKey || !aiConfigured} onRun={() => runDigest(false)} onJump={(cite) => { const m = cite.match(/(\d+):(\d+)/); if (!m) return; const idx = resolvePageLine(transcript, `${Number(m[1])}:${Number(m[2])}`); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } else toast.info(`${cite} is not in the excerpted transcript`); }} />}
               {panel === "designations" && <DesignationsPanel detail={detail.data!} onJump={(d) => { const idx = resolvePageLine(transcript, `${d.startPage}:${d.startLine}`); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } }} onRemove={removeDesignation} onUpdate={updateDesignation} onStart={() => { setDesignating(true); setSelection({}); }} />}
               {panel === "objections" && <ObjectionsPanel detail={detail.data!} onJump={(i) => { setFlagFilter(null); setActiveIndex(i); }} onRule={setRuling} />}
+              {panel === "references" && <CrossReferencesPanel depositionId={id} onOpenDocument={onOpenDocument} onJump={(i) => { setFlagFilter(null); setActiveIndex(i); }} />}
               {panel === "exhibits" && <ExhibitsPanel detail={detail.data!} onOpen={openExhibit} onJump={(ref) => { const idx = transcript.findIndex((qa) => qa.exhibit === ref); if (idx >= 0) { setFlagFilter(null); setActiveIndex(idx); } }} />}
               {panel === "flags" && <FlagsPanel transcript={transcript} onJump={(i) => { setFlagFilter(null); setActiveIndex(i); }} />}
             </div>
@@ -390,7 +397,7 @@ function DigestPanel({ dep, digesting, noKey, onRun, onJump }: { dep: Deposition
     return (
       <div className="space-y-3 p-3">
         {noKey ? <NoKeyCallout feature="Deposition digests" compact /> : (
-          <EmptyState icon={Sparkles} title="No digest yet" description="Generate a structured digest: summary, key admissions with page:line cites, themes, credibility notes and follow-up questions. Cached on the deposition." action={<Button size="sm" onClick={onRun} disabled={digesting || !dep.transcript.length}>{digesting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Generate digest</Button>} />
+          <EmptyState icon={ListChecks} title="No digest yet" description="Summary, key admissions with page:line cites, themes, credibility notes and follow-up questions; every cite is checked against the transcript and the result carries a trust badge." action={<Button size="sm" onClick={onRun} disabled={digesting || !dep.transcript.length}>{digesting ? <Loader2 className="size-4 animate-spin" /> : <ListChecks className="size-4" />} Digest transcript</Button>} />
         )}
       </div>
     );
@@ -407,7 +414,7 @@ function DigestPanel({ dep, digesting, noKey, onRun, onJump }: { dep: Deposition
   return (
     <div className="space-y-4 p-3 text-[12.5px]">
       <section>
-        <h4 className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><Sparkles className="size-3" /> Summary <ProvenanceBadge record={d} compact={false} className="normal-case tracking-normal" /></h4>
+        <h4 className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Summary <ProvenanceBadge record={d} compact={false} className="normal-case tracking-normal" /></h4>
         <p className="leading-relaxed">{withCites(d.summary)}</p>
       </section>
       {d.themes.length > 0 && <section><h4 className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Themes</h4><div className="flex flex-wrap gap-1">{d.themes.map((t) => <Badge key={t} variant="secondary" className="font-normal">{t}</Badge>)}</div></section>}
@@ -425,9 +432,16 @@ function DesignationsPanel({ detail, onJump, onRemove, onUpdate, onStart }: { de
   const [editing, setEditing] = React.useState<string | null>(null);
   const [note, setNote] = React.useState("");
   const list = detail.designations;
-  if (!list.length) return <div className="p-3"><EmptyState icon={Highlighter} title="No designations" description="Press D (or click Designate), then click the first and last Q/A of the range. Export as CSV or Word for the trial-presentation vendor." action={<Button size="sm" variant="outline" onClick={onStart}><Highlighter className="size-4" /> Start designating</Button>} /></div>;
+  const totals = React.useMemo(() => designationTotals(list), [list]);
+  if (!list.length) return <div className="p-3"><EmptyState icon={Highlighter} title="No designations" description="Press D (or click Designate), then click the first and last Q/A of the range. Mark counters against a designation, record objections, and export CSV or Word for the trial-presentation vendor." action={<Button size="sm" variant="outline" onClick={onStart}><Highlighter className="size-4" /> Start designating</Button>} /></div>;
   const PURPOSE: Record<Designation["purpose"], string> = { affirmative: "bg-chart-2/12 text-chart-2 border-chart-2/30", counter: "bg-chart-3/15 text-chart-3 border-chart-3/30", impeachment: "bg-destructive/12 text-destructive border-destructive/30", objection: "bg-muted text-muted-foreground border-border" };
+  const targets = list.filter((x) => x.purpose === "affirmative" || x.purpose === "impeachment");
   return (
+    <div>
+      <div className="grid grid-cols-4 gap-px border-b bg-border text-[11px]">
+        {([["Lines", totals.lines.all], ["Affirmative", totals.lines.affirmative], ["Counter", totals.lines.counter], ["≈ min", totals.estimatedMinutes]] as [string, number][]).map(([k, v]) => <div key={k} className="bg-background px-2 py-1.5"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div><div className="tabular font-medium">{v}</div></div>)}
+      </div>
+      {(totals.danglingCounters > 0 || totals.detachedCounters > 0 || totals.objections.pending > 0) && <div className="border-b bg-warning/10 px-3 py-1 text-[11px] text-warning-foreground dark:text-warning">{[totals.danglingCounters ? `${totals.danglingCounters} counter${totals.danglingCounters === 1 ? "" : "s"} without a designation` : "", totals.detachedCounters ? `${totals.detachedCounters} counter${totals.detachedCounters === 1 ? "" : "s"} far from its designation` : "", totals.objections.pending ? `${totals.objections.pending} objection${totals.objections.pending === 1 ? "" : "s"} pending ruling` : ""].filter(Boolean).join(" · ")}</div>}
     <ul className="divide-y">
       {list.map((d) => (
         <li key={d.id} className="group px-3 py-2">
@@ -437,10 +451,24 @@ function DesignationsPanel({ detail, onJump, onRemove, onUpdate, onStart }: { de
               <SelectTrigger size="sm" className={cn("h-5 w-auto gap-1 rounded border px-1.5 text-[10.5px] capitalize shadow-none", PURPOSE[d.purpose])}><SelectValue /></SelectTrigger>
               <SelectContent>{(["affirmative", "counter", "impeachment", "objection"] as const).map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
             </Select>
+            {d.purpose === "counter" && (
+              <select value={d.counterTo ?? ""} onChange={(e) => onUpdate(d, { counterTo: e.target.value || undefined })} className={cn("h-5 max-w-[120px] rounded border bg-background px-1 text-[10.5px]", !d.counterTo && "border-warning/60")} aria-label="Counter to designation" title="Designation this counter completes">
+                <option value="">counter to…</option>
+                {targets.map((t) => <option key={t.id} value={t.id}>{formatRange(t)}</option>)}
+              </select>
+            )}
             <span className="flex-1" />
+            <Tip label={d.objection ? "Edit objection" : "Record an objection to this designation"}><Button size="icon-xs" variant="ghost" className={cn(!d.objection && "opacity-0 group-hover:opacity-100")} onClick={() => onUpdate(d, { objection: d.objection ? undefined : { basis: "relevance", ruling: "pending" } })} aria-label="Toggle objection" aria-pressed={!!d.objection}><Gavel className={cn("size-3.5", d.objection && "text-foreground")} /></Button></Tip>
             <Tip label="Edit note"><Button size="icon-xs" variant="ghost" className="opacity-0 group-hover:opacity-100" onClick={() => { setEditing(d.id); setNote(d.note ?? ""); }} aria-label="Edit note"><Pencil className="size-3.5" /></Button></Tip>
             <Tip label="Delete"><Button size="icon-xs" variant="ghost" className="opacity-0 group-hover:opacity-100 hover:text-destructive" onClick={() => onRemove(d)} aria-label="Delete designation"><Trash2 className="size-3.5" /></Button></Tip>
           </div>
+          {d.objection && (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span className="text-muted-foreground">Objection</span>
+              <select value={d.objection.basis} onChange={(e) => onUpdate(d, { objection: { ...d.objection!, basis: e.target.value } })} className="h-5 rounded border bg-background px-1 text-[10.5px]" aria-label="Objection basis">{OBJECTION_BASES.map((b) => <option key={b} value={b}>{b}</option>)}</select>
+              <select value={d.objection.ruling ?? "pending"} onChange={(e) => onUpdate(d, { objection: { ...d.objection!, ruling: e.target.value as NonNullable<Designation["objection"]>["ruling"] } })} className={cn("h-5 rounded border bg-background px-1 text-[10.5px]", d.objection.ruling === "sustained" && "text-success", d.objection.ruling === "overruled" && "text-destructive")} aria-label="Ruling">{OBJECTION_RULINGS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select>
+            </div>
+          )}
           {editing === d.id ? (
             <div className="mt-1.5">
               <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="text-xs" autoFocus onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { onUpdate(d, { note: note.trim() }); setEditing(null); } if (e.key === "Escape") setEditing(null); }} />
@@ -450,6 +478,7 @@ function DesignationsPanel({ detail, onJump, onRemove, onUpdate, onStart }: { de
         </li>
       ))}
     </ul>
+    </div>
   );
 }
 
@@ -562,7 +591,7 @@ function OutlineDialog({ open, onOpenChange, matterId, depositions, aiConfigured
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) { setResult(null); setNoKey(false); } }}>
       <DialogContent size={result ? "xl" : "lg"} className="flex max-h-[92vh] flex-col">
-        <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpenText className="size-4" /> Prepare outline for next witness <AiLabel /></DialogTitle><DialogDescription>Builds an examination/defence outline from the documents the witness authored or received, the chronology, open conflicts and every prior transcript that mentions them.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpenText className="size-4" /> Prepare outline for next witness</DialogTitle><DialogDescription>Builds an examination/defence outline from the documents the witness authored or received, the chronology, open conflicts and every prior transcript that mentions them.</DialogDescription></DialogHeader>
         {!result ? (
           <div className="grid gap-3">
             {(noKey || !aiConfigured) && <NoKeyCallout feature="Outline drafting" compact />}
@@ -598,7 +627,7 @@ function OutlineDialog({ open, onOpenChange, matterId, depositions, aiConfigured
           ) : (
             <>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <AiButtonHint configured={aiConfigured}><Button onClick={run} disabled={running || !name}>{running ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {running ? "Drafting…" : "Draft outline"}</Button></AiButtonHint>
+              <KeyHint configured={aiConfigured}><Button onClick={run} disabled={running || !name}>{running ? <Loader2 className="size-4 animate-spin" /> : <PenLine className="size-4" />} {running ? "Drafting…" : "Draft outline"}</Button></KeyHint>
             </>
           )}
         </DialogFooter>

@@ -397,7 +397,7 @@ describe("conflicts", () => {
     expect(db().conflicts.delete(c.id)).toBe(true);
     const ov = overview(AFFF);
     expect(ov.depositions).toBe(6);
-    expect(ov.transcribed).toBe(4);
+    expect(ov.transcribed).toBe(5); // Voss, Hale, Pryce, Brooks + the imported Liu transcript
     expect(ov.conflicts.open).toBeGreaterThanOrEqual(8);
     expect(ov.aiConfigured).toBe(false);
   });

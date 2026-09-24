@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = await readJson<{ id?: string; patch?: Partial<Pick<PrivilegeLogEntry, "description" | "status" | "basis">> }>(req);
+  const body = await readJson<{ id?: string; patch?: Partial<Pick<PrivilegeLogEntry, "description" | "status" | "basis" | "templateId">> }>(req);
   if (!body?.id || !body.patch) return jsonError("`id` and `patch` are required");
   const entry = updatePrivilegeEntry(body.id, body.patch);
   if (!entry) return jsonError(`No entry ${body.id}`, 404);

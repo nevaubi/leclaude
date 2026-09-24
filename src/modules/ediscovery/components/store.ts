@@ -1,22 +1,35 @@
 "use client";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { SavedView, SearchFilters, SortKey } from "../types";
+import type { GroupBy, SavedView, SearchFilters, SortKey } from "../types";
 
 export type Density = "compact" | "comfortable";
-export type ViewerTab = "text" | "metadata" | "family" | "similar" | "ai";
+export type ViewerTab = "text" | "metadata" | "family" | "similar" | "ai" | "history";
 
-export interface ColumnDef { id: string; label: string; width: number; min: number; sort?: SortKey; align?: "left" | "right" }
+export interface ColumnDef { id: string; label: string; width: number; min: number; sort?: SortKey; align?: "left" | "right"; defaultHidden?: boolean; locked?: boolean }
 
+/** Review grid columns (Everlaw-style standard metadata). Hidden-by-default columns come back through the column chooser. */
 export const DEFAULT_COLUMNS: ColumnDef[] = [
-  { id: "select", label: "", width: 36, min: 36 },
-  { id: "bates", label: "Bates", width: 128, min: 96, sort: "bates" },
-  { id: "date", label: "Date", width: 96, min: 80, sort: "date" },
-  { id: "custodian", label: "Custodian", width: 124, min: 90, sort: "custodian" },
-  { id: "type", label: "Type", width: 84, min: 64, sort: "type" },
-  { id: "subject", label: "Subject", width: 420, min: 160, sort: "subject" },
-  { id: "score", label: "AI score", width: 108, min: 88, sort: "aiScore", align: "right" },
-  { id: "coding", label: "Coding", width: 210, min: 120 },
+  { id: "bates", label: "Bates begin", width: 124, min: 96, sort: "bates", locked: true },
+  { id: "batesEnd", label: "Bates end", width: 110, min: 90, defaultHidden: true },
+  { id: "family", label: "Family", width: 64, min: 52, sort: "family" },
+  { id: "thread", label: "Thread", width: 64, min: 52, sort: "thread", defaultHidden: true },
+  { id: "dupes", label: "Dupes", width: 60, min: 48, defaultHidden: true },
+  { id: "custodian", label: "Custodian", width: 118, min: 90, sort: "custodian" },
+  { id: "date", label: "Date sent / created", width: 100, min: 84, sort: "date" },
+  { id: "from", label: "From", width: 120, min: 90, sort: "from", defaultHidden: true },
+  { id: "to", label: "To", width: 140, min: 90, defaultHidden: true },
+  { id: "cc", label: "Cc", width: 120, min: 90, defaultHidden: true },
+  { id: "subject", label: "Subject", width: 360, min: 160, sort: "subject" },
+  { id: "type", label: "Type", width: 88, min: 64, sort: "type" },
+  { id: "size", label: "Size", width: 64, min: 52, sort: "size", align: "right", defaultHidden: true },
+  { id: "pages", label: "Pages", width: 56, min: 48, sort: "pages", align: "right" },
+  { id: "decision", label: "Decision", width: 96, min: 84 },
+  { id: "issues", label: "Issues", width: 150, min: 90 },
+  { id: "suggested", label: "Suggested", width: 96, min: 80, sort: "aiScore", align: "right" },
+  { id: "reviewer", label: "Reviewer", width: 110, min: 80, defaultHidden: true },
+  { id: "reviewed", label: "Reviewed", width: 110, min: 84, sort: "reviewed", defaultHidden: true },
+  { id: "redactions", label: "Redactions", width: 72, min: 56, align: "right", defaultHidden: true },
 ];
 
 interface ReviewState {
@@ -33,6 +46,13 @@ interface ReviewState {
   toggleFilter: (key: keyof SearchFilters, value: string) => void;
   clearFilters: () => void;
   setSort: (sort: SortKey) => void;
+  setSortState: (sort: SortKey | undefined, dir: "asc" | "desc" | undefined) => void;
+  groupBy: GroupBy;
+  setGroupBy: (g: GroupBy) => void;
+  /** Batch review mode: only the batch's documents (or its QC sample) are listed. */
+  batchId: string | null;
+  qcMode: boolean;
+  setBatch: (id: string | null, qc?: boolean) => void;
   // selection / cursor
   selected: string[];
   setSelected: (ids: string[]) => void;
@@ -55,6 +75,12 @@ interface ReviewState {
   setDensity: (d: Density) => void;
   columnWidths: Record<string, number>;
   setColumnWidth: (id: string, w: number) => void;
+  setColumnWidths: (w: Record<string, number>) => void;
+  hiddenColumns: string[];
+  setHiddenColumns: (ids: string[]) => void;
+  /** Id of the saved layout currently applied (null = ad hoc). */
+  layoutId: string | null;
+  setLayoutId: (id: string | null) => void;
   autoAdvance: boolean;
   setAutoAdvance: (v: boolean) => void;
   railCollapsed: boolean;
@@ -91,6 +117,12 @@ export const useReviewStore = create<ReviewState>()(
           if (s.sort === sort) return { dir: (s.dir ?? (sort === "aiScore" || sort === "relevance" ? "desc" : "asc")) === "asc" ? "desc" : "asc" };
           return { sort, dir: sort === "aiScore" || sort === "relevance" ? "desc" : "asc" };
         }),
+      setSortState: (sort, dir) => set({ sort, dir }),
+      groupBy: "none",
+      setGroupBy: (groupBy) => set({ groupBy }),
+      batchId: null,
+      qcMode: false,
+      setBatch: (batchId, qc = false) => set({ batchId, qcMode: batchId ? qc : false, selected: [], view: "all", filters: {} }),
       selected: [],
       setSelected: (selected) => set({ selected }),
       toggleSelected: (id) => set((s) => ({ selected: s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id] })),
@@ -110,14 +142,19 @@ export const useReviewStore = create<ReviewState>()(
       setDensity: (density) => set({ density }),
       columnWidths: {},
       setColumnWidth: (id, w) => set((s) => ({ columnWidths: { ...s.columnWidths, [id]: w } })),
+      setColumnWidths: (columnWidths) => set({ columnWidths, layoutId: null }),
+      hiddenColumns: DEFAULT_COLUMNS.filter((c) => c.defaultHidden).map((c) => c.id),
+      setHiddenColumns: (hiddenColumns) => set({ hiddenColumns, layoutId: null }),
+      layoutId: null,
+      setLayoutId: (layoutId) => set({ layoutId }),
       autoAdvance: true,
       setAutoAdvance: (autoAdvance) => set({ autoAdvance }),
       railCollapsed: false,
       setRailCollapsed: (railCollapsed) => set({ railCollapsed }),
       listTick: 0,
       bumpList: () => set((s) => ({ listTick: s.listTick + 1 })),
-      reset: () => set({ q: "", semantic: false, view: "all", filters: {}, sort: undefined, dir: undefined, selected: [], activeId: null, openDocId: null }),
+      reset: () => set({ q: "", semantic: false, view: "all", filters: {}, sort: undefined, dir: undefined, selected: [], activeId: null, openDocId: null, batchId: null, qcMode: false, groupBy: "none" }),
     }),
-    { name: "leclaude:ediscovery:review", partialize: (s) => ({ density: s.density, columnWidths: s.columnWidths, autoAdvance: s.autoAdvance, codingPanelOpen: s.codingPanelOpen, railCollapsed: s.railCollapsed }) },
+    { name: "leclaude:ediscovery:review", version: 2, partialize: (s) => ({ density: s.density, columnWidths: s.columnWidths, hiddenColumns: s.hiddenColumns, layoutId: s.layoutId, autoAdvance: s.autoAdvance, codingPanelOpen: s.codingPanelOpen, railCollapsed: s.railCollapsed }) },
   ),
 );

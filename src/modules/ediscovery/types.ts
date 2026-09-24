@@ -2,7 +2,8 @@
  * Client-safe types for the e-discovery review workspace. Nothing here
  * imports server-only modules; the API routes and React components share it.
  */
-import type { CodingDecision, DocType, EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain";
+import type { CodingDecision, DocType, EDocument, IssueCode, PrivilegeLogEntry, ProductionSet, Redaction, ReviewBatch, ReviewLayout, SavedSearchRecord, SearchTermReport } from "@/lib/types/domain";
+import type { BatchProgress, DisagreementReport } from "./batch-pure";
 
 export type ReviewTab = "review" | "depositions" | "cross" | "timeline" | "people" | "conflicts" | "codes";
 
@@ -39,7 +40,10 @@ export const SCORE_BUCKETS: { id: ScoreBucket; label: string }[] = [
   { id: "unscored", label: "Unscored" },
 ];
 
-export type SortKey = "date" | "bates" | "custodian" | "type" | "subject" | "aiScore" | "relevance";
+export type SortKey = "date" | "bates" | "custodian" | "type" | "subject" | "aiScore" | "relevance" | "from" | "pages" | "size" | "family" | "thread" | "reviewed";
+
+/** Row grouping in the review grid: families, email threads or near-duplicate clusters stay contiguous. */
+export type GroupBy = "none" | "family" | "thread" | "neardup";
 
 export interface SearchFilters {
   custodians?: string[]; // custodianId
@@ -60,6 +64,14 @@ export interface SearchRequest {
   dir?: "asc" | "desc";
   offset?: number;
   limit?: number;
+  /** 1-based page (alternative to offset). */
+  page?: number;
+  /** Restrict to a review batch (batch review mode); `qc` narrows to its QC sample. */
+  batchId?: string;
+  qc?: boolean;
+  /** Restrict to an explicit id list (selection-based batches and productions). */
+  ids?: string[];
+  groupBy?: GroupBy;
 }
 
 export interface FacetBucket { value: string; label: string; count: number }
@@ -72,6 +84,8 @@ export interface Facets {
   issues: FacetBucket[];
   score: FacetBucket[];
   years: DateBucket[];
+  /** Month histogram (YYYY-MM) of the current result set, for the date chart. */
+  months: DateBucket[];
 }
 
 export interface FamilyInfo {
@@ -90,6 +104,17 @@ export type DocRow = Omit<EDocument, "text" | "entities" | "aiSummary"> & {
   score?: number; // semantic/keyword relevance 0..1
   snippet?: string;
   textLength: number;
+  /** One-line rationale behind the AI suggestion (from the cached analysis or the batch prediction). */
+  aiRationale?: string;
+  /** Model confidence in the suggestion (0..1) when recorded. */
+  aiConfidence?: number;
+  /** Group key when the search was grouped (family root id, thread id or near-dup cluster id). */
+  groupKey?: string;
+  /** Position inside the group (0 = group head). */
+  groupIndex?: number;
+  groupSize?: number;
+  /** Number of redactions on the document. */
+  redactions?: number;
 };
 
 export interface SearchResponse {
@@ -102,6 +127,9 @@ export interface SearchResponse {
   parsed: ParsedQuerySummary;
   tookMs: number;
   semantic: boolean;
+  page: number;
+  pages: number;
+  groupBy?: GroupBy;
 }
 
 export interface ParsedQuerySummary {
@@ -128,6 +156,72 @@ export interface MatterStats {
 }
 
 export interface SavedViewCounts { view: SavedView; count: number }
+
+/** Batch as listed by the API: the record plus derived progress and names. */
+export type ReviewBatchSummary = ReviewBatch & { progress: BatchProgress; assigneeName?: string; createdByName?: string };
+
+export interface BatchCreateInput {
+  matterId: string;
+  name: string;
+  description?: string;
+  /** Explicit ids (selection) or a query to snapshot. */
+  ids?: string[];
+  q?: string;
+  view?: SavedView;
+  filters?: SearchFilters;
+  savedSearchId?: string;
+  /** Split into several batches of at most this many documents. */
+  size?: number;
+  assigneeId?: string;
+  priority?: ReviewBatch["priority"];
+  dueAt?: string;
+  qcSamplePercent?: number;
+  secondPass?: boolean;
+  /** Only documents that still need a decision (default true). */
+  uncodedOnly?: boolean;
+}
+
+export type SavedSearchInput = Pick<SavedSearchRecord, "name" | "q"> & Partial<Pick<SavedSearchRecord, "description" | "view" | "filters" | "sort" | "dir" | "semantic" | "shared">> & { matterId: string };
+
+export type ReviewLayoutInput = Pick<ReviewLayout, "name" | "hiddenColumns" | "columnWidths" | "density"> & { matterId?: string };
+
+export type RedactionInput = Pick<Redaction, "docId" | "kind" | "reason"> & Partial<Pick<Redaction, "start" | "end" | "page" | "rect" | "label" | "note">>;
+
+export interface ProductionCreateInput {
+  matterId: string;
+  name: string;
+  volume?: string;
+  prefix: string;
+  padding?: number;
+  startNumber?: number;
+  stampText?: string;
+  /** Explicit ids, a query, or (default) every production-ready document. */
+  ids?: string[];
+  q?: string;
+  view?: SavedView;
+  filters?: SearchFilters;
+  savedSearchId?: string;
+  notes?: string;
+}
+
+export type ProductionSummary2 = ProductionSet & { docCount: number; pageCount: number; batesRange: { begin: string; end: string } | null; redactedDocs: number; createdByName?: string };
+
+export interface SearchTermReportRequest { matterId: string; terms: string[]; view?: SavedView; filters?: SearchFilters }
+
+export type { ReviewBatch, SavedSearchRecord, ReviewLayout, Redaction, ProductionSet, SearchTermReport, BatchProgress, DisagreementReport };
+
+/** Audit history row for one document (from the hash-chained audit log). */
+export interface DocHistoryEntry {
+  id: string;
+  ts: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  summary: string;
+  fields?: string[];
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+}
 
 export type CodingPatch = Partial<CodingDecision>;
 

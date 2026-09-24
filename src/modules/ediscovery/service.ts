@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 import { hybridSearch, indexDocuments, indexStats } from "@/lib/ai/vector-store";
 import { VECTOR_COLLECTIONS } from "@/lib/ai/toolkit/internal";
 import type { EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain";
-import { batesInRange, compareBates, isEmptyQuery, makeSnippet, matchesQuery, parseQuery, type ParsedQuery, type Searchable } from "./query";
+import { batesInRange, compareBates, isEmptyQuery, makeSnippet, matchesQuery, parseQuery, type ParsedQuery, type QueryNode, type Searchable } from "./query";
+import { batches, redactions as redactionStore } from "./review-store";
+import { currentUser } from "@/lib/current-user";
 import { indexTextFor, isProducible, productionLoadFileCsv, productionSummary, templatePrivilegeDescription, toPrivilegeLogRow } from "./privilege";
 import { CODING_RULES_KEY, DEFAULT_CODING_RULES } from "./rules";
 import { audit } from "@/lib/integrity/audit";
@@ -17,6 +19,7 @@ import {
   type CodingStatus,
   type DocRow,
   type Facets,
+  type GroupBy,
   type FamilyInfo,
   type IssueCodeInput,
   type MatterStats,
@@ -31,7 +34,8 @@ import {
   type SortKey,
 } from "./types";
 
-export const CURRENT_USER_ID = "p_jwhitfield";
+/** The signed-in reviewer (LECLAUDE_USER_ID override honoured through @/lib/current-user). */
+export const CURRENT_USER_ID = currentUser().id;
 /** Maximum number of documents returned by a semantic (hybrid) search. */
 export const SEMANTIC_K = 60;
 /** Hard cap on rows per search page (the grid is virtualised; the client pages in 500s and refreshes with everything loaded). */
@@ -67,9 +71,44 @@ export function toSearchable(d: EDocument): Searchable {
     issues: (d.coding.issues ?? []).join(" ").toLowerCase(),
     tags: (d.tags ?? []).join(" ").toLowerCase(),
     hash: lower(d.hash),
+    hot: !!d.coding.hot,
+    privileged: d.coding.privileged ?? null,
+    privilegeBasis: d.coding.privilegeBasis,
+    responsive: d.coding.responsive ?? null,
+    attachments: d.family?.attachmentIds?.length ?? 0,
+    isAttachment: !!d.family?.parentId,
+    family: lower(d.family?.parentId ?? d.id),
+    thread: lower(d.family?.threadId),
+    isDuplicate: !!d.isDuplicateOf,
+    nearDuplicates: d.nearDuplicateIds?.length ?? 0,
+    pages: d.pages ?? 1,
+    reviewer: lower(d.coding.reviewerId),
   };
   searchableCache.set(d, s);
   return s;
+}
+
+/**
+ * `family:` and `thread:` accept a Bates number or document id of any member; rewrite the
+ * value to the family root id / thread id so the projection can match it exactly.
+ */
+function resolveFieldRefs(node: QueryNode, all: EDocument[]): QueryNode {
+  const find = (v: string) => all.find((d) => d.id.toLowerCase() === v || d.bates.toLowerCase() === v || d.bates.toLowerCase().replace(/[-_ ]/g, "") === v.replace(/[-_ ]/g, ""));
+  const walk = (n: QueryNode): QueryNode => {
+    switch (n.kind) {
+      case "and": case "or": return { kind: n.kind, children: n.children.map(walk) };
+      case "not": return { kind: "not", child: walk(n.child) };
+      case "prox": return { ...n, left: walk(n.left), right: walk(n.right) };
+      case "field": {
+        if (n.field === "family") { const d = find(n.value); return d ? { ...n, value: (d.family?.parentId ?? d.id).toLowerCase() } : n; }
+        if (n.field === "thread") { const d = find(n.value); return d?.family?.threadId ? { ...n, value: d.family.threadId.toLowerCase() } : n; }
+        if (n.field === "reviewer") { const p = db().people.findOne((x) => x.name.toLowerCase().includes(n.value)); return p ? { ...n, value: p.id.toLowerCase() } : n; }
+        return n;
+      }
+      default: return n;
+    }
+  };
+  return walk(node);
 }
 
 export function codingStatuses(d: EDocument): CodingStatus[] {
@@ -103,10 +142,34 @@ function familyInfo(d: EDocument, byId: Map<string, EDocument>, threadSizes: Map
   };
 }
 
-export function toRow(d: EDocument, byId: Map<string, EDocument>, threadSizes: Map<string, number>, extra: { score?: number; snippet?: string } = {}): DocRow {
+const ANALYSIS_KEY = (docId: string) => `ediscovery:analysis:${docId}`;
+
+/** Rationale + confidence behind the AI suggestion, from the cached analysis or the prediction audit meta. */
+export function aiSuggestionMeta(d: EDocument): { aiRationale?: string; aiConfidence?: number } {
+  const out: { aiRationale?: string; aiConfidence?: number } = {};
+  if (d.aiProvenance?.confidence != null) out.aiConfidence = d.aiProvenance.confidence;
+  const cached = db().kv.get<{ suggestedCoding?: { rationale?: string } }>(ANALYSIS_KEY(d.id));
+  if (cached?.suggestedCoding?.rationale) out.aiRationale = cached.suggestedCoding.rationale;
+  else if (d.aiProvenance) {
+    const meta = (d.aiProvenance as { meta?: { rationale?: string } }).meta;
+    if (meta?.rationale) out.aiRationale = meta.rationale;
+  }
+  return out;
+}
+
+export function toRow(d: EDocument, byId: Map<string, EDocument>, threadSizes: Map<string, number>, extra: Partial<Pick<DocRow, "score" | "snippet" | "groupKey" | "groupIndex" | "groupSize">> = {}): DocRow {
   const { text, entities: _e, aiSummary: _s, ...rest } = d;
   void _e; void _s;
-  return { ...rest, family2: familyInfo(d, byId, threadSizes), textLength: text.length, ...extra };
+  const redactionCount = redactionCounts.get(d.matterId)?.get(d.id) ?? 0;
+  return { ...rest, family2: familyInfo(d, byId, threadSizes), textLength: text.length, ...aiSuggestionMeta(d), ...(redactionCount ? { redactions: redactionCount } : {}), ...extra };
+}
+
+/** Per-matter redaction counts, refreshed on each search (cheap: the collection is memory-resident). */
+const redactionCounts = new Map<string, Map<string, number>>();
+function refreshRedactionCounts(matterId: string) {
+  const m = new Map<string, number>();
+  for (const r of redactionStore().all()) if (r.matterId === matterId) m.set(r.docId, (m.get(r.docId) ?? 0) + 1);
+  redactionCounts.set(matterId, m);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +253,7 @@ export function computeFacets(base: EDocument[], filters: SearchFilters | undefi
   const i = count(applyFilters(base, filters, "issues"), (d) => d.coding.issues ?? []);
   const sc = count(applyFilters(base, filters, "scores"), (d) => [scoreBucket(d)]);
   const y = count(applyFilters(base, filters, "years"), (d) => [d.date.slice(0, 4)]);
+  const mo = count(applyFilters(base, filters, "years"), (d) => [d.date.slice(0, 7)]);
   const codes = new Map(db().issueCodes.find((x) => x.matterId === matterId).map((x) => [x.code, x]));
   const statusLabel: Record<CodingStatus, string> = { responsive: "Responsive", non_responsive: "Non-responsive", needs_review: "Needs review", privileged: "Privileged", hot: "Hot" };
   const sortDesc = (a: { count: number; label: string }, b: { count: number; label: string }) => b.count - a.count || a.label.localeCompare(b.label);
@@ -200,6 +264,7 @@ export function computeFacets(base: EDocument[], filters: SearchFilters | undefi
     issues: Array.from(new Set([...codes.keys(), ...i.keys()])).map((value) => ({ value, label: codes.get(value)?.label ?? value, count: i.get(value) ?? 0 })).sort(sortDesc),
     score: SCORE_BUCKETS.map((b) => ({ value: b.id, label: b.label, count: sc.get(b.id) ?? 0 })),
     years: Array.from(y.entries()).map(([year, n]) => ({ year, count: n })).sort((a, b) => a.year.localeCompare(b.year)),
+    months: Array.from(mo.entries()).map(([year, n]) => ({ year, count: n })).sort((a, b) => a.year.localeCompare(b.year)),
   };
 }
 
@@ -217,6 +282,12 @@ export function sortDocs<T extends { doc: EDocument; score?: number }>(items: T[
     subject: (a, b) => a.doc.subject.localeCompare(b.doc.subject),
     aiScore: (a, b) => (a.doc.aiScore ?? -1) - (b.doc.aiScore ?? -1) || compareBates(a.doc.bates, b.doc.bates),
     relevance: (a, b) => (a.score ?? 0) - (b.score ?? 0) || compareBates(b.doc.bates, a.doc.bates),
+    from: (a, b) => (a.doc.from ?? "").localeCompare(b.doc.from ?? "") || compareBates(a.doc.bates, b.doc.bates),
+    pages: (a, b) => (a.doc.pages ?? 1) - (b.doc.pages ?? 1) || compareBates(a.doc.bates, b.doc.bates),
+    size: (a, b) => a.doc.text.length - b.doc.text.length || compareBates(a.doc.bates, b.doc.bates),
+    family: (a, b) => (a.doc.family?.parentId ?? a.doc.id).localeCompare(b.doc.family?.parentId ?? b.doc.id) || compareBates(a.doc.bates, b.doc.bates),
+    thread: (a, b) => (a.doc.family?.threadId ?? "~").localeCompare(b.doc.family?.threadId ?? "~") || a.doc.date.localeCompare(b.doc.date) || compareBates(a.doc.bates, b.doc.bates),
+    reviewed: (a, b) => (a.doc.coding.reviewedAt ?? "").localeCompare(b.doc.coding.reviewedAt ?? "") || compareBates(a.doc.bates, b.doc.bates),
   };
   const fn = cmp[sort ?? "bates"];
   return [...items].sort((a, b) => fn(a, b) * mul);
@@ -231,10 +302,15 @@ export async function searchDocuments(req: SearchRequest): Promise<SearchRespons
   const all = matterDocs(req.matterId);
   const { byId, threadSizes } = indexes(all);
   const parsed: ParsedQuery = parseQuery(req.q ?? "");
+  parsed.ast = resolveFieldRefs(parsed.ast, all);
   const useSemantic = !!req.semantic && !!req.q?.trim();
+  refreshRedactionCounts(req.matterId);
 
   let scored: { doc: EDocument; score?: number; snippet?: string }[];
-  const inView = all.filter(viewPredicate(req.view, req.matterId));
+  let inView = all.filter(viewPredicate(req.view, req.matterId));
+  // Batch review mode / explicit id lists narrow the corpus before the query runs.
+  const idSet = scopeIds(req);
+  if (idSet) inView = inView.filter((d) => idSet.has(d.id));
 
   if (useSemantic) {
     // Hybrid (keyword BM25 + embeddings when available) over the vector index, restricted to this matter.
@@ -257,21 +333,75 @@ export async function searchDocuments(req: SearchRequest): Promise<SearchRespons
   const filteredIds = new Set(applyFilters(base, req.filters).map((d) => d.id));
   const filtered = scored.filter((s) => filteredIds.has(s.doc.id));
   const sort: SortKey = req.sort ?? (useSemantic ? "relevance" : "bates");
-  const sorted = sortDocs(filtered, sort, req.dir);
-  const offset = Math.max(0, req.offset ?? 0);
+  let sorted = sortDocs(filtered, sort, req.dir);
+  const groupBy: GroupBy = req.groupBy ?? "none";
+  const groups = groupBy !== "none" ? groupRows(sorted, groupBy, byId) : null;
+  if (groups) sorted = groups.rows;
   const limit = Math.min(MAX_PAGE, Math.max(1, req.limit ?? 100));
+  const offset = Math.max(0, req.page && req.page > 0 ? (req.page - 1) * limit : (req.offset ?? 0));
   const page = sorted.slice(offset, offset + limit);
   return {
-    hits: page.map((s) => toRow(s.doc, byId, threadSizes, { score: s.score, snippet: s.snippet })),
+    hits: page.map((s) => toRow(s.doc, byId, threadSizes, { score: s.score, snippet: s.snippet, ...(groups?.meta.get(s.doc.id) ?? {}) })),
     total: sorted.length,
     totalWorkspace: all.length,
     offset,
     limit,
+    page: Math.floor(offset / limit) + 1,
+    pages: Math.max(1, Math.ceil(sorted.length / limit)),
     facets,
     parsed: { terms: parsed.terms, fields: parsed.fields, bates: parsed.bates.map((b) => ({ start: b.start.raw, end: b.end.raw })), warnings: parsed.warnings },
     tookMs: Date.now() - t0,
     semantic: useSemantic,
+    groupBy,
   };
+}
+
+/** Id restriction for batch review mode (`batchId`, optionally its QC sample) or an explicit `ids` list. */
+function scopeIds(req: SearchRequest): Set<string> | null {
+  let set: Set<string> | null = null;
+  if (req.batchId) {
+    const b = batches().get(req.batchId);
+    if (!b) return new Set();
+    set = new Set(req.qc ? b.qcSampleIds : b.docIds);
+  }
+  if (req.ids?.length) {
+    const ids = new Set(req.ids);
+    set = set ? new Set([...set].filter((id) => ids.has(id))) : ids;
+  }
+  return set;
+}
+
+/** Reorder rows so each group (family / thread / near-dup cluster) is contiguous, head first; single-member groups stay in place. */
+function groupRows<T extends { doc: EDocument }>(rows: T[], groupBy: GroupBy, byId: Map<string, EDocument>): { rows: T[]; meta: Map<string, { groupKey: string; groupIndex: number; groupSize: number }> } {
+  const keyOf = (d: EDocument): string | null => {
+    if (groupBy === "family") { const root = d.family?.parentId && byId.has(d.family.parentId) ? d.family.parentId : d.id; return (byId.get(root)?.family?.attachmentIds?.length ?? 0) > 0 ? root : null; }
+    if (groupBy === "thread") return d.family?.threadId ?? null;
+    if (groupBy === "neardup") {
+      const cluster = new Set<string>([d.id, ...(d.nearDuplicateIds ?? []), ...(d.isDuplicateOf ? [d.isDuplicateOf] : [])]);
+      for (const x of byId.values()) if (x.nearDuplicateIds?.includes(d.id) || x.isDuplicateOf === d.id) cluster.add(x.id);
+      if (cluster.size < 2) return null;
+      return Array.from(cluster).sort((a, b) => compareBates(byId.get(a)?.bates ?? a, byId.get(b)?.bates ?? b))[0];
+    }
+    return null;
+  };
+  const buckets = new Map<string, T[]>();
+  const order: { key: string | null; row: T }[] = [];
+  for (const r of rows) {
+    const key = keyOf(r.doc);
+    if (key) { const list = buckets.get(key); if (list) { list.push(r); continue; } buckets.set(key, [r]); }
+    order.push({ key, row: r });
+  }
+  const out: T[] = [];
+  const meta = new Map<string, { groupKey: string; groupIndex: number; groupSize: number }>();
+  for (const o of order) {
+    if (!o.key) { out.push(o.row); continue; }
+    const list = buckets.get(o.key)!;
+    // Head of the group: the family root / earliest message / primary of the cluster when present in the results.
+    const headIdx = list.findIndex((r) => r.doc.id === o.key);
+    const ordered = headIdx > 0 ? [list[headIdx], ...list.filter((_, i) => i !== headIdx)] : list;
+    ordered.forEach((r, i) => { meta.set(r.doc.id, { groupKey: o.key!, groupIndex: i, groupSize: ordered.length }); out.push(r); });
+  }
+  return { rows: out, meta };
 }
 
 /** Remove free-text terms from a parsed query, keeping structural constraints (used by semantic mode). */
@@ -284,6 +414,7 @@ function stripTerms(parsed: ParsedQuery): ParsedQuery["ast"] {
         return kids.length === 0 ? { kind: "empty" } : kids.length === 1 ? kids[0] : { kind: n.kind, children: kids };
       }
       case "not": { const c = walk(n.child); return c.kind === "empty" ? c : { kind: "not", child: c }; }
+      case "prox": return { kind: "empty" };
       default: return n;
     }
   };
@@ -644,7 +775,7 @@ export function upsertPrivilegeEntry(d: EDocument, description: string, status: 
   return db().privilegeLog.put(entry);
 }
 
-export function updatePrivilegeEntry(id: string, patch: Partial<Pick<PrivilegeLogEntry, "description" | "status" | "basis">>): PrivilegeLogEntry | null {
+export function updatePrivilegeEntry(id: string, patch: Partial<Pick<PrivilegeLogEntry, "description" | "status" | "basis" | "templateId">>): PrivilegeLogEntry | null {
   return db().privilegeLog.update(id, patch);
 }
 
