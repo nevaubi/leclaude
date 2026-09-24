@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { CalendarPlus, CheckSquare, ChevronDown, Home as HomeIcon, Keyboard, MessageSquarePlus, Plus, RefreshCw, Scale, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
@@ -28,8 +29,26 @@ export function HomePage({ initial }: { initial: HomeInitialData }) {
       <EventSheet />
       <EventDialog />
       <TaskDialog />
+      <React.Suspense fallback={null}><DeepLinkHandler /></React.Suspense>
     </HomeProvider>
   );
+}
+
+/** Honors /?task=<id>, /?event=<id> and /?section=<calendar|tasks|news|updates|matters> deep links (command palette, workflow artifacts). */
+function DeepLinkHandler() {
+  const params = useSearchParams();
+  const openTaskDialog = useHomeUI((s) => s.openTaskDialog);
+  const openEvent = useHomeUI((s) => s.openEvent);
+  const setFocus = useHomeUI((s) => s.setFocus);
+  const task = params.get("task");
+  const event = params.get("event");
+  const section = params.get("section") as HomeSection | null;
+  React.useEffect(() => {
+    if (task) openTaskDialog({ taskId: task });
+    if (event) openEvent(event);
+    if (section && ["calendar", "tasks", "news", "updates", "matters"].includes(section)) setFocus(section);
+  }, [task, event, section, openTaskDialog, openEvent, setFocus]);
+  return null;
 }
 
 const ALL = "__all__";
