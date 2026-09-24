@@ -2,7 +2,10 @@ import "server-only";
 import type { Database } from "@/lib/db";
 import type { LibraryItem, OfficeComment } from "@/lib/types/domain";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
-import { LIBRARY_FOLDERS, matterFolderId } from "@/modules/library/ids";
+import { matterFolderId } from "@/modules/library/ids";
+
+/** Knowledge › Litigation practice (system subfolder seeded by the library module; the Knowledge root itself holds no items). */
+const KNOWLEDGE_LITIGATION_FOLDER = "lib_folder_knowledge_litigation";
 import { createOfficeDoc, saveOfficeDoc } from "@/modules/office/shared/docs-service";
 import { buildSlide } from "./layouts";
 import { type DeckContent } from "./model";
@@ -476,7 +479,7 @@ export function seedSlides(db: Database) {
       outline: CLE_OUTLINE,
       createdAt: "2026-09-15T12:00:00Z",
       tags: ["CLE", "evidence", "training"],
-      folderId: LIBRARY_FOLDERS.knowledge,
+      folderId: KNOWLEDGE_LITIGATION_FOLDER,
       versions: [
         { summary: "Agent edit: Added the circuit-trends table with [VERIFY] placeholders", author: AGENT, transform: (d) => d },
       ],

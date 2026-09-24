@@ -22,7 +22,7 @@ const TOKENS: { id: ThemeColorToken; label: string }[] = [{ id: "fg", label: "Te
 function TBtn({ label, shortcut, onClick, active, disabled, children, className }: { label: string; shortcut?: string; onClick: () => void; active?: boolean; disabled?: boolean; children: React.ReactNode; className?: string }) {
   return (
     <Tip label={label} shortcut={shortcut}>
-      <Button variant={active ? "secondary" : "ghost"} size="icon-xs" onClick={onClick} disabled={disabled} aria-label={label} aria-pressed={active} className={cn(active && "text-primary", className)}>{children}</Button>
+      <Button variant={active ? "secondary" : "ghost"} size="icon-xs" onClick={onClick} onMouseDown={(e) => e.preventDefault()} disabled={disabled} aria-label={label} aria-pressed={active} className={cn(active && "text-primary", className)}>{children}</Button>
     </Tip>
   );
 }
@@ -35,7 +35,7 @@ export function ColorControl({ value, onChange, theme, label, icon, allowNone }:
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="flex h-7 items-center gap-1 rounded px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label={label} title={label}>
+        <button className="flex h-7 items-center gap-1 rounded px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label={label} title={label} onMouseDown={(e) => e.preventDefault()}>
           {icon}
           <span className="h-3.5 w-3.5 rounded-sm border" style={{ background: resolved === "transparent" ? "repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0/6px 6px" : resolved }} />
         </button>

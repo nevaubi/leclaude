@@ -13,6 +13,14 @@ export const LIBRARY_FOLDERS = {
 /** Folder created by the Home module for saved news items; shown alongside the system folders. */
 export const NEWS_CLIPPINGS_FOLDER = "lib_folder_news_clippings";
 
+/** Knowledge base subfolders (seeded by the library module); other seeds file items here instead of the Knowledge root. */
+export const KNOWLEDGE_SUBFOLDERS = {
+  litigation: "lib_folder_knowledge_litigation",
+  transactional: "lib_folder_knowledge_transactional",
+  research: "lib_folder_knowledge_research",
+  style: "lib_folder_knowledge_style",
+} as const;
+
 export const SYSTEM_FOLDER_ORDER: string[] = [LIBRARY_FOLDERS.firm, LIBRARY_FOLDERS.matters, LIBRARY_FOLDERS.templates, LIBRARY_FOLDERS.clauses, LIBRARY_FOLDERS.knowledge, LIBRARY_FOLDERS.myFiles];
 
 export function matterFolderId(matterId: string) {

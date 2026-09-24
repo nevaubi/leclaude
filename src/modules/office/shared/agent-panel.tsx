@@ -38,6 +38,8 @@ export interface OfficeAgentPanelProps {
   onApplied?: (summary: string, proposals: EditProposal[]) => void;
   /** Hover preview: called with the hovered pending proposal, or null when the pointer leaves. */
   onPreview?: (proposal: EditProposal | null) => void;
+  /** Whether applied edits become tracked changes (Word). Defaults to true for the Word endpoint, false otherwise; affects wording only. */
+  trackedChanges?: boolean;
   className?: string;
   defaultMode?: OfficeAgentMode;
   title?: string;
@@ -53,6 +55,8 @@ const SEVERITY_VARIANT: Record<ReviewFinding["severity"], "muted" | "info" | "wa
 
 export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
   const { endpoint, docId, docTitle, matterId, getSnapshot, scopes, applyProposals, onUndo, onLocate, suggestions, extraContext, onApplied, onPreview, className, defaultMode = "draft", title = "Drafting assistant" } = props;
+  const tracked = props.trackedChanges ?? /\/word\//.test(endpoint);
+  const appliedNoun = tracked ? "as tracked changes" : "to the document";
   const [mode, setMode] = React.useState<OfficeAgentMode>(defaultMode);
   const [scopeId, setScopeId] = React.useState<string>(scopes[0]?.id ?? "document");
   const [research, setResearch] = React.useState(false);
@@ -117,7 +121,7 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
       if (r.applied.length) {
         const last = agent.messages.filter((m) => m.role === "assistant").at(-1);
         onApplied?.(summarize(last, batch.filter((p) => r.applied.includes(p.id))), batch);
-        toast.success(`Applied ${r.applied.length} edit${r.applied.length === 1 ? "" : "s"} as tracked changes`);
+        toast.success(`Applied ${r.applied.length} edit${r.applied.length === 1 ? "" : "s"} ${appliedNoun}`);
       }
     } finally { setApplying(false); }
   };
@@ -127,7 +131,7 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
   const emptyState = (
     <div className="px-3 pt-4">
       <div className="mb-3 rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-        {mode === "draft" && <>Ask me to draft, rewrite, restructure, format, cite, or polish. I read the whole document, propose edits you can preview, and apply them as tracked changes. Drop in a screenshot to transcribe it, or dictate with the mic.</>}
+        {mode === "draft" && <>Ask me to draft, rewrite, restructure, format, cite, or polish. I read the whole document, propose edits you can preview, and apply them {tracked ? "as tracked changes" : "with full undo"}. Drop in a screenshot to transcribe it, or dictate with the mic.</>}
         {mode === "review" && <>I&apos;ll read the document and flag citation, defined-term, cross-reference, numbering, risk and style issues, with one-click fixes where safe.</>}
         {mode === "ask" && <>Ask questions about this document, the matter, or the law. Turn on Research for web, case law, statutes and dockets.</>}
       </div>
@@ -182,7 +186,7 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
               </div>
             </div>
           )}
-          {applied.length > 0 && pending.length === 0 && <div className="px-3 py-1.5 text-[11px] text-muted-foreground">{applied.length} edit{applied.length === 1 ? "" : "s"} applied as tracked changes.</div>}
+          {applied.length > 0 && pending.length === 0 && <div className="px-3 py-1.5 text-[11px] text-muted-foreground">{applied.length} edit{applied.length === 1 ? "" : "s"} applied {appliedNoun}.</div>}
         </div>
       )}
 
