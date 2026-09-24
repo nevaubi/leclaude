@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Background, BackgroundVariant, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, type Connection, type IsValidConnection, type NodeMouseHandler } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, LayoutGrid, Loader2, Maximize2, Minus, Play, Plus, Redo2, Save, Sparkles, Undo2, Workflow as WorkflowIcon } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, LayoutGrid, Loader2, Maximize2, Minus, MousePointerClick, PanelsTopLeft, Play, Plus, Redo2, Save, Undo2, Workflow as WorkflowIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { Workflow, WorkflowNodeType, WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tip } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SegmentedControl } from "@/components/ui/form";
 import { findCycleNodes } from "../../graph";
+import { syncInputsFromFrontend } from "../../frontend";
 import { nodeSpec } from "../../registry";
 import { apiJson, ApiError, useWorkflowMeta } from "../../hooks";
 import type { WorkflowRecord } from "../../service";
@@ -25,6 +27,7 @@ import { RunPanel } from "../run/run-panel";
 import { RunsTable } from "../run/runs-table";
 import { ConfigPanel } from "./config-panel";
 import { DEFAULT_EDGE_OPTIONS, EDGE_TYPES, EdgeMarkers } from "./edges";
+import { FrontendEditor } from "./frontend-editor";
 import { NODE_TYPES } from "./nodes";
 import { DND_MIME, NodePalette } from "./palette";
 import { graphBounds, toDomainGraph, useBuilderStore, type WfNode } from "./store";
@@ -57,6 +60,7 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
   // Collapse the palette on narrower windows (after mount, so SSR markup matches) so the canvas keeps a usable width next to the config panel.
   React.useEffect(() => { if (window.innerWidth < 1440) setPaletteOpen(false); }, []);
   const [rightTab, setRightTab] = React.useState<"configure" | "runs">("configure");
+  const [view, setView] = React.useState<"steps" | "frontend">(search.get("view") === "frontend" ? "frontend" : "steps");
   const [runOpen, setRunOpen] = React.useState(false);
   const [activeRunId, setActiveRunId] = React.useState<string | null>(search.get("run") && search.get("run") !== "1" ? search.get("run") : null);
   const searchRef = React.useRef<HTMLInputElement>(null);
@@ -90,7 +94,8 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
   const save = React.useCallback(async (opts: { status?: Workflow["status"]; silent?: boolean } = {}) => {
     const st = store.getState();
     const graph = toDomainGraph(st.nodes, st.edges);
-    const body = { name: st.meta.name, description: st.meta.description, category: st.meta.category, nodes: graph.nodes, edges: graph.edges, inputs: st.meta.inputs, tags: st.meta.tags, status: opts.status ?? st.meta.status };
+    const frontend = st.meta.frontend?.fields ? st.meta.frontend : null;
+    const body = { name: st.meta.name, description: st.meta.description, category: st.meta.category, nodes: graph.nodes, edges: graph.edges, inputs: frontend ? syncInputsFromFrontend(frontend) : st.meta.inputs, frontend, tags: st.meta.tags, status: opts.status ?? st.meta.status };
     st.setSaving(true);
     try {
       if (st.meta.isTemplate) {
@@ -128,8 +133,9 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
       if (!id) return;
       if (id !== store.getState().workflowId) return; // navigated to the clone; the new page opens the dialog via ?run=1
     }
+    if (store.getState().meta.frontend?.fields?.length) { router.push(`/workflows/${store.getState().workflowId}/start`); return; }
     setRunOpen(true);
-  }, [errors.length, isTemplate, save, store]);
+  }, [errors.length, isTemplate, save, store, router]);
 
   const addNode = React.useCallback((type: WorkflowNodeType, position?: { x: number; y: number }) => {
     const st = store.getState();
@@ -217,23 +223,42 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
           <Tip label={isTemplate ? "Save as your own workflow" : "Save"} shortcut="⌘S">
             <Button variant="outline" size="sm" onClick={() => save()} disabled={saving || (!dirty && !isTemplate)}>{saving ? <Loader2 className="size-3.5 animate-spin" /> : isTemplate ? <Copy className="size-3.5" /> : <Save className="size-3.5" />} {isTemplate ? "Use template" : "Save"}</Button>
           </Tip>
-          <Tip label="Run with inputs" shortcut="⌘↵">
-            <Button size="sm" onClick={openRun} disabled={saving}><Play className="size-3.5" /> Run</Button>
-          </Tip>
+          {wfMeta.frontend?.fields?.length ? (
+            <Tip label="Open the start page" shortcut="⌘↵">
+              <Button size="sm" onClick={openRun} disabled={saving}><Play className="size-3.5" /> Start</Button>
+            </Tip>
+          ) : (
+            <Tip label="Run with inputs" shortcut="⌘↵">
+              <Button size="sm" onClick={openRun} disabled={saving}><Play className="size-3.5" /> Run</Button>
+            </Tip>
+          )}
         </div>
       </TopbarSlot>
 
       <div className="flex min-h-0 flex-1">
         {/* Palette */}
-        <aside className={cn("relative shrink-0 border-r bg-card transition-[width] duration-200", paletteOpen ? "w-[268px]" : "w-0")}>
-          {paletteOpen && <NodePalette onAdd={(t) => addNode(t)} searchRef={searchRef} />}
-          <button onClick={() => setPaletteOpen((o) => !o)} className="absolute -right-3 top-3 z-10 flex size-6 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-xs hover:text-foreground cursor-pointer" aria-label={paletteOpen ? "Collapse palette" : "Expand palette"}>
-            {paletteOpen ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-          </button>
+        <aside className={cn("relative shrink-0 border-r bg-card transition-[width] duration-200", paletteOpen && view === "steps" ? "w-[268px]" : "w-0")}>
+          {paletteOpen && view === "steps" && <NodePalette onAdd={(t) => addNode(t)} searchRef={searchRef} />}
+          {view === "steps" && (
+            <button onClick={() => setPaletteOpen((o) => !o)} className="absolute -right-3 top-3 z-10 flex size-6 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-xs hover:text-foreground cursor-pointer" aria-label={paletteOpen ? "Collapse palette" : "Expand palette"}>
+              {paletteOpen ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            </button>
+          )}
         </aside>
 
+        {/* Front end editor (replaces the canvas) */}
+        {view === "frontend" && (
+          <div className="flex min-w-0 flex-1 flex-col bg-background">
+            <div className="toolbar hairline-b flex shrink-0 items-center gap-2 px-3">
+              <SegmentedControl size="xs" options={[{ value: "steps", label: "Steps", icon: PanelsTopLeft }, { value: "frontend", label: "Front end", icon: MousePointerClick }]} value={view} onChange={setView} ariaLabel="Builder view" />
+              <span className="text-[11.5px] text-muted-foreground">The one-page form people fill in to start this workflow.</span>
+            </div>
+            <div className="min-h-0 flex-1"><FrontendEditor meta={meta} /></div>
+          </div>
+        )}
+
         {/* Canvas */}
-        <div ref={wrapperRef} className="relative min-w-0 flex-1 bg-background" onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}>
+        <div ref={wrapperRef} className={cn("relative min-w-0 flex-1 bg-background", view !== "steps" && "hidden")} onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}>
           <EdgeMarkers />
           <ReactFlow<WfNode>
             nodes={nodes}
@@ -262,6 +287,8 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
             <MiniMap pannable zoomable position="bottom-right" className="!m-3 !rounded-lg !border !bg-card [&_svg]:rounded-lg" maskColor="color-mix(in oklch, var(--background) 65%, transparent)" nodeColor={(n) => `var(--${toneFor((n as WfNode).data.wfType).text.includes("primary") ? "primary" : toneFor((n as WfNode).data.wfType).text.includes("success") ? "success" : toneFor((n as WfNode).data.wfType).text.includes("info") ? "info" : toneFor((n as WfNode).data.wfType).text.includes("warning") ? "warning" : "chart-5"})`} nodeStrokeWidth={0} nodeBorderRadius={6} />
             <Panel position="top-left" className="!m-3 flex items-center gap-1 rounded-lg border bg-card p-1 shadow-xs">
+              <SegmentedControl size="xs" options={[{ value: "steps", label: "Steps", icon: PanelsTopLeft }, { value: "frontend", label: "Front end", icon: MousePointerClick }]} value={view} onChange={setView} ariaLabel="Builder view" />
+              <span className="mx-0.5 h-4 w-px bg-border" />
               <Tip label="Undo" shortcut="⌘Z"><Button variant="ghost" size="icon-xs" onClick={() => store.getState().undo()} disabled={!past.length} aria-label="Undo"><Undo2 className="size-3.5" /></Button></Tip>
               <Tip label="Redo" shortcut="⌘⇧Z"><Button variant="ghost" size="icon-xs" onClick={() => store.getState().redo()} disabled={!future.length} aria-label="Redo"><Redo2 className="size-3.5" /></Button></Tip>
               <span className="mx-0.5 h-4 w-px bg-border" />
@@ -281,7 +308,7 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
             {nodes.length === 0 && (
               <Panel position="top-center" className="!mt-24 pointer-events-none">
                 <div className="rounded-lg border border-dashed bg-card/80 px-6 py-5 text-center text-sm text-muted-foreground shadow-xs">
-                  <Sparkles className="mx-auto mb-2 size-5" />
+                  <WorkflowIcon className="mx-auto mb-2 size-5" />
                   Drag a trigger from the palette to start, then add AI, data, logic and action steps.
                 </div>
               </Panel>

@@ -139,7 +139,10 @@ export function exportChronologyToTimeline(matterId: string, opts: { entries?: I
     if (dup) { result.skippedDuplicates++; continue; }
     const docs = e.evidence.map((ev) => intelDocuments().get(ev.docId));
     const provenance = makeProvenance({ surface: "intel.chronology", model: "analysis", confidence: e.confidence, sources: e.evidence.map((ev, i) => provenanceSource(docs[i] ?? null, ev)) });
-    provenance.verification = { status: "verified", checkedAt: now, method: "schema", supported: e.evidence.length, unsupported: 0, contradicted: 0, notes: "Dates and titles taken directly from the cited records" };
+    // Dates and titles are copied from the records, so the export is schema-checked; records that are themselves flagged
+    // unverified keep the event at "partially-verified" so the review queue does not present a sample date as confirmed.
+    const flaggedDocs = docs.filter((d) => d?.flags.some((f) => f.kind === "unverified" || f.kind === "low_confidence" || f.kind === "contradicted")).length;
+    provenance.verification = { status: flaggedDocs ? "partially-verified" : "verified", checkedAt: now, method: "schema", supported: e.evidence.length - flaggedDocs, unsupported: flaggedDocs, contradicted: 0, notes: flaggedDocs ? `${flaggedDocs} of ${e.evidence.length} cited records are flagged unverified or low-confidence` : "Dates and titles taken directly from the cited records" };
     const id = `tl_intel_${sha256(`${matterId}|${e.at}|${e.title.toLowerCase()}`).slice(0, 12)}`;
     const event: TimelineEvent = {
       id, matterId, date: e.at, precision: "day", title: e.title, description: e.detail, category: categoryFor(e.kind), significance: e.kind === "news" ? 2 : 3,

@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 import { applyEdgeChanges, applyNodeChanges, type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from "@xyflow/react";
-import type { Workflow, WorkflowEdge, WorkflowNode, WorkflowNodeType, WorkflowRunStep } from "@/lib/types/domain";
+import type { Workflow, WorkflowEdge, WorkflowFrontend, WorkflowNode, WorkflowNodeType, WorkflowRunStep } from "@/lib/types/domain";
 import { autoLayout, validateWorkflow, type GraphIssue } from "../../graph";
 import { defaultConfigFor, nodeSpec } from "../../registry";
 import { referencedStepIds } from "../../template-expr";
@@ -24,6 +24,9 @@ export interface WorkflowMeta {
   inputs: NonNullable<Workflow["inputs"]>;
   isTemplate: boolean;
   ownerId?: string;
+  /** The one-page start form (null: none; the run dialog is generated from `inputs`). */
+  frontend: WorkflowFrontend | null;
+  system?: boolean;
 }
 
 interface Snapshot { nodes: WfNode[]; edges: WfEdge[] }
@@ -115,7 +118,7 @@ function rewriteRefs(nodes: WfNode[], oldId: string, newId: string): WfNode[] {
 
 export const useBuilderStore = create<BuilderState>((set, get) => ({
   workflowId: "",
-  meta: { name: "", description: "", category: "operations", status: "draft", tags: [], inputs: [], isTemplate: false },
+  meta: { name: "", description: "", category: "operations", status: "draft", tags: [], inputs: [], isTemplate: false, frontend: null },
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -134,7 +137,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     const snap = fromDomain(w.nodes, w.edges);
     set({
       workflowId: w.id,
-      meta: { name: w.name, description: w.description ?? "", category: w.category, status: w.status, tags: w.tags ?? [], inputs: w.inputs ?? [], isTemplate: Boolean(w.isTemplate), ownerId: w.ownerId },
+      meta: { name: w.name, description: w.description ?? "", category: w.category, status: w.status, tags: w.tags ?? [], inputs: w.inputs ?? [], isTemplate: Boolean(w.isTemplate), ownerId: w.ownerId, frontend: w.frontend?.fields ? JSON.parse(JSON.stringify(w.frontend)) : null, system: Boolean(w.system) },
       nodes: snap.nodes,
       edges: snap.edges,
       selectedNodeId: null,

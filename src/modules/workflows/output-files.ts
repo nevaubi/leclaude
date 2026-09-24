@@ -63,6 +63,12 @@ export interface RenderedFile {
   libraryFolderId?: string;
 }
 
+/** Excel sheet names cannot contain : \ / ? * [ ] and are capped at 31 characters. */
+export function safeSheetName(name: string): string {
+  const clean = name.replace(/[:\\/?*[\]]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 31).trim();
+  return clean || "Sheet1";
+}
+
 export function safeFilename(title: string, ext: string): string {
   const base = title.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 120) || "output";
   return base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`;
@@ -167,7 +173,7 @@ export async function renderOutputFile(input: RenderFileInput): Promise<Rendered
       if (input.addToLibrary !== false) { const li = fileLibraryItem(input, r, "file"); r.libraryItemId = li.id; r.libraryFolderId = li.parentId; }
       return r;
     }
-    const wb = workbookFromTable(table.name, table.header, table.rows.slice(1));
+    const wb = workbookFromTable(safeSheetName(table.name), table.header, table.rows.slice(1));
     const doc = createOfficeDoc({ kind: "sheet", title, content: wb, matterId: input.matterId, folderId: input.folderId, tags: input.tags, meta: docMeta });
     const bytes = exportXlsx(wb);
     const b = putBlob(bytes, mime, filename, { ...blobMeta, docId: doc.id });

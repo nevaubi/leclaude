@@ -194,7 +194,8 @@ describe("sweep", () => {
     await sweep({ providers: p, network: false });
     expect(hasFlag(intelDocuments().get(a.doc.id)!, "stale")).toBe(false);
     intelInsights().put({ id: "iins_test", kind: "alert", scope: { entityIds: [] }, title: "3M settled", summary: "3M agreed to pay $10.3 billion.", data: {}, evidence: [{ docId: "idoc_seed_news_3m_settlement" }], provenance: makeProvenance({ surface: "test", confidence: 0.9 }), confidence: 0.9, status: "verified", flags: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    const v = await verifyInsights({ limit: 5 });
+    // Target the test insight by id: the analysis seed also stores its own insights, which would widen the candidate set.
+    const v = await verifyInsights({ insightIds: ["iins_test"] });
     expect(v).toMatchObject({ checked: 0, skipped: 1, reason: "no_api_key" });
   });
 });

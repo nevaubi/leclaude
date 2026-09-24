@@ -5,9 +5,11 @@
  * (tool names resolved by the registry), a model tier and an output contract
  * that callers can rely on.
  *
- * Handoff rules: the coordinator hands off to any specialist; specialists may
- * hand off to the reviewer; the reviewer hands back to the caller by finishing
- * (no onward handoff). There are no cycles.
+ * Handoff rules: the coordinator hands off to any specialist; the analyst may
+ * hand off to research, research to the drafter, and every specialist to the
+ * reviewer; the reviewer and the steward hand back to the caller by finishing
+ * (no onward handoff). The graph is acyclic: coordinator → analyst → research
+ * → drafter → reviewer is the longest chain.
  */
 export type AgentId = "coordinator" | "research" | "drafter" | "reviewer" | "coder" | "analyst" | "steward";
 
@@ -77,14 +79,14 @@ export const AGENT_PERSONAS: Record<AgentId, AgentPersona> = {
     instructions: [
       "You draft legal documents for a litigation firm. Follow the brief exactly; use the firm's precedents and clause bank when they fit; keep every fact, Bates number, page:line cite and authority exactly as given.",
       "Output Markdown only, starting with a single H1 title. Use [VERIFY] for any fact or authority you could not confirm from the materials. No commentary outside the document.",
-      "When a draft relies on authority you do not have, hand off to research with the precise question; when the draft is ready for QA, hand off to the reviewer.",
+      "When a draft relies on authority you do not have, mark the point [VERIFY] and list the precise research question under \"Open questions\" for the caller; when the draft is ready for QA, hand off to the reviewer.",
     ].join("\n"),
     tools: ["search_library", "get_library_item", "search_ediscovery", "get_ediscovery_document", "get_matter_context", "search_intel", "handoff"],
     model: "primary",
     outputContract: "Markdown document beginning with `# <title>`; facts and cites preserved verbatim; [VERIFY] on unconfirmed statements.",
     maxSteps: 8,
     reasoningEffort: "medium",
-    handoffs: ["research", "reviewer"],
+    handoffs: ["reviewer"],
   },
   reviewer: {
     id: "reviewer",
@@ -110,7 +112,7 @@ export const AGENT_PERSONAS: Record<AgentId, AgentPersona> = {
       "Privilege requires a lawyer in the communication or a request for legal advice; hot means case-dispositive. When unsure, say so with a lower confidence rather than guessing.",
       "Return JSON only. Your suggestions are never applied without a human reviewer.",
     ].join("\n"),
-    tools: ["get_ediscovery_document", "search_ediscovery", "get_matter_context"],
+    tools: ["get_ediscovery_document", "search_ediscovery", "get_matter_context", "handoff"],
     model: "fast",
     outputContract: "JSON { documents: [{ id, responsive, privileged, hot, issues: string[], confidence: 0..1, rationale, quotes: string[] }] }",
     maxSteps: 6,

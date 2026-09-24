@@ -14,6 +14,6 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
   const system = listWorkflows({ template: false, system: true });
   const stats = workflowStats();
   const recentRuns = listRuns({ limit: 8 }).runs;
-  const initialTab = tab === "templates" || tab === "mine" || tab === "runs" || tab === "system" ? tab : undefined;
+  const initialTab = tab === "templates" || tab === "mine" || tab === "runs" || tab === "system" ? (tab as "templates" | "mine" | "runs" | "system") : undefined;
   return <WorkflowsGallery templates={templates} mine={mine} system={system} stats={stats} recentRuns={recentRuns} initialTab={initialTab} />;
 }

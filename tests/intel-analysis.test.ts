@@ -346,6 +346,9 @@ describe("insights", () => {
     const afff = all.filter((i) => i.scope.matterId === AFFF);
     expect(afff.length).toBeGreaterThan(1);
     expect(all.every((i) => i.provenance.surface === "intel.analysis" && i.provenance.verification?.method === "schema")).toBe(true);
+    // Deterministic analyses never claim model verification: the badge reads source-backed / partially verified until the claims sweep runs with a key.
+    expect(all.every((i) => i.provenance.verification?.status === "unverified" || i.provenance.verification?.status === "partially-verified")).toBe(true);
+    expect(all.filter((i) => i.flags.some((f) => f.kind === "unverified")).every((i) => i.provenance.verification?.status === "partially-verified" && (i.provenance.verification?.unsupported ?? 0) > 0)).toBe(true);
     expect(all.filter((i) => i.status === "published").every((i) => i.evidence.length > 0 && i.confidence >= CONFIDENCE_GATE)).toBe(true);
     expect(analysisStatus().lastRun).toBeTruthy();
   });

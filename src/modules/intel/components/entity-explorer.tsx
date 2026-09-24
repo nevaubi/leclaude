@@ -137,6 +137,7 @@ export function EntityExplorer({ initial, userId, status, sources, initialParams
               </span>
             )}
             noun="entity"
+            summary={false}
             total={items.length}
             ariaLabel="Entities"
             empty={<div className="p-6 text-center text-[12px] text-muted-foreground">No entities match these filters.</div>}

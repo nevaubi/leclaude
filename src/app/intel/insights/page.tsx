@@ -5,7 +5,7 @@ import { aiConfig } from "@/lib/ai/config";
 import { currentUser } from "@/lib/current-user";
 import { db } from "@/lib/db";
 import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
-import { analysisStatus, listInsights } from "@/modules/intel/analysis/insights";
+import { analysisStatus, getInsight, listInsights } from "@/modules/intel/analysis/insights";
 import { InsightsView } from "@/modules/intel/components/insights-view";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageTopbar icon={<Radar />} title="Intelligence" context={`Insights · ${status.insights.published} published · ${status.insights.flagged} flagged · ${status.insights.draft} draft`} />
-      <InsightsView initial={list.insights} matters={matters} userId={me.id} hasKey={aiConfig().hasKey} status={status} openId={typeof sp.insight === "string" ? sp.insight : undefined} />
+      <InsightsView initial={list.insights} matters={matters} userId={me.id} hasKey={aiConfig().hasKey} status={status} openId={typeof sp.insight === "string" && getInsight(sp.insight) ? sp.insight : undefined} />
     </div>
   );
 }

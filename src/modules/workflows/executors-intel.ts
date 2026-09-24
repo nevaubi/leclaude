@@ -39,9 +39,12 @@ const intelFetch: Executor = async (x) => {
   const adapter = str(c.adapter).trim();
   if (!sourceId && !adapter) throw new StepError("Choose a source id or an adapter.", "no_source");
   const r = await fetchSource({ sourceId: sourceId || undefined, adapter: sourceId ? undefined : adapter, config: parseJsonMaybe(c.config), name: `${x.workflow.name} › ${x.node.label}`, mode: str(c.mode) === "enqueue" ? "enqueue" : "run", maxDocs: c.maxDocs ? num(c.maxDocs, 100) : undefined, since: c.since ? str(c.since) : undefined, signal: x.signal, log: x.log });
-  if (r.status === "failed" || r.status === "escalated") {
+  const mode = str(c.mode) === "enqueue" ? "enqueue" : "run";
+  // A job that failed, was escalated, or was re-queued by the intel steward for a later retry (network / rate limit)
+  // fails this step so the workflow steward can re-run it or escalate; an enqueued job is reported as queued.
+  if (r.status === "failed" || r.status === "escalated" || (mode === "run" && r.status !== "succeeded" && r.errors.length > 0)) {
     const first = r.errors[0];
-    throw new StepError(`Source ${r.sourceName} ${r.status}${first ? `: ${first.message}` : ""}`, first?.code ?? "source_failed");
+    throw new StepError(`Source ${r.sourceName} ${r.status === "queued" ? "failed and was re-queued" : r.status}${first ? `: ${first.message}` : ""}`, first?.code ?? "source_failed");
   }
   return { output: { ...r, kinds: Array.from(new Set(r.docIds.map((id) => db().collection<{ id: string; kind: string }>("intel_documents").get(id)?.kind).filter(Boolean))) } };
 };

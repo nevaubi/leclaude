@@ -31,7 +31,8 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 function EndLabel(props: { x?: number; y?: number; value?: number | string; index?: number; count: number; color: string; text: string }) {
-  if (props.index !== props.count - 1 || props.x == null || props.y == null) return null;
+  // Only the last point is labelled, and only when the series ends above zero (flat series would pile up on the baseline; the legend names them).
+  if (props.index !== props.count - 1 || props.x == null || props.y == null || !Number(props.value)) return null;
   return <text x={props.x + 6} y={props.y} dy={4} fontSize={10.5} className="fill-foreground" style={{ paintOrder: "stroke", stroke: "var(--background)", strokeWidth: 3 }}>{props.text}</text>;
 }
 
@@ -76,14 +77,14 @@ export function SeriesChart({ months, series, anomalies = [], height = 220, kind
                 <Bar dataKey={folded[0].label} fill={seriesColor(0)} radius={[3, 3, 0, 0]} maxBarSize={22} isAnimationActive={false} />
               </BarChart>
             ) : (
-              <LineChart data={rows} margin={{ top: 8, right: 64, bottom: 0, left: -12 }}>
+              <LineChart data={rows} margin={{ top: 8, right: 96, bottom: 0, left: -12 }}>
                 <CartesianGrid vertical={false} stroke="var(--line-quiet)" />
                 <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={24} />
                 <YAxis {...axis} allowDecimals={false} width={40} />
                 <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)" }} />
                 {folded.map((s, i) => (
-                  <Line key={s.label} type="monotone" dataKey={s.label} stroke={seriesColor(i)} strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--background)" }} isAnimationActive={false}>
-                    {!single && i < 4 && <LabelList dataKey={s.label} content={(p) => <EndLabel {...(p as { x?: number; y?: number; value?: number | string; index?: number })} count={rows.length} color={seriesColor(i)} text={s.label.length > 22 ? `${s.label.slice(0, 20)}…` : s.label} />} />}
+                  <Line key={s.label} type="linear" dataKey={s.label} stroke={seriesColor(i)} strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--background)" }} isAnimationActive={false}>
+                    {!single && i < 4 && <LabelList dataKey={s.label} content={(p) => <EndLabel {...(p as { x?: number; y?: number; value?: number | string; index?: number })} count={rows.length} color={seriesColor(i)} text={s.label.length > 18 ? `${s.label.slice(0, 16)}…` : s.label} />} />}
                   </Line>
                 ))}
                 {anomalies.map((a, i) => <ReferenceDot key={i} x={monthLabel(a.anomaly.t)} y={a.anomaly.v} r={5} fill="none" stroke="var(--destructive)" strokeWidth={1.5} ifOverflow="discard" />)}

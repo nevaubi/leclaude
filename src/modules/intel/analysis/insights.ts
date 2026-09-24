@@ -70,9 +70,19 @@ export function composeInsight(input: ComposeInput): IntelInsight {
   const confidence = Math.max(0, Math.min(1, Number(input.confidence.toFixed(2))));
   const provenance = makeProvenance({ surface: "intel.analysis", model: "analysis", confidence, sources: evidence.map(provenanceSourceFor) });
   provenance.generatedAt = now;
-  provenance.verification = { status: "verified", checkedAt: now, method: "schema", supported: evidence.length, unsupported: 0, contradicted: 0, notes: "Computed deterministically from the cited records; re-verified by the sweep when a model key exists." };
   const flags: IntelFlag[] = [...(input.flags ?? [])];
   const unverifiedDocs = evidence.filter((ev) => intelDocuments().get(ev.docId)?.flags.some((f) => f.kind === "unverified" || f.kind === "low_confidence")).length;
+  // Deterministic analyses are source-backed by construction but not model-verified: the badge says so until the
+  // sweep re-checks the summary against the evidence chunks with a key (steward.verifyInsights → method "claims").
+  provenance.verification = {
+    status: unverifiedDocs ? "partially-verified" : "unverified",
+    checkedAt: now,
+    method: "schema",
+    supported: evidence.length - unverifiedDocs,
+    unsupported: unverifiedDocs,
+    contradicted: 0,
+    notes: unverifiedDocs ? `${unverifiedDocs} of ${evidence.length} cited records are themselves flagged unverified or low-confidence; the claims sweep re-verifies when a model key exists.` : "Computed deterministically from the cited records; the claims sweep re-verifies the summary when a model key exists.",
+  };
   if (unverifiedDocs && !flags.some((f) => f.kind === "unverified")) flags.push({ kind: "unverified", note: `${unverifiedDocs} of ${evidence.length} cited records carry an unverified or low-confidence flag`, at: now, by: "analysis" });
   if (confidence < CONFIDENCE_GATE && !flags.some((f) => f.kind === "low_confidence")) flags.push({ kind: "low_confidence", note: `Confidence ${(confidence * 100).toFixed(0)}% is below the ${(CONFIDENCE_GATE * 100).toFixed(0)}% gate`, at: now, by: "analysis" });
   const publishable = confidence >= CONFIDENCE_GATE && evidence.length > 0;

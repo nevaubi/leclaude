@@ -15,13 +15,26 @@ import { ActivityBars } from "./activity-chart";
 import { chronologyKindLabel, groupByMonth } from "./models";
 import { BodySection, ConfidenceText, DateText, DocLink, EntityLink, FlagList, MethodNote } from "./shared";
 
+/** One line for a nested attribute value: scalars as-is, objects as their string fields ("U.S. District Judge · D.S.C. · 2010–"). */
+function describeValue(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v !== "object") return String(v);
+  const o = v as Record<string, unknown>;
+  const parts = ["title", "name", "court", "role", "position", "label"].map((k) => o[k]).filter((x): x is string => typeof x === "string" && x.trim() !== "");
+  const from = typeof o.dateStart === "string" ? o.dateStart.slice(0, 4) : typeof o.from === "string" ? o.from.slice(0, 4) : undefined;
+  const to = typeof o.dateEnd === "string" ? o.dateEnd.slice(0, 4) : typeof o.to === "string" ? o.to.slice(0, 4) : undefined;
+  if (from || to) parts.push(`${from ?? ""}–${to ?? ""}`);
+  if (parts.length) return parts.join(" · ");
+  return Object.values(o).filter((x) => typeof x === "string" || typeof x === "number").map(String).join(" · ").slice(0, 120);
+}
+
 function attributeItems(attrs: Record<string, unknown>): { label: string; value: React.ReactNode; mono?: boolean }[] {
   const skip = new Set(["seeded", "demo"]);
   const label = (k: string) => k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).replace(/\bId\b/, "id").replace(/Cfr/, "CFR").replace(/Usc/, "U.S.C.").replace(/Mdl/, "MDL").replace(/Ndc/, "NDC");
   return Object.entries(attrs).filter(([k, v]) => !skip.has(k) && v != null && v !== "" && !(Array.isArray(v) && !v.length)).slice(0, 14).map(([k, v]) => {
     if (k === "transfereeCourt" || k === "courtId") return { label: label(k), value: typeof v === "string" ? COURT_NAMES[v] ?? v : String(v) };
-    if (Array.isArray(v)) return { label: label(k), value: v.map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(", ") };
-    if (typeof v === "object") return { label: label(k), value: JSON.stringify(v).slice(0, 120), mono: true };
+    if (Array.isArray(v)) return { label: label(k), value: v.map(describeValue).filter(Boolean).join("; ") };
+    if (typeof v === "object") return { label: label(k), value: describeValue(v) };
     return { label: label(k), value: String(v), mono: /id$|number|ndc|cite/i.test(k) };
   });
 }
