@@ -116,10 +116,24 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
   const Icon = hit ? SOURCE_ICON[hit.source] : ScrollText;
   const external = result?.url ?? hit?.url;
   const isExternal = external ? /^https?:/.test(external) : false;
+  const contentRef = React.useRef<HTMLDivElement>(null);
 
   return (
     <Sheet open={p.open} onOpenChange={p.onOpenChange}>
-      <SheetContent side="right" width="max-w-3xl" className="p-0 gap-0">
+      <SheetContent
+        ref={contentRef}
+        side="right"
+        width="max-w-3xl"
+        className="p-0 gap-0 outline-none"
+        // Focus the sheet itself rather than its first button: a focused button opens its tooltip, and the
+        // tooltip then swallows the first Escape so the drawer would not close.
+        onOpenAutoFocus={(e) => { e.preventDefault(); contentRef.current?.focus(); }}
+        onKeyDown={(e) => {
+          const t = e.target as HTMLElement | null;
+          if (!hit || e.metaKey || e.ctrlKey || e.altKey || (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))) return;
+          if (e.key === "c") { e.preventDefault(); copyCite(); }
+        }}
+      >
         {hit && (
           <>
             <div className="shrink-0 border-b px-5 pb-3 pt-4 pr-12">

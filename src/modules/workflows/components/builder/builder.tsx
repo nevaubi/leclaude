@@ -257,8 +257,7 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
             deleteKeyCode={["Backspace", "Delete"]}
             multiSelectionKeyCode="Shift"
             selectionKeyCode="Shift"
-            proOptions={{ hideAttribution: true }}
-            className="[&_.react-flow__attribution]:hidden"
+            className="[&_.react-flow__attribution]:rounded-tl-md [&_.react-flow__attribution]:bg-background/80 [&_.react-flow__attribution]:text-[9px] [&_.react-flow__attribution]:text-muted-foreground"
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
             <MiniMap pannable zoomable position="bottom-right" className="!m-3 !rounded-lg !border !bg-card [&_svg]:rounded-lg" maskColor="color-mix(in oklch, var(--background) 65%, transparent)" nodeColor={(n) => `var(--${toneFor((n as WfNode).data.wfType).text.includes("primary") ? "primary" : toneFor((n as WfNode).data.wfType).text.includes("success") ? "success" : toneFor((n as WfNode).data.wfType).text.includes("info") ? "info" : toneFor((n as WfNode).data.wfType).text.includes("warning") ? "warning" : "chart-5"})`} nodeStrokeWidth={0} nodeBorderRadius={6} />

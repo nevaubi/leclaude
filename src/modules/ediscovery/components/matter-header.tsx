@@ -22,9 +22,10 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
   const deadline = stats?.productionDeadline;
   const dl = deadline ? deadlineLabel(deadline.daysLeft) : null;
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 overflow-x-auto border-b bg-card/40 px-4 no-scrollbar" aria-label="Matter summary">
-      <h1 className="w-auto min-w-[120px] max-w-[24vw] shrink-0 truncate text-[13px] font-semibold tracking-tight xl:max-w-[30vw]" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
-      {matter?.stage && <Chip tone="muted" title={`Stage: ${matter.stage}`} className="hidden max-w-[200px] shrink xl:inline-flex">{matter.stage}</Chip>}
+    <header className="flex h-10 shrink-0 items-center gap-2 overflow-hidden border-b bg-card/40 px-4" aria-label="Matter summary">
+      {/* The title is the only flexible item: it shrinks (and truncates) before anything else so the Details control on the right always stays reachable. */}
+      <h1 className="min-w-[120px] max-w-[24vw] shrink truncate text-[13px] font-semibold tracking-tight xl:max-w-[30vw]" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
+      {matter?.stage && <Chip tone="muted" title={`Stage: ${matter.stage}`} className="hidden max-w-[200px] shrink-0 2xl:inline-flex">{matter.stage}</Chip>}
       <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden />
       {loading && !stats ? (
         <Skeleton className="h-4 w-56" />
@@ -43,7 +44,7 @@ export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, o
             <Tip label={`${deadline.label} · ${new Date(deadline.date + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}`}>
               <span className="flex shrink-0 items-center gap-1.5 text-[12px]">
                 <CalendarClock className={cn("size-3.5", dl.tone === "destructive" ? "text-destructive" : dl.tone === "warning" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")} />
-                <span className="hidden max-w-[180px] truncate text-muted-foreground xl:inline">{deadline.label}</span>
+                <span className="hidden max-w-[140px] truncate text-muted-foreground xl:inline">{deadline.label}</span>
                 <Chip tone={dl.tone}>{dl.label}</Chip>
               </span>
             </Tip>

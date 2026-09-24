@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RelativeTime } from "@/components/ui/relative-time";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Markdown } from "@/components/ai/markdown";
+import { TrustBadge } from "@/components/ai/trust-badge";
+import type { Provenance } from "@/lib/integrity/types";
 import { OFFICE_KIND_LABEL } from "@/modules/office/shared/types";
 import type { LibraryItem, PracticeArea } from "@/lib/types/domain";
 import { PRACTICE_AREAS, TYPE_LABEL, type LibraryItemDetail, type LibraryItemView } from "../types";
@@ -249,10 +251,13 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 function AiSummary({ id, aiConfigured }: { id: string; aiConfigured: boolean }) {
   const [busy, setBusy] = React.useState(false);
   const [summary, setSummary] = React.useState<string | null>(null);
+  // POST /api/library/ai {action: "summarize"} → { summary, cached, provenance? } (verified against the item's own text).
+  const [provenance, setProvenance] = React.useState<Provenance | undefined>(undefined);
   const [noKey, setNoKey] = React.useState(!aiConfigured);
+  React.useEffect(() => { setSummary(null); setProvenance(undefined); }, [id]);
   const run = async () => {
     setBusy(true);
-    try { const r = await api<{ summary: string; cached: boolean }>("/api/library/ai", { method: "POST", json: { action: "summarize", id } }); setSummary(r.summary); setNoKey(false); if (r.cached) toast.info("Showing the cached summary"); }
+    try { const r = await api<{ summary: string; cached: boolean; provenance?: Provenance }>("/api/library/ai", { method: "POST", json: { action: "summarize", id } }); setSummary(r.summary); setProvenance(r.provenance && typeof r.provenance === "object" && Array.isArray(r.provenance.sources) ? r.provenance : undefined); setNoKey(false); if (r.cached) toast.info("Showing the cached summary"); }
     catch (e) { if (isNoKeyError(e)) setNoKey(true); else toast.error("Summary failed", { description: (e as Error).message }); }
     finally { setBusy(false); }
   };
@@ -260,11 +265,17 @@ function AiSummary({ id, aiConfigured }: { id: string; aiConfigured: boolean }) 
     <section className="rounded-lg border">
       <header className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
         <Sparkles className="size-4 text-primary" /><div className="text-sm font-medium">AI summary</div>
+        {summary && <TrustBadge provenance={provenance} compact={!provenance} />}
         <div className="flex-1" />
         <Button size="xs" variant="secondary" onClick={run} disabled={busy}>{busy ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />} {summary ? "Regenerate" : "Summarize this item"}</Button>
       </header>
       <div className="px-3 py-2 text-sm">
-        {summary ? <Markdown compact>{summary}</Markdown> : noKey ? (
+        {summary ? (
+          <>
+            <Markdown compact>{summary}</Markdown>
+            {provenance?.review?.status === "pending" && <p className="mt-2 text-[11px] text-warning-foreground dark:text-warning">Awaiting review{provenance.review.note ? ` — ${provenance.review.note.toLowerCase()}` : ""}. Confirm against the item before relying on it.</p>}
+          </>
+        ) : noKey ? (
           <div className="flex items-start gap-2 text-xs text-muted-foreground"><KeyRound className="mt-0.5 size-3.5 shrink-0 text-warning" /><span>OpenAI key required. Add <code className="font-mono">OPENAI_API_KEY</code> in <Link href="/settings#ai" className="text-primary underline">Settings</Link> to summarize, auto-tag and ask the library.</span></div>
         ) : <p className="text-xs text-muted-foreground">Get a 5-bullet brief: what it is, key dates and authorities, when to use it, and what to watch out for.</p>}
       </div>

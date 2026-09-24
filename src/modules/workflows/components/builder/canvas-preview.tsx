@@ -64,7 +64,6 @@ function PreviewFlow({ onNodeSelect }: { onNodeSelect?: (id: string) => void }) 
         nodesConnectable={false}
         elementsSelectable={Boolean(onNodeSelect)}
         onNodeClick={(_e, n) => onNodeSelect?.(n.id)}
-        proOptions={{ hideAttribution: true }}
         zoomOnScroll={false}
         panOnScroll
       >

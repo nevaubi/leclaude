@@ -309,21 +309,25 @@ export function SegmentedControl<T extends string>({ options, value, onChange, c
 
 export interface PanelTab<T extends string> { id: T; label: string; icon?: IconLike; count?: number; shortcut?: string; hint?: string }
 
-/** Underlined tab strip for right-hand panels (Assistant | Comments (2) | Charts | Page Setup). */
+/**
+ * Underlined tab strip for right-hand panels (Assistant | Comments (2) | Charts | Page Setup).
+ * The strip is a container: in a narrow panel the icons drop first, then the padding tightens, so
+ * four labelled tabs plus the close button always fit without truncating the last label.
+ */
 export function PanelTabs<T extends string>({ tabs, value, onChange, onClose, className, compact }: { tabs: PanelTab<T>[]; value: T | null; onChange: (t: T) => void; onClose?: () => void; className?: string; compact?: boolean }) {
   return (
-    <div role="tablist" className={cn("flex h-9 shrink-0 items-center border-b px-1", className)}>
+    <div role="tablist" className={cn("@container flex h-9 shrink-0 items-center border-b px-1", className)}>
       {tabs.map((t) => {
         const active = t.id === value;
         return (
-          <button key={t.id} role="tab" aria-selected={active} onClick={() => onChange(t.id)} title={t.hint ?? (t.shortcut ? `${t.label} (${t.shortcut})` : t.label)} className={cn("relative flex h-full items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium transition-colors cursor-pointer", compact ? "px-2" : "px-2.5", active ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary" : "text-muted-foreground hover:text-foreground")}>
-            {t.icon && <t.icon className="size-3.5" />}
-            {t.label}
+          <button key={t.id} role="tab" aria-selected={active} onClick={() => onChange(t.id)} title={t.hint ?? (t.shortcut ? `${t.label} (${t.shortcut})` : t.label)} className={cn("relative flex h-full min-w-0 items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium transition-colors cursor-pointer", compact ? "px-2" : "px-1.5 @min-[440px]:px-2.5", active ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary" : "text-muted-foreground hover:text-foreground")}>
+            {t.icon && <t.icon className={cn("size-3.5 shrink-0", !compact && "hidden @min-[480px]:inline")} />}
+            <span className="truncate">{t.label}</span>
             {t.count ? <span className={cn("rounded-full px-1.5 text-[10.5px] tabular", active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{t.count}</span> : null}
           </button>
         );
       })}
-      {onClose && <><div className="flex-1" /><button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Close panel"><X className="size-3.5" /></button></>}
+      {onClose && <><div className="min-w-1 flex-1" /><button onClick={onClose} className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Close panel"><X className="size-3.5" /></button></>}
     </div>
   );
 }

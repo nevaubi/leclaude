@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { audit } from "./audit";
+import { gateReview } from "./provenance";
 import { listProvenance, updateProvenance, getProvenanceRecord } from "./store";
 import type { Provenance, ProvenanceKind, ReviewQueueItem } from "./types";
 
@@ -68,7 +69,19 @@ function syncNativeProvenance(kind: ProvenanceKind, id: string, patch: (p: Prove
   }
 }
 
-function recordExists(kind: ProvenanceKind, id: string): boolean {
+/** Gate an existing AI record for human review (sidecar + native record), e.g. from an integrity scan. */
+export function gateForReview(kind: ProvenanceKind, id: string, note: string): boolean {
+  const rec = getProvenanceRecord(kind, id);
+  if (!rec) return false;
+  const patch = (p: Provenance): Provenance => (p.review?.status === "approved" || p.review?.status === "rejected" ? p : gateReview(p, note));
+  updateProvenance(kind, id, patch);
+  syncNativeProvenance(kind, id, patch);
+  audit("ai.verify", { kind, id, label: rec.title, matterId: rec.matterId }, { method: "human", decision: "gated", note });
+  return true;
+}
+
+/** True when the record a provenance sidecar describes still exists (deleted records drop out of the queue and the scans). */
+export function recordExists(kind: ProvenanceKind, id: string): boolean {
   const d = db();
   switch (kind) {
     case "timeline.event": return d.timeline.has(id);
@@ -83,6 +96,7 @@ function recordExists(kind: ProvenanceKind, id: string): boolean {
     case "library.summary":
     case "library.autotag":
     case "library.compare": return d.library.has(id.split(":")[0]);
+    case "research": return d.collection<{ id: string }>("search_runs").has(id);
     default: return true;
   }
 }

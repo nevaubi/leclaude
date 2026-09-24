@@ -1,6 +1,5 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Loader2, PanelLeftOpen, PanelRightOpen, Scale, Search as SearchIcon, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +23,7 @@ import { RightPanel } from "./right-panel";
 import { ThreadRail, type ThreadSummary } from "./thread-rail";
 import { ReaderDrawer } from "./reader-drawer";
 import { CiteChecker } from "./citecheck";
+import { searchUrl, urlAction } from "./url-sync";
 
 export interface ResearchPageProps {
   initialQuery?: string;
@@ -85,20 +85,24 @@ export function ResearchPage(props: ResearchPageProps) {
     } catch { /* offline */ }
   }, []);
 
-  const research = useResearch({ onRunDone: () => void refresh(), onError: (m) => { if (!/OPENAI_API_KEY/i.test(m)) toast.error("Research run failed", { description: m }); } });
+  // URL sync. `handledQ` / `handledThread` remember what this page already ran or opened, because
+  // useSearchParams lags history.replaceState by a render: without them, opening a thread right after
+  // a composer question re-ran that question into a fresh (duplicate) thread.
+  const handledQRef = React.useRef<string | null>(null);
+  const handledThreadRef = React.useRef<string | null>(null);
+  const setUrl = React.useCallback((next: { q?: string | null; thread?: string | null; tool?: Tool }) => {
+    if (next.q) handledQRef.current = next.q;
+    if (next.thread) handledThreadRef.current = next.thread;
+    try { window.history.replaceState(null, "", searchUrl(next)); } catch { /* ignore */ }
+  }, []);
+
+  const research = useResearch({
+    // Once a run has a thread, the URL points at the thread so a reload reopens it instead of re-running the question.
+    onRunDone: (r) => { setUrl({ thread: r.threadId }); void refresh(); },
+    onError: (m) => { if (!/OPENAI_API_KEY/i.test(m)) toast.error("Research run failed", { description: m }); },
+  });
   const { state, sourceList } = research;
   const streaming = research.streaming;
-
-  // URL sync without re-triggering the ?q= auto-run below.
-  const lastAutoRef = React.useRef<string | null>(null);
-  const setUrl = React.useCallback((next: { q?: string | null; thread?: string | null; tool?: Tool }) => {
-    const sp = new URLSearchParams();
-    if (next.tool === "citecheck") sp.set("tool", "citecheck");
-    else if (next.thread) sp.set("thread", next.thread);
-    else if (next.q) sp.set("q", next.q);
-    lastAutoRef.current = next.q ?? null;
-    try { window.history.replaceState(null, "", sp.toString() ? `/search?${sp}` : "/search"); } catch { /* ignore */ }
-  }, []);
 
   // ---- pins ↔ thread sync (debounced) ----
   const pinsSyncRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,9 +145,9 @@ export function ResearchPage(props: ResearchPageProps) {
   openThreadRef.current = openThread;
 
   React.useEffect(() => {
-    if (!hydrated || tool === "citecheck") return;
-    if (urlThread && urlThread !== state.threadId && !lastAutoRef.current) { lastAutoRef.current = `thread:${urlThread}`; void openThreadRef.current(urlThread); return; }
-    if (urlQ.trim() && lastAutoRef.current !== urlQ) { lastAutoRef.current = urlQ; askRef.current(urlQ, undefined, { newThread: true }); }
+    const action = urlAction({ hydrated, tool, urlQ, urlThread, handledQ: handledQRef.current, handledThread: handledThreadRef.current, activeThreadId: state.threadId });
+    if (action.type === "openThread") { handledThreadRef.current = action.id; void openThreadRef.current(action.id); }
+    else if (action.type === "ask") { handledQRef.current = action.q; askRef.current(action.q, undefined, { newThread: true }); }
   }, [hydrated, urlQ, urlThread, tool, state.threadId]);
 
   const newThread = React.useCallback(() => { research.reset(); replacePins([]); setQuery(""); setTool("research"); setUrl({}); inputRef.current?.focus(); }, [research, replacePins, setUrl]);
@@ -238,8 +242,7 @@ export function ResearchPage(props: ResearchPageProps) {
         <button onClick={() => switchTool("citecheck")} className={cn("flex h-6 items-center gap-1 rounded px-2 text-[11px] cursor-pointer", tool === "citecheck" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground")}><ShieldCheck className="size-3" /> Citation checker</button>
       </div>
       <div className="flex-1" />
-      {currentMatter && <Badge variant="outline" className="hidden shrink-0 xl:inline-flex">{currentMatter.shortName}</Badge>}
-      {!props.aiConfigured && <Tip label="Synthesis and verification are disabled until OPENAI_API_KEY is set"><Link href="/settings#ai" className="shrink-0"><Badge variant="warning" className="cursor-pointer">No OpenAI key</Badge></Link></Tip>}
+      {currentMatter && <Tip label={currentMatter.caption ?? currentMatter.name}><Badge variant="outline" className="hidden shrink-0 xl:inline-flex">{currentMatter.shortName}</Badge></Tip>}
       {!railOpen && <Tip label="Show threads" shortcut="["><Button variant="ghost" size="icon-sm" onClick={() => setRailOpen(true)} aria-label="Show threads"><PanelLeftOpen className="size-4" /></Button></Tip>}
       {!panelOpen && tool === "research" && <Tip label="Show research panel" shortcut="]"><Button variant="ghost" size="icon-sm" onClick={() => setPanelOpen(true)} aria-label="Show research panel"><PanelRightOpen className="size-4" /></Button></Tip>}
     </TopbarSlot>

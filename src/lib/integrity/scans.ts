@@ -3,8 +3,10 @@ import { nanoid } from "nanoid";
 import { db, type Database } from "@/lib/db";
 import { indexStats } from "@/lib/ai/vector-store";
 import { contentHash } from "./hash";
-import { audit } from "./audit";
-import type { ScanFinding, ScanReport, ScanResult, ScanSeverity } from "./types";
+import { audit, verifyAuditChain } from "./audit";
+import { gateForReview, recordExists } from "./review";
+import { deleteProvenance, listProvenance } from "./store";
+import { CONFIDENCE_GATE, type ProvenanceKind, type ScanFinding, type ScanReport, type ScanResult, type ScanSeverity } from "./types";
 
 export interface IntegrityScan {
   id: string;
@@ -162,6 +164,49 @@ registerScan({
     for (const m of d.matters.all()) for (const kd of m.keyDates ?? []) { checked++; const has = d.events.findOne((e) => e.matterId === m.id && e.startsAt.slice(0, 10) === kd.date); if (!has && kd.date >= today) findings.push({ severity: "low", title: `${m.shortName}: "${kd.label}" (${kd.date}) has no calendar event`, detail: "Key dates render as read-only deadlines; add an event to assign attendees and notes.", target: { kind: "matter", id: m.id, href: `/?section=calendar` } }); }
     for (const t of d.tasks.all()) { checked++; if (t.status !== "done" && t.dueAt && t.dueAt < today) { const days = Math.round((Date.now() - new Date(t.dueAt).getTime()) / 86400000); if (days > 30) findings.push({ severity: "low", title: `Task "${t.title}" is ${days} days overdue`, detail: `due ${t.dueAt}`, target: { kind: "task", id: t.id, href: `/?task=${t.id}` } }); } }
     return { checked, findings };
+  },
+});
+
+/** Split a sidecar id (`kind:recordId`) at the first colon; record ids may themselves contain colons. */
+function splitProvenanceId(id: string): { kind: ProvenanceKind; recordId: string } {
+  const i = id.indexOf(":");
+  return { kind: id.slice(0, i) as ProvenanceKind, recordId: id.slice(i + 1) };
+}
+
+registerScan({
+  id: "ai-provenance",
+  name: "AI provenance & review",
+  description: "AI-produced records: provenance left behind by deleted records, contradicted or low-confidence output that is not gated for review, reviews pending for more than 7 days, and the audit log hash chain.",
+  run: () => {
+    const findings: Omit<ScanFinding, "id" | "scanId">[] = [];
+    const now = Date.now();
+    let checked = 0;
+    for (const r of listProvenance({ limit: 10_000 })) {
+      checked++;
+      const target = { kind: "provenance", id: r.id, href: r.href };
+      if (!recordExists(r.kind, r.recordId)) { findings.push({ severity: "low", title: `Provenance left behind by a deleted ${r.kind} record`, detail: `${r.recordId} — ${r.title}`, target, fixable: true }); continue; }
+      const p = r.provenance;
+      const decided = p.review?.status === "approved" || p.review?.status === "rejected";
+      const pending = p.review?.status === "pending";
+      if (!decided && !pending && p.verification?.status === "contradicted") findings.push({ severity: "high", title: `Contradicted AI output is not gated for review`, detail: `${r.title} — ${p.verification.contradicted} claim(s) contradicted by the sources`, target, fixable: true });
+      else if (!decided && !pending && p.confidence != null && p.confidence < CONFIDENCE_GATE) findings.push({ severity: "medium", title: `Low-confidence AI output (${Math.round(p.confidence * 100)}%) is not gated for review`, detail: r.title, target, fixable: true });
+      else if (!decided && !pending && p.sources.length === 0 && p.verification?.status !== "verified" && r.kind !== "home.brief") findings.push({ severity: "info", title: "AI output with no recorded sources", detail: `${r.title} (${r.kind})`, target, fixable: true });
+      if (pending) {
+        const days = Math.floor((now - new Date(p.review?.at ?? p.generatedAt).getTime()) / 86400000);
+        if (days > 7) findings.push({ severity: "low", title: `AI record awaiting review for ${days} days`, detail: `${r.title} (${r.kind})`, target });
+      }
+    }
+    const chain = verifyAuditChain();
+    checked += chain.checked;
+    if (!chain.ok) findings.push({ severity: "high", title: "Audit log hash chain is broken", detail: `First broken event: ${chain.brokenAt}. Events after it can no longer be trusted as untampered.`, target: { kind: "audit", id: chain.brokenAt ?? "" } });
+    return { checked, findings };
+  },
+  fix: (_d, f) => {
+    if (f.target?.kind !== "provenance") return false;
+    const { kind, recordId } = splitProvenanceId(f.target.id);
+    if (!recordExists(kind, recordId)) return deleteProvenance(kind, recordId);
+    const note = /contradicted/i.test(f.title) ? "Contradicted by sources" : /confidence/i.test(f.title) ? "Below confidence gate" : "Not source-backed";
+    return gateForReview(kind, recordId, note);
   },
 });
 

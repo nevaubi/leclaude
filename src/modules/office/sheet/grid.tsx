@@ -126,15 +126,22 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
     return { xs, ys, pages: (xs.length + 1) * (ys.length + 1) };
   }, [workbook.pageSetup, sheet, colSize, rowSize, colStarts, rowStarts]);
 
+  // Status-bar "Rows a–b": the rows actually on screen (frozen rows included, overscan excluded), so the
+  // label matches the row headers a user can see rather than the virtualizer's render window.
   const layoutRef = React.useRef("");
   React.useEffect(() => {
-    const visible = rowItems.filter((r) => r.size > 0 && r.index >= fr);
-    const info = { firstRow: (visible[0]?.index ?? 0) + 1, lastRow: (visible[visible.length - 1]?.index ?? 0) + 1, pages: pageInfo.pages };
+    const el = scrollRef.current;
+    const top = el ? el.scrollTop + COL_HEADER_HEIGHT + Hf : 0;
+    const bottom = el ? el.scrollTop + el.clientHeight : Number.POSITIVE_INFINITY;
+    const onScreen = rowItems.filter((r) => r.size > 0 && (r.index < fr || (r.end > top && r.start < bottom)));
+    const fallback = rowItems.filter((r) => r.size > 0);
+    const rows = onScreen.length ? onScreen : fallback;
+    const info = { firstRow: (rows[0]?.index ?? 0) + 1, lastRow: (rows[rows.length - 1]?.index ?? 0) + 1, pages: pageInfo.pages };
     const key = `${info.firstRow}-${info.lastRow}-${info.pages}`;
     if (key === layoutRef.current) return;
     layoutRef.current = key;
     onLayout?.(info);
-  }, [rowItems, fr, pageInfo.pages, onLayout]);
+  }, [rowItems, fr, Hf, pageInfo.pages, onLayout]);
 
   // ---------------------------------------------------------------- geometry helpers
   const cellRect = React.useCallback((row: number, col: number) => {
@@ -173,8 +180,11 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
     const { x, y, w, h } = cellRect(row, col);
     const viewL = el.scrollLeft + ROW_HEADER_WIDTH + Wf, viewT = el.scrollTop + COL_HEADER_HEIGHT + Hf;
     const viewR = el.scrollLeft + el.clientWidth, viewB = el.scrollTop + el.clientHeight;
-    if (col >= fc) { if (x < viewL) el.scrollLeft = x - ROW_HEADER_WIDTH - Wf; else if (x + w > viewR) el.scrollLeft = x + w - el.clientWidth; }
-    if (row >= fr) { if (y < viewT) el.scrollTop = y - COL_HEADER_HEIGHT - Hf; else if (y + h > viewB) el.scrollTop = y + h - el.clientHeight; }
+    // A cell larger than the viewport (a merged title row, a tall wrapped row) is aligned to its start,
+    // never scrolled to its far edge — otherwise opening a sheet at A1 lands on the last columns of the title.
+    const viewW = el.clientWidth - ROW_HEADER_WIDTH - Wf, viewH = el.clientHeight - COL_HEADER_HEIGHT - Hf;
+    if (col >= fc) { if (x < viewL || w >= viewW) el.scrollLeft = Math.max(0, x - ROW_HEADER_WIDTH - Wf); else if (x + w > viewR) el.scrollLeft = x + w - el.clientWidth; }
+    if (row >= fr) { if (y < viewT || h >= viewH) el.scrollTop = Math.max(0, y - COL_HEADER_HEIGHT - Hf); else if (y + h > viewB) el.scrollTop = y + h - el.clientHeight; }
   }, [cellRect, Wf, Hf, fc, fr]);
 
   React.useEffect(() => { scrollIntoView(selection.active.row, selection.active.col); }, [selection.active, scrollIntoView]);

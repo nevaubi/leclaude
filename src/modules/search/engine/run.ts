@@ -70,6 +70,9 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   // Sources from earlier turns in the thread stay citable (their excerpts stand in for text); new reads replace them.
   let pool: ResearchSource[] = thread.sources.map((s) => ({ ...s, laneIds: [] }));
   for (const s of pool) if (s.read && s.excerpt) texts.set(s.id, s.excerpt);
+  // Prior-turn sources are stored without their text. Re-read them through the 24h cache (in parallel with the
+  // lanes) so a follow-up answer is verified against full text rather than a 600-character excerpt.
+  const rehydration = deps.hasKey ? rehydratePriorSources(pool, texts, deps, signal) : Promise.resolve(0);
   const laneSummaries: NonNullable<ResearchMessage["lanes"]> = [];
   let agents = 0;
   let rounds = 0;
@@ -112,6 +115,7 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
 
       // --- synthesis (primary model, lane sources only) ----------------------
       if (noKey) { break; }
+      await rehydration;
       send({ type: "synthesis.start", round, sources: numbered.length });
       const j = jurisdictionByKey(settings.jurisdiction);
       const courts = resolveCourts(settings.jurisdiction, settings.courts);
@@ -230,8 +234,12 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
 
   // --- provenance, persistence, audit --------------------------------------------
   const finalNumbered = numbered.map((s) => (cited.has(s.n ?? -1) ? s : { ...s, n: undefined }));
-  const provenance = assembleProvenance({ sources: finalNumbered, verification, instructions: synthesisInstructions || undefined, question, model: deps.model, citationMismatches: citationChecks?.filter((c) => !c.matched).length ?? 0 });
-  try { attachProvenance({ kind: "research", recordId: runId, matterId: settings.matterId ?? undefined, title: question.slice(0, 140), href: `/search?thread=${thread.id}`, provenance }); } catch (e) { console.warn("[research] provenance sidecar failed", (e as Error).message); }
+  // Provenance describes an answer. A retrieval-only turn (no key, synthesis failed) has nothing to attest or review,
+  // so it carries no provenance and never lands in the review queue.
+  const provenance = answer && !noKey ? assembleProvenance({ sources: finalNumbered, verification, instructions: synthesisInstructions || undefined, question, model: deps.model, citationMismatches: citationChecks?.filter((c) => !c.matched).length ?? 0 }) : undefined;
+  if (provenance && !aborted()) {
+    try { attachProvenance({ kind: "research", recordId: runId, matterId: settings.matterId ?? undefined, title: question.slice(0, 140), href: `/search?thread=${thread.id}`, provenance }); } catch (e) { console.warn("[research] provenance sidecar failed", (e as Error).message); }
+  }
   const stats: RunStats = { sources: pool.length, read: pool.filter((s) => s.read).length, rounds, agents, durationMs: Date.now() - startedAt };
   const message: ResearchMessage = {
     id: `msg_${nanoid(8)}`,
@@ -283,16 +291,41 @@ function toSummary(v: VerificationResult, sources: ResearchSource[]): Verificati
   };
 }
 
+/** The proposition inside a question, for deterministic follow-ups ("Is X available in Y?" → "X available in Y"). */
+export function questionTopic(question: string): string {
+  let t = question.replace(/\s+/g, " ").replace(/[?!.\s]+$/, "").trim();
+  t = t.replace(/^(is|are|was|were|does|do|did|can|could|may|might|must|should|would|will|has|have|had)\s+(?:(?:a|an|the)\s+)?/i, "");
+  t = t.replace(/^(what|which|when|how|whether|why|where|who)\s+(?:(?:is|are|does|do|did|can|must|should|would|will)\s+)?(?:(?:the|a|an)\s+)?/i, "");
+  if (!t) return question.trim();
+  t = t.charAt(0).toLowerCase() + t.slice(1);
+  return t.length > 140 ? t.slice(0, 139).trimEnd() + "…" : t;
+}
+
 /** Deterministic follow-ups when the model is unavailable: bound to jurisdiction and matter. */
 export function fallbackFollowUps(question: string, settings: SearchSettings, matter: Matter | null): string[] {
-  const j = jurisdictionByKey(settings.jurisdiction).label.split(" (")[0];
-  const topic = question.replace(/\?+$/, "").trim();
+  const j = jurisdictionByKey(settings.jurisdiction);
+  const label = j.label.split(" (")[0];
+  const where = j.key === "all-federal" ? "in the federal courts" : j.group === "State" ? `in ${label}` : `in the ${label}`;
+  const topic = questionTopic(question);
   const out = [
-    `What is the strongest contrary authority in the ${j} on: ${topic}?`,
-    matter ? `How does the record in ${matter.shortName} (documents and depositions) bear on this question?` : `Which statutes or regulations change the analysis of: ${topic}?`,
-    `What standard applies at the motion-to-dismiss versus summary-judgment stage for: ${topic}?`,
+    `What is the strongest contrary authority ${where} on ${topic}?`,
+    matter ? `How does the record in ${matter.shortName} (documents and depositions) bear on ${topic}?` : `Which statutes or regulations bear on ${topic}?`,
+    `What standard governs ${topic} at the motion-to-dismiss stage versus summary judgment?`,
   ];
   return out.map((s) => (s.length > 220 ? s.slice(0, 219) + "…" : s));
+}
+
+/** Re-read prior-turn sources (cached reads are instant; misses keep the stored excerpt). Returns how many were rehydrated. */
+async function rehydratePriorSources(pool: ResearchSource[], texts: Map<string, string>, deps: EngineDeps, signal: AbortSignal | undefined, limit = 8): Promise<number> {
+  const stale = pool.filter((s) => s.read && s.hit.readRef && (texts.get(s.id)?.length ?? 0) <= 600).slice(0, limit);
+  let n = 0;
+  await Promise.all(stale.map(async (s) => {
+    try {
+      const r = await deps.read(s.hit.readRef!, { title: s.title, signal });
+      if (r.text && r.text.length > (texts.get(s.id)?.length ?? 0)) { texts.set(s.id, r.text); n++; }
+    } catch { /* keep the excerpt */ }
+  }));
+  return n;
 }
 
 /** Persist the run in `search_runs` (history), keeping the legacy fields the seeds and history UI rely on. */

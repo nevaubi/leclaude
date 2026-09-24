@@ -181,29 +181,6 @@
   .tabular { font-variant-numeric: tabular-nums; }
   .text-balance { text-wrap: balance; }
   .mask-fade-b { mask-image: linear-gradient(to bottom, black 85%, transparent); }
-  /* Typography scale: UI (13px), reading (14px serif-friendly), meta (12px). */
-  .text-ui { font-size: var(--text-ui); line-height: 1.45; }
-  .text-reading { font-size: var(--text-reading); line-height: 1.6; }
-  .text-meta { font-size: var(--text-meta); line-height: 1.4; }
-  .text-eyebrow { font-size: 10.5px; line-height: 1.2; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
-  /* 8px rhythm helpers */
-  .rhythm > * + * { margin-top: var(--rhythm); }
-  .rhythm-2 > * + * { margin-top: calc(var(--rhythm) * 2); }
-  .rhythm-3 > * + * { margin-top: calc(var(--rhythm) * 3); }
-  /* Quiet chip: small rounded, thin border, no fill unless toned */
-  .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: var(--radius-chip); border: 1px solid var(--border); font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--muted-foreground); background: transparent; }
-  .chip-solid { background: var(--muted); border-color: transparent; }
-  /* Section header: one line, 36px, thin bottom rule */
-  .section-header { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border-bottom: 1px solid var(--border); }
-  /* Quiet surface for cards that should recede (news, updates) */
-  .surface-quiet { background: var(--surface-quiet); }
-  /* Focus ring for keyboard-first rows */
-  .row-focus:focus-visible { outline: none; box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--ring) 55%, transparent); }
-  /* Timeline rail for vertical step lists */
-  .timeline-rail { position: relative; }
-  .timeline-rail::before { content: ""; position: absolute; left: 9px; top: 12px; bottom: 12px; width: 1px; background: var(--border); }
-  /* Sticky action row inside scroll regions */
-  .sticky-actions { position: sticky; top: 0; z-index: 5; background: color-mix(in oklch, var(--card) 92%, transparent); backdrop-filter: blur(6px); }
 }
 
 /* ProseMirror base (editors extend in their own css) */
@@ -218,14 +195,12 @@
 .react-flow { --xy-background-color: var(--background); }
 
 /* ------------------------------------------------------------------
-   Litigator UI scale (additive). 13px UI, 14px reading, 12px meta; an
-   8px rhythm; quiet surfaces. Pages opt in with these utilities so the
-   modules converge on one look without touching the tokens above.
+   Litigator UI scale. 13px UI, 14px reading, 12px meta; an 8px rhythm;
+   quiet surfaces, one chip, one section header. Pages opt in with these
+   utilities so the modules converge on one look without touching the
+   tokens above. (Single source: earlier duplicate blocks were merged.)
    ------------------------------------------------------------------ */
 :root {
-  --text-ui: 13px;
-  --text-reading: 14px;
-  --text-meta: 12px;
   --space-1: 8px;
   --space-2: 16px;
   --space-3: 24px;
@@ -238,14 +213,20 @@
   .text-ui { font-size: var(--text-ui); line-height: 1.4; }
   .text-reading { font-size: var(--text-reading); line-height: 1.6; }
   .text-meta { font-size: var(--text-meta); line-height: 1.35; }
+  .text-eyebrow { font-size: 10.5px; line-height: 1.2; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
   .reading-serif { font-family: var(--font-serif); font-size: var(--text-reading); line-height: 1.65; }
+  /* 8px rhythm helpers */
+  .rhythm > * + * { margin-top: var(--rhythm); }
+  .rhythm-2 > * + * { margin-top: calc(var(--rhythm) * 2); }
+  .rhythm-3 > * + * { margin-top: calc(var(--rhythm) * 3); }
   /* One quiet header pattern shared by cards, panes and analysis tabs. */
   .section-header { display: flex; align-items: center; gap: 8px; min-height: 40px; padding-inline: 12px; border-bottom: 1px solid var(--border); }
   .section-title { font-size: var(--text-ui); font-weight: 600; letter-spacing: -0.01em; }
   .section-count { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); background: var(--muted); border-radius: 999px; padding: 1px 6px; }
   /* Small rounded chip used for statuses, counts and filters (no shouting). */
-  .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding-inline: 7px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--foreground); }
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding-inline: 7px; border-radius: var(--radius-chip); border: 1px solid var(--border); background: var(--card); font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--foreground); }
   .chip-quiet { border-color: transparent; background: var(--muted); color: var(--muted-foreground); }
+  .chip-solid { background: var(--muted); border-color: transparent; }
   .chip-accent { border-color: color-mix(in oklch, var(--primary) 30%, transparent); background: color-mix(in oklch, var(--primary) 9%, transparent); color: var(--primary); }
   .chip-warning { border-color: color-mix(in oklch, var(--warning) 45%, transparent); background: color-mix(in oklch, var(--warning) 16%, transparent); color: var(--warning-foreground); }
   .dark .chip-warning { color: var(--warning); }
@@ -256,9 +237,12 @@
   .timeline-rail::before { content: ""; position: absolute; left: 7px; top: 12px; bottom: 12px; width: 1px; background: var(--border); }
   /* Sticky action rows keep the primary decision one glance away. */
   .sticky-actions { position: sticky; top: 0; z-index: 5; background: color-mix(in oklch, var(--card) 92%, transparent); backdrop-filter: blur(6px); }
+  /* Quiet surface for cards that should recede (news, updates). */
   .surface-quiet { background: color-mix(in oklch, var(--muted) 55%, transparent); }
+  /* Focus rings for keyboard-first rows and controls. */
   .focus-ring { outline: none; }
   .focus-ring:focus-visible { box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 55%, transparent); }
+  .row-focus:focus-visible { outline: none; box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--ring) 55%, transparent); }
 }
 
 /* Dark-mode contrast: warning text on tinted backgrounds and hairlines read better a notch lighter. */

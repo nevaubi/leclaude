@@ -14,8 +14,8 @@ export function LivePanel({ lanes, sources, streaming }: { lanes: LaneView[]; so
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
         <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground"><Monitor className="size-5" /></span>
-        <div className="text-sm font-medium">Live research browser</div>
-        <div className="max-w-[260px] text-xs text-muted-foreground">Each research lane opens its own pane here; pages, screenshots and computations appear as they are read.</div>
+        <div className="text-sm font-medium">Live research lanes</div>
+        <div className="max-w-[260px] text-xs text-muted-foreground">Each lane gets a card here: the searches it runs, every source it finds or reads, and its note to the synthesis.</div>
       </div>
     );
   }

@@ -7,7 +7,8 @@ import { mergeSources, numberSources, sourceFromHit, sourceKey, normalizeUrl, to
 import { crossCheckCitations, markUnverifiedCitations, normCite } from "@/modules/search/engine/citecheck";
 import { decideCoverage, broaden, claimToQuery } from "@/modules/search/engine/coverage";
 import { assembleProvenance } from "@/modules/search/engine/provenance";
-import { runResearch, fallbackFollowUps } from "@/modules/search/engine/run";
+import { runResearch, fallbackFollowUps, questionTopic } from "@/modules/search/engine/run";
+import { getProvenance } from "@/lib/integrity/store";
 import { getThread, listThreadSummaries, setThreadPins } from "@/modules/search/engine/threads";
 import { cacheKey, getCached, putCached, sweepCache } from "@/modules/search/engine/cache";
 import type { EngineDeps } from "@/modules/search/engine/deps";
@@ -363,6 +364,35 @@ describe("research run (fakes, no key needed)", () => {
     expect(c.types()).not.toContain("synthesis.start");
     expect(searchRuns().get("run_t_4")?.aiStatus).toBe("no_api_key");
     expect(fallbackFollowUps("Is X preempted?", settings(), null)[0]).toContain("4th Circuit");
+  });
+
+  it("keeps retrieval-only turns out of the review queue and re-reads prior-turn sources before a follow-up", async () => {
+    const deps = fakeDeps({ hasKey: false });
+    const res = await runResearch({ question: "no key provenance", settings: settings({ sources: ["caselaw"] }), runId: "run_t_7" }, () => {}, undefined, deps);
+    expect(res.message.content).toBe("");
+    expect(res.message.provenance).toBeUndefined(); // nothing to attest, so no TrustBadge and no queue entry
+    expect(getProvenance("research", "run_t_7")).toBeNull();
+    expect(res.stats.read).toBeGreaterThanOrEqual(2);
+    // Follow-up in the same thread with a key, scoped to regulations only: the opinions read last turn are
+    // rehydrated through deps.read (cache) even though no lane touches case law this time.
+    const deps2 = fakeDeps();
+    const res2 = await runResearch({ question: "follow up", settings: settings({ sources: ["regulations"] }), runId: "run_t_8", threadId: res.threadId }, () => {}, undefined, deps2);
+    expect(deps2.calls).toContain("read:opinion:112120");
+    expect(deps2.calls).toContain("read:opinion:4381234");
+    expect(res2.message.provenance?.surface).toBe("research");
+    expect(getProvenance("research", "run_t_8")?.model).toBe("gpt-test");
+  });
+
+  it("writes readable deterministic follow-ups", () => {
+    expect(questionTopic("Is the government contractor defense available to an AFFF manufacturer?")).toBe("government contractor defense available to an AFFF manufacturer");
+    expect(questionTopic("What is the clear-evidence standard after Albrecht?")).toBe("clear-evidence standard after Albrecht");
+    expect(questionTopic("Does TSCA § 8(e) apply?")).toBe("TSCA § 8(e) apply");
+    const f = fallbackFollowUps("Is X preempted?", settings({ jurisdiction: "all-federal" }), null);
+    expect(f[0]).toBe("What is the strongest contrary authority in the federal courts on X preempted?");
+    expect(f[1]).toMatch(/^Which statutes or regulations bear on X preempted\?$/);
+    expect(fallbackFollowUps("Is X preempted?", settings({ jurisdiction: "california-state" }), null)[0]).toContain("in California on");
+    expect(fallbackFollowUps("Is X preempted?", settings(), null)[0]).toContain("in the 4th Circuit on");
+    expect(fallbackFollowUps("Is X preempted?", settings(), null).join(" ")).not.toContain("the All federal");
   });
 
   it("shows the not-source-backed banner when nothing was retrieved", async () => {

@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Markdown } from "@/components/ai/markdown";
+import { TrustBadge } from "@/components/ai/trust-badge";
+import type { Provenance } from "@/lib/integrity/types";
 import type { LibraryItemView } from "../types";
 import { fillClause, prettyVariable, variableSpecs } from "../clauses";
 import { api, isNoKeyError } from "./api";
@@ -135,12 +137,13 @@ function CompareSection({ item, standard, aiConfigured }: { item: LibraryItemVie
   const [mode, setMode] = React.useState<"standard" | "paste">(standard ? "standard" : "paste");
   const [text, setText] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const [result, setResult] = React.useState<{ analysis: string; mode: "ai" | "heuristic"; standardName?: string } | null>(null);
+  // POST /api/library/ai {action: "compare"} → { analysis, mode, standardName?, provenance? } (AI analyses are claim-verified against both clauses).
+  const [result, setResult] = React.useState<{ analysis: string; mode: "ai" | "heuristic"; standardName?: string; provenance?: Provenance } | null>(null);
   const [noKey, setNoKey] = React.useState(false);
   const run = async () => {
     setBusy(true); setResult(null); setNoKey(false);
     try {
-      const r = await api<{ analysis: string; mode: "ai" | "heuristic"; standardName?: string }>("/api/library/ai", { method: "POST", json: { action: "compare", id: item.id, text: mode === "paste" ? text : undefined } });
+      const r = await api<{ analysis: string; mode: "ai" | "heuristic"; standardName?: string; provenance?: Provenance }>("/api/library/ai", { method: "POST", json: { action: "compare", id: item.id, text: mode === "paste" ? text : undefined } });
       setResult(r);
     } catch (e) {
       if (isNoKeyError(e)) setNoKey(true); else toast.error("Comparison failed", { description: (e as Error).message });
@@ -170,7 +173,7 @@ function CompareSection({ item, standard, aiConfigured }: { item: LibraryItemVie
         {noKey && <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">OpenAI key required. Add <code className="font-mono">OPENAI_API_KEY</code> to <code className="font-mono">.env.local</code> and restart to enable AI comparison.</div>}
         {result && (
           <div className="rounded-md border bg-card p-3">
-            <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground"><Badge variant={result.mode === "ai" ? "success" : "muted"}>{result.mode === "ai" ? "AI analysis" : "Heuristic"}</Badge>{result.standardName && <span>vs. {result.standardName}</span>}</div>
+            <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground"><Badge variant={result.mode === "ai" ? "success" : "muted"}>{result.mode === "ai" ? "AI analysis" : "Heuristic"}</Badge>{result.standardName && <span>vs. {result.standardName}</span>}{result.mode === "ai" && <TrustBadge provenance={result.provenance && Array.isArray(result.provenance.sources) ? result.provenance : undefined} compact={!result.provenance} />}</div>
             <Markdown compact>{result.analysis}</Markdown>
           </div>
         )}

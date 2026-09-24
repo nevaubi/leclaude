@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
-import "@/lib/integrity/bootstrap";
+import { ensureScheduledScans } from "@/lib/integrity/bootstrap";
 import { decideReview, listReviewQueue, reviewCounts } from "@/lib/integrity/review";
 import type { ProvenanceKind } from "@/lib/integrity/types";
 
@@ -11,6 +11,7 @@ export const runtime = "nodejs";
  * → { items: ReviewQueueItem[], counts: { pending, byKind } }
  */
 export async function GET(req: NextRequest) {
+  ensureScheduledScans();
   const p = req.nextUrl.searchParams;
   const matterId = p.get("matter") ?? p.get("matterId") ?? undefined;
   const status = (p.get("status") as "pending" | "approved" | "rejected" | "all" | null) ?? "pending";

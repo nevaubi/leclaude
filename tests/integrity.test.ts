@@ -4,6 +4,8 @@ import { audit, listAudit, verifyAuditChain } from "@/lib/integrity/audit";
 import { runScans, fixFinding, lastReport } from "@/lib/integrity/scans";
 import { makeProvenance, isTrusted, trustLabel } from "@/lib/integrity/provenance";
 import { contentHash, promptHash } from "@/lib/integrity/hash";
+import { getProvenanceRecord, putProvenance } from "@/lib/integrity/store";
+import { crossCheckCitations } from "@/lib/ai/verify";
 
 beforeAll(() => { resetSqlite(); db(); });
 
@@ -41,6 +43,48 @@ describe("integrity scans", () => {
     expect(f).toBeTruthy();
     expect(fixFinding(f!.id).ok).toBe(true);
     expect(d.edocs.get("ed_dup_b")?.isDuplicateOf ?? d.edocs.get("ed_dup_a")?.isDuplicateOf).toBeTruthy();
+  });
+});
+
+describe("ai provenance scan", () => {
+  it("flags orphaned sidecars, ungated contradicted output and stale pending reviews, and fixes what it can", () => {
+    const d = db();
+    const ev = d.timeline.list({ limit: 1 })[0];
+    expect(ev).toBeTruthy();
+    const src = [{ kind: "document" as const, cite: "MFC-0041877" }];
+    putProvenance({ kind: "timeline.event", recordId: "tl_ghost_scan", title: "ghost event", provenance: makeProvenance({ surface: "test", sources: src, confidence: 0.9 }) });
+    putProvenance({ kind: "timeline.event", recordId: ev.id, matterId: ev.matterId, title: ev.title, provenance: { ...makeProvenance({ surface: "test", sources: src, confidence: 0.9 }), verification: { status: "contradicted", checkedAt: new Date().toISOString(), method: "claims", supported: 0, unsupported: 0, contradicted: 2 } } });
+    const run = d.collection<{ id: string }>("search_runs").list({ limit: 1 })[0];
+    expect(run).toBeTruthy();
+    putProvenance({ kind: "research", recordId: run.id, title: "old answer", provenance: { ...makeProvenance({ surface: "research", sources: src, confidence: 0.3 }), generatedAt: new Date(Date.now() - 30 * 86400000).toISOString() } });
+
+    const report = runScans("manual", ["ai-provenance"]);
+    const findings = report.results[0].findings;
+    expect(report.results[0].error).toBeUndefined();
+    const ghost = findings.find((f) => f.target?.id === "timeline.event:tl_ghost_scan");
+    const contradicted = findings.find((f) => f.target?.id === `timeline.event:${ev.id}`);
+    const stale = findings.find((f) => f.target?.id === `research:${run.id}`);
+    expect(ghost?.severity).toBe("low");
+    expect(contradicted?.severity).toBe("high");
+    expect(stale?.title).toMatch(/awaiting review for \d+ days/);
+    expect(findings.some((f) => /hash chain/.test(f.title))).toBe(false);
+
+    expect(fixFinding(ghost!.id).ok).toBe(true);
+    expect(getProvenanceRecord("timeline.event", "tl_ghost_scan")).toBeNull();
+    expect(fixFinding(contradicted!.id).ok).toBe(true);
+    expect(getProvenanceRecord("timeline.event", ev.id)?.provenance.review).toEqual({ status: "pending", note: "Contradicted by sources" });
+    expect(runScans("manual", ["ai-provenance"]).results[0].findings.find((f) => f.target?.id === `timeline.event:${ev.id}` && f.severity === "high")).toBeUndefined();
+    expect(listAudit({ action: "ai.verify", targetId: ev.id })[0]?.meta?.decision).toBe("gated");
+  });
+});
+
+describe("record cite cross-check", () => {
+  it("does not mistake clock times for page:line cites", () => {
+    const c = crossCheckCitations("The call at 10:30 a.m. and the 2:15 PM meeting are noted at 24:05 and 31:2–31:9.", { pages: [24] });
+    expect(c.cites).toEqual(["24:5", "31:2", "31:9"]);
+    expect(c.unresolved).toEqual(["31:2", "31:9"]);
+    expect(c.text).toContain("10:30 a.m. and the 2:15 PM meeting");
+    expect(c.text).toContain("31:2–31:9 [VERIFY]");
   });
 });
 
