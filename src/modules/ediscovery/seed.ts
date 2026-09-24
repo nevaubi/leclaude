@@ -9,6 +9,7 @@ import { AFFF_DOCS_B } from "./seed-docs-afff-b";
 import { NORTHGATE_DOCS, NG_CUSTODIANS } from "./seed-docs-northgate";
 import { indexTextFor, templatePrivilegeDescription } from "./privilege";
 import { CODING_RULES_KEY, DEFAULT_CODING_RULES } from "./rules";
+import { seedAnalysis } from "./analysis/seed";
 
 /** Issue codes per matter (stable ids: ic_<matter-short>_<code>). */
 export const AFFF_ISSUE_CODES: IssueCode[] = [
@@ -79,6 +80,7 @@ export function seedEdiscovery(db: Database) {
   }
   // Keyword index (no embeddings without a key); synchronous when embed:false.
   void indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((d) => ({ id: d.id, text: indexTextFor(d), meta: { matterId: d.matterId, custodianId: d.custodianId, type: d.type, date: d.date, bates: d.bates } })), { embed: false }).catch((e) => console.error("[seed:ediscovery] index", e));
+  seedAnalysis(db);
 }
 
 /** Stable ids exported for other modules and tests. */
