@@ -20,7 +20,7 @@ import type { Deposition, DepositionQA } from "@/lib/types/domain";
 import { OBJECTION_RULINGS, QA_FLAGS, formatPageLine, formatRange, type AnalysisTabProps, type Designation, type DepositionSummary, type ObjectionRuling, type QAFlag } from "../types";
 import { resolvePageLine } from "../transcript";
 import { TranscriptViewer } from "./transcript-viewer";
-import { FLAG_STYLES, FlagBadge, ListSkeleton, NoKeyCallout, ObjectionBadge, AiLabel, AiButtonHint, formatShortDate, typingTarget, useNarrowViewport, OBJECTION_STYLES } from "./shared";
+import { FLAG_STYLES, FlagBadge, ListSkeleton, NoKeyCallout, ObjectionBadge, AiLabel, AiButtonHint, ProvenanceBadge, formatShortDate, typingTarget, useNarrowViewport, OBJECTION_STYLES } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useDeposition, useDepositions, useOverview, useTranscriptSearch, type DepositionDetail } from "./use-analysis-data";
 
 type SidePanel = "digest" | "designations" | "objections" | "exhibits" | "flags";
@@ -407,7 +407,7 @@ function DigestPanel({ dep, digesting, noKey, onRun, onJump }: { dep: Deposition
   return (
     <div className="space-y-4 p-3 text-[12.5px]">
       <section>
-        <h4 className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><Sparkles className="size-3" /> Summary</h4>
+        <h4 className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><Sparkles className="size-3" /> Summary <ProvenanceBadge record={d} compact={false} className="normal-case tracking-normal" /></h4>
         <p className="leading-relaxed">{withCites(d.summary)}</p>
       </section>
       {d.themes.length > 0 && <section><h4 className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Themes</h4><div className="flex flex-wrap gap-1">{d.themes.map((t) => <Badge key={t} variant="secondary" className="font-normal">{t}</Badge>)}</div></section>}

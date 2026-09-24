@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -10,7 +10,7 @@ import type { SearchRequest } from "../types";
 import { useReviewStore } from "./store";
 import { api, useSearch } from "./use-review-data";
 import { useReview } from "./review-page";
-import { SearchRail } from "./search-rail";
+import { SearchRail, SearchRailCollapsed } from "./search-rail";
 import { SearchBox } from "./search-box";
 import { DocTable } from "./doc-table";
 import { BulkBar } from "./bulk-bar";
@@ -127,8 +127,8 @@ export function ReviewTab() {
   };
 
   const fullscreen = s.fullscreen && !!s.openDocId;
-  // Below 1440px the rail (248px) plus list plus viewer plus coding panel do not fit, so the rail folds away
-  // automatically while a document is open (the user's persisted preference is left untouched).
+  // Below 1440px the rail (248px) plus list plus viewer plus coding panel do not fit, so the rail folds to its
+  // icon column automatically while a document is open (the user's persisted preference is left untouched).
   const narrow = useNarrowViewport(1440);
   const railCollapsed = hydrated && (s.railCollapsed || (narrow && !!s.openDocId));
 
@@ -136,9 +136,9 @@ export function ReviewTab() {
     <ReviewListContext.Provider value={listApi}>
       <div className="flex h-full min-h-0">
         {!fullscreen && (
-          <aside className={cn("relative hidden h-full shrink-0 flex-col border-r bg-sidebar/40 md:flex transition-[width]", railCollapsed ? "w-9" : "w-[248px]")} aria-label="Saved searches and filters">
+          <aside className={cn("relative hidden h-full shrink-0 flex-col border-r bg-sidebar/40 md:flex transition-[width]", railCollapsed ? "w-11" : "w-[248px]")} aria-label="Saved searches and filters">
             {railCollapsed ? (
-              <Tip label="Show saved searches and facets" side="right"><Button variant="ghost" size="icon-xs" className="mx-auto mt-2" onClick={() => s.setRailCollapsed(false)} aria-label="Expand rail"><PanelLeftOpen className="size-4" /></Button></Tip>
+              <SearchRailCollapsed onExpand={() => s.setRailCollapsed(false)} />
             ) : (
               <>
                 <SearchRail response={search.data} loading={search.loading && !search.data} />
@@ -149,7 +149,7 @@ export function ReviewTab() {
         )}
         <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
           {!fullscreen && (
-            <ResizablePanel defaultSize={s.openDocId ? "44" : "100"} minSize={340} className="flex min-w-0 flex-col">
+            <ResizablePanel defaultSize={s.openDocId ? "42" : "100"} minSize={340} className="flex min-w-0 flex-col">
               <SearchBox response={search.data} loading={search.loading} />
               <BulkBar hits={hits} onCode={bulk} />
               <DocTable hits={hits} loading={search.loading && !search.data} total={search.data?.total ?? 0} totalWorkspace={search.data?.totalWorkspace ?? 0} tookMs={search.data?.tookMs} semantic={!!search.data?.semantic} onLoadMore={search.loadMore} loadingMore={search.loadingMore} />
@@ -158,7 +158,7 @@ export function ReviewTab() {
           {s.openDocId && (
             <>
               {!fullscreen && <ResizableHandle withHandle />}
-              <ResizablePanel defaultSize={fullscreen ? "100" : "56"} minSize={fullscreen ? undefined : 420} className="min-w-0">
+              <ResizablePanel defaultSize={fullscreen ? "100" : "58"} minSize={fullscreen ? undefined : 420} className="min-w-0">
                 <DocViewer docId={s.openDocId} terms={search.data?.parsed.terms ?? []} onNavigate={move} onClose={() => s.setOpenDocId(null)} index={ids.indexOf(s.openDocId)} count={ids.length} />
               </ResizablePanel>
             </>

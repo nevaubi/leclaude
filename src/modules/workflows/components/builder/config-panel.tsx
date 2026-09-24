@@ -8,13 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Tip } from "@/components/ui/tooltip";
 import type { Workflow } from "@/lib/types/domain";
 import { getConfigValue, loopBodies, setConfigValue, upstreamOf } from "../../graph";
 import { NODE_TYPE_MAP, WORKFLOW_CATEGORIES, type FieldSpec } from "../../registry";
 import type { WorkflowMeta } from "../../hooks";
-import { NodeTypeIcon, SectionLabel, toneFor } from "../shared";
+import { NodeTypeIcon, toneFor } from "../shared";
 import { ConfigField, TagsInput, type FieldContext, type VariableGroup } from "./fields";
 import { InputsEditor } from "./inputs-editor";
 import { toDomainGraph, useBuilderStore } from "./store";
@@ -141,19 +140,14 @@ function NodeConfig({ nodeId, meta }: { nodeId: string; meta: WorkflowMeta | nul
             ))}
           </div>
         )}
-        <div className="px-3 py-3 space-y-4">
-          {[...groups.entries()].map(([g, fields]) => (
-            <div key={g} className="space-y-3">
-              {groups.size > 1 && <SectionLabel>{g}</SectionLabel>}
-              {fields.map((f) => (
-                <ConfigField key={f.key} spec={f} value={getConfigValue(config, f.key)} onChange={(v) => updateNodeConfig(node.id, (c) => setConfigValue(c, f.key, v))} ctx={ctx} />
-              ))}
-            </div>
-          ))}
-        </div>
-        <Separator />
-        <div className="px-3 py-3 space-y-2">
-          <SectionLabel>Output</SectionLabel>
+        {[...groups.entries()].map(([g, fields], i) => (
+          <PanelSection key={g} title={g === "Configuration" && groups.size === 1 ? "Configuration" : g} count={fields.length} first={i === 0}>
+            {fields.map((f) => (
+              <ConfigField key={f.key} spec={f} value={getConfigValue(config, f.key)} onChange={(v) => updateNodeConfig(node.id, (c) => setConfigValue(c, f.key, v))} ctx={ctx} />
+            ))}
+          </PanelSection>
+        ))}
+        <PanelSection title="Output">
           <div className="rounded-md border bg-muted/30 p-2 text-[11px]">
             <div className="font-mono text-muted-foreground">{spec?.outputShape}</div>
             <div className="mt-1.5 flex items-center gap-1.5">
@@ -163,9 +157,24 @@ function NodeConfig({ nodeId, meta }: { nodeId: string; meta: WorkflowMeta | nul
             </div>
             <div className="mt-1 text-[10.5px] text-muted-foreground">Reference this step from later steps with the expression above.</div>
           </div>
-        </div>
+        </PanelSection>
       </div>
     </>
+  );
+}
+
+/** Panel section: one clear header row (title · count) above its fields, a thin rule between sections. */
+function PanelSection({ title, count, children, first, right }: { title: React.ReactNode; count?: number; children: React.ReactNode; first?: boolean; right?: React.ReactNode }) {
+  return (
+    <section className={cn("px-3 pb-3", !first && "border-t")}>
+      <div className="flex h-9 items-center gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+        {count != null && <span className="rounded-full bg-muted px-1.5 text-[10px] tabular text-muted-foreground">{count}</span>}
+        <span className="flex-1" />
+        {right}
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
 
@@ -186,7 +195,7 @@ function WorkflowSettings({ meta }: { meta: WorkflowMeta | null }) {
         <p className="mt-0.5 text-[11px] text-muted-foreground">Select a step on the canvas to configure it.</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-        <div className="px-3 py-3 space-y-3">
+        <PanelSection title="Details" first>
           <div className="space-y-1">
             <Label className="text-[11px]">Name</Label>
             <Input value={wf.name} onChange={(e) => setMeta({ name: e.target.value })} className="h-8 text-xs" />
@@ -215,15 +224,11 @@ function WorkflowSettings({ meta }: { meta: WorkflowMeta | null }) {
             <Label className="text-[11px]">Tags</Label>
             <TagsInput value={wf.tags} onChange={(tags) => setMeta({ tags })} />
           </div>
-        </div>
-        <Separator />
-        <div className="px-3 py-3 space-y-2">
-          <SectionLabel right={<span className="text-[10px] normal-case tracking-normal">{trigger ? `Trigger: ${NODE_TYPE_MAP[trigger.data.wfType]?.label}` : "No trigger"}</span>}>Run inputs</SectionLabel>
+        </PanelSection>
+        <PanelSection title="Run inputs" count={wf.inputs.length} right={<span className="text-[10px] text-muted-foreground">{trigger ? `Trigger: ${NODE_TYPE_MAP[trigger.data.wfType]?.label}` : "No trigger"}</span>}>
           <InputsEditor value={wf.inputs} onChange={(inputs) => setMeta({ inputs })} />
-        </div>
-        <Separator />
-        <div className="px-3 py-3 space-y-2">
-          <SectionLabel right={<span className={cn("text-[10px] normal-case tracking-normal", errors.length ? "text-destructive" : "text-success")}>{errors.length ? `${errors.length} error(s)` : "Runnable"}</span>}>Validation</SectionLabel>
+        </PanelSection>
+        <PanelSection title="Validation" right={<span className={cn("text-[10px]", errors.length ? "text-destructive" : "text-success")}>{errors.length ? `${errors.length} error(s)` : "Runnable"}</span>}>
           {issues.length === 0 ? (
             <div className="flex items-center gap-1.5 text-[11px] text-success"><Check className="size-3.5" /> No issues. The graph is ready to run.</div>
           ) : (
@@ -236,7 +241,7 @@ function WorkflowSettings({ meta }: { meta: WorkflowMeta | null }) {
               ))}
             </div>
           )}
-        </div>
+        </PanelSection>
       </div>
     </>
   );

@@ -22,7 +22,7 @@ import type { DocRow, SearchResponse } from "../../types";
 import { TIMELINE_CATEGORIES, type AnalysisTabProps, type TimelineCategory, type TimelineFilters } from "../types";
 import { filterEvents, formatEventDate, sortEvents, sourceLabel } from "../chronology";
 import { TimelineSvg, CategoryLegend } from "./timeline-svg";
-import { AiButtonHint, AiLabel, CategoryChip, CiteChip, NoKeyCallout, formatShortDate } from "./shared";
+import { AiButtonHint, AiLabel, CategoryChip, CiteChip, NoKeyCallout, ProvenanceBadge, TabHeader, formatShortDate } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, useOpenTestimony, useOverview, useTimeline } from "./use-analysis-data";
 
 type Src = TimelineEvent["sources"][number];
@@ -66,24 +66,25 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
-        <Activity className="size-4 text-muted-foreground" />
-        <div className="text-sm font-semibold">Chronology</div>
-        {tl.data && <span className="text-xs text-muted-foreground tabular">{events.length} of {tl.data.total} events · {counts.verified} verified · {counts.disputed} disputed{counts.ai ? ` · ${counts.ai} AI-extracted` : ""}</span>}
-        <div className="flex-1" />
-        <Tip label="Toggle the visual timeline"><Button size="sm" variant="ghost" onClick={() => setShowChart((v) => !v)} className={cn(showChart && "bg-accent")}><CalendarRange className="size-4" /> <span className="hidden md:inline">Timeline</span></Button></Tip>
-        <AiButtonHint configured={aiConfigured}><Button size="sm" variant="outline" onClick={() => setExtractOpen(true)}><Sparkles className="size-4" /> Extract from documents</Button></AiButtonHint>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><Download className="size-4" /> Export <ChevronDown className="size-3.5 opacity-60" /></Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => downloadFile(`/api/ediscovery/analysis/timeline/export?matter=${encodeURIComponent(matterId)}&format=csv`)}><Download className="size-4" /> CSV</DropdownMenuItem>
-            <DropdownMenuItem onClick={exportWord}><FileText className="size-4" /> Word chronology</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" /> Add event</Button>
-      </div>
-
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-1.5">
+      <TabHeader
+        icon={Activity}
+        title="Chronology"
+        summary={tl.data ? `${events.length} of ${tl.data.total} events · ${counts.verified} verified · ${counts.disputed} disputed${counts.ai ? ` · ${counts.ai} AI-extracted` : ""}` : undefined}
+        actions={
+          <>
+            <Tip label="Toggle the visual timeline"><Button size="sm" variant="ghost" onClick={() => setShowChart((v) => !v)} className={cn(showChart && "bg-accent")} aria-pressed={showChart}><CalendarRange className="size-4" /> <span className="hidden md:inline">Timeline</span></Button></Tip>
+            <AiButtonHint configured={aiConfigured}><Button size="sm" variant="outline" onClick={() => setExtractOpen(true)}><Sparkles className="size-4" /> <span className="hidden lg:inline">Extract from documents</span><span className="lg:hidden">Extract</span></Button></AiButtonHint>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><Download className="size-4" /> <span className="hidden md:inline">Export</span> <ChevronDown className="size-3.5 opacity-60" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => downloadFile(`/api/ediscovery/analysis/timeline/export?matter=${encodeURIComponent(matterId)}&format=csv`)}><Download className="size-4" /> CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportWord}><FileText className="size-4" /> Word chronology</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" /> <span className="hidden md:inline">Add event</span><span className="md:hidden">Add</span></Button>
+          </>
+        }
+      >
         <ListFilter className="size-3.5 text-muted-foreground" />
         <CategoryLegend active={new Set(filters.categories ?? [])} onToggle={setCat} />
         <span className="mx-1 h-4 w-px bg-border" />
@@ -109,7 +110,7 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
           <Input value={filters.q ?? ""} onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value || undefined }))} placeholder="Search events, Bates…" className="h-7 w-[200px] pl-7 text-[11.5px]" aria-label="Search events" />
         </div>
         {hasFilters && <Button size="xs" variant="ghost" onClick={() => setFilters({ categories: [] })}><X className="size-3.5" /> Clear</Button>}
-      </div>
+      </TabHeader>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
         {showChart && (tl.loading && !tl.data ? <Skeleton className="h-[220px] shrink-0" /> : <TimelineSvg events={events} selectedId={selectedId} onSelect={setSelectedId} people={people} className="shrink-0" />)}
@@ -137,7 +138,7 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
                       <div className="flex items-start gap-2">
                         <span className="mt-1 inline-flex shrink-0 gap-px" title={`Significance ${e.significance}/5`}>{Array.from({ length: 5 }).map((_, i) => <span key={i} className={cn("h-2.5 w-1 rounded-sm", i < e.significance ? "bg-primary/70" : "bg-muted")} />)}</span>
                         <div className="min-w-0 break-words">
-                          <div className="font-medium leading-snug">{e.title}{e.createdBy === "ai" && <AiLabel className="ml-1.5 align-middle" />}</div>
+                          <div className="font-medium leading-snug">{e.title}{e.createdBy === "ai" && <AiLabel className="ml-1.5 align-middle" />}<ProvenanceBadge record={e} className="ml-1 align-middle" /></div>
                           {e.description && <div className="mt-0.5 line-clamp-2 text-[11.5px] text-muted-foreground">{e.description}</div>}
                           {e.personIds?.length ? <div className="mt-0.5 text-[10.5px] text-muted-foreground">{e.personIds.map((p) => people.get(p) ?? p).join(", ")}</div> : null}
                         </div>

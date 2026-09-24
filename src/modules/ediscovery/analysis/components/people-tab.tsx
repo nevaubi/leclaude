@@ -19,7 +19,7 @@ import type { Relationship } from "@/lib/types/domain";
 import { type AnalysisTabProps, type GraphNode, type KnowledgeMap } from "../types";
 import { RELATIONSHIP_LABELS } from "../graph";
 import { ForceGraph } from "./force-graph";
-import { AiButtonHint, AiLabel, CiteChip, ListSkeleton, NoKeyCallout, SeverityBadge, ConflictStatusBadge, CategoryChip, formatShortDate, tokenDot } from "./shared";
+import { AiButtonHint, AiLabel, CiteChip, ListSkeleton, NoKeyCallout, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, CategoryChip, formatShortDate, tokenDot } from "./shared";
 import { api, exportMarkdownToWord, isNoKey, useGraph, useKnowledgeMaps, useOpenTestimony, useOverview, usePerson } from "./use-analysis-data";
 import type { TimelineCategory } from "../types";
 
@@ -264,6 +264,7 @@ function KnowledgeMapDialog({ open, onOpenChange, matterId, aiConfigured, topics
               <div className="flex flex-wrap items-center gap-2">
                 {list.length > 1 && <Select value={active.id} onValueChange={setActiveId}><SelectTrigger size="sm" className="h-7 w-[280px]"><SelectValue /></SelectTrigger><SelectContent>{list.map((m) => <SelectItem key={m.id} value={m.id}>{m.topic} · {formatShortDate(m.createdAt.slice(0, 10))}</SelectItem>)}</SelectContent></Select>}
                 <div className="text-sm font-semibold">{active.topic}</div>
+                <ProvenanceBadge record={active} compact={false} />
                 <span className="flex-1" />
                 <Button size="xs" variant="outline" onClick={() => exportMarkdownToWord({ title: `Who knew what, when — ${active.topic}`, markdown: toMarkdown(active), matterId, tags: ["knowledge-map", "ediscovery"] })}><FileText className="size-3.5" /> Word</Button>
               </div>

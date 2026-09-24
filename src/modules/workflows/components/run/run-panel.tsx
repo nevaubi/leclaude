@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/ai/markdown";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusDot } from "@/components/ui/misc";
+import { TrustBadge } from "@/components/ai/trust-badge";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { executionPlan } from "../../graph";
 import { nodeSpec } from "../../registry";
@@ -16,6 +18,7 @@ import { apiJson, ApiError, useRunStream } from "../../hooks";
 import type { RunArtifact, WorkflowRunRecord } from "../../types";
 import { formatDuration, formatTokens, formatUsd, InlineAlert, NodeTypeIcon, RunStatusBadge, SectionLabel, StepStatusIcon, stepDuration, useNow } from "../shared";
 import { CopyButton, OutputViewer } from "./step-output";
+import { artifactProvenance, stepDotTone, stepSummary } from "./timeline-helpers";
 
 export interface RunPanelProps {
   runId: string;
@@ -104,9 +107,9 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
 
         {pendingApproval && <ApprovalCard approval={pendingApproval} onDecide={decide} busy={busy === "approve"} />}
 
-        <div className="p-3 space-y-1">
-          <SectionLabel right={<span className="normal-case tracking-normal">{run.steps.filter((s) => s.status === "succeeded").length}/{run.steps.length} done</span>}>Steps</SectionLabel>
-          <ol className="space-y-1">
+        <div className="p-3 space-y-2">
+          <SectionLabel right={<span className="normal-case tracking-normal tabular">{stepSummary(run.steps)}</span>}>Steps</SectionLabel>
+          <ol className="timeline-rail space-y-1.5 pl-0.5" aria-label="Run steps">
             {steps.map((row) => {
               const step = stepMap.get(row.id) ?? { nodeId: row.id, status: "pending" as const };
               const node = nodeMap.get(row.id);
@@ -121,10 +124,12 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
             <ul className="space-y-1">
               {run.artifacts!.map((a, i) => {
                 const Icon = ARTIFACT_ICON[a.kind] ?? Paperclip;
+                const prov = artifactProvenance(a);
                 const inner = (
                   <span className="flex items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-xs hover:bg-accent/60 transition-colors">
                     <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate">{a.title}</span>
+                    {prov && <TrustBadge provenance={prov} compact />}
                     {a.meta?.dueAt ? <span className="text-[10.5px] text-muted-foreground">due {String(a.meta.dueAt)}</span> : null}
                     {a.href && <ExternalLink className="size-3 text-muted-foreground" />}
                   </span>
@@ -174,16 +179,19 @@ function StepRow({ step, label, type, depth, progress, now, iterations, nodeMap,
   const dur = stepDuration(step, now);
   const spec = nodeSpec(type);
   const hasBody = step.output !== undefined || (step.logs?.length ?? 0) > 0 || step.error || (iterations?.length ?? 0) > 0;
+  const dot = stepDotTone(step.status);
+  const stepProv = artifactProvenance({ kind: "document", id: step.nodeId, title: label, nodeId: step.nodeId, meta: (step as { meta?: Record<string, unknown> }).meta, provenance: (step as { provenance?: unknown }).provenance } as Parameters<typeof artifactProvenance>[0]);
   return (
-    <li style={{ marginLeft: depth * 16 }}>
+    <li className="relative pl-6" style={{ marginLeft: depth * 16 }}>
+      <span className="absolute left-[3px] top-[13px] flex size-3.5 items-center justify-center rounded-full bg-card"><StatusDot tone={dot.tone} pulse={dot.pulse} label={dot.label} /></span>
       <div className={cn("rounded-md border bg-card transition-colors", step.status === "running" && "border-info/50", step.status === "failed" && "border-destructive/50", step.status === "waiting_approval" && "border-warning/60")}>
         <button type="button" onClick={() => hasBody && setOpen((o) => !o)} className={cn("flex w-full items-center gap-2 px-2 py-1.5 text-left", hasBody && "cursor-pointer hover:bg-accent/40")}>
-          <StepStatusIcon status={step.status} />
           <NodeTypeIcon type={type} size="xs" />
           <span className="min-w-0 flex-1">
             <span className={cn("block truncate text-xs font-medium", step.status === "skipped" && "text-muted-foreground")}>{label}</span>
             <span className="block truncate text-[10.5px] text-muted-foreground">{step.status === "running" && progress ? progress : step.error ? step.error : spec?.short ?? type}</span>
           </span>
+          {stepProv && <TrustBadge provenance={stepProv} compact />}
           {step.tokens ? <span className="tabular text-[10px] text-muted-foreground">{formatTokens(step.tokens)} tok</span> : null}
           {dur != null && <span className="tabular text-[10.5px] text-muted-foreground">{formatDuration(dur)}</span>}
           {hasBody && <ChevronRight className={cn("size-3.5 text-muted-foreground transition-transform", open && "rotate-90")} />}

@@ -40,9 +40,9 @@ const TABS: { id: SidebarTab; label: string; icon: typeof ListTree; shortcut?: s
 
 export function WordSidebar({ editor, tab, onTab, outline, currentHeadingId, onClose, findFocusKey }: { editor: Editor; tab: SidebarTab; onTab: (t: SidebarTab) => void; outline: OutlineItem[]; currentHeadingId: string | null; onClose: () => void; findFocusKey: number }) {
   return (
-    <aside className="flex h-full w-[240px] shrink-0 flex-col border-r bg-background" aria-label="Document navigation">
+    <aside className="flex h-full w-[248px] shrink-0 flex-col border-r bg-background" aria-label="Document sidebar">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2">
-        <SegmentedControl options={TABS} value={tab} onChange={onTab} aria-label="Sidebar view" className="min-w-0 flex-1" />
+        <SegmentedControl ariaLabel="Sidebar" grow size="xs" value={tab} onChange={onTab} options={[{ id: "outline", label: "Outline", icon: ListTree, title: "Headings and word counts" }, { id: "find", label: "Find", icon: Search, title: "Find and replace", shortcut: "⌘F" }]} />
         <Tip label="Hide sidebar" shortcut="⌘⇧O"><Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Hide sidebar"><X className="size-3.5" /></Button></Tip>
       </div>
       {tab === "outline" ? <OutlinePanel editor={editor} outline={outline} currentHeadingId={currentHeadingId} /> : <FindReplacePanel editor={editor} focusKey={findFocusKey} />}
@@ -58,22 +58,22 @@ function OutlinePanel({ editor, outline, currentHeadingId }: { editor: Editor; o
     const dom = editor.view.nodeDOM(item.pos) as HTMLElement | null;
     dom?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
-  if (!outline.length) return <PanelEmpty icon={ListTree} title="No headings yet" description="Use Heading 1–3 (⌘⌥1–3) to build an outline, or ask the assistant to structure the document." />;
+  if (!outline.length) return <div className="p-3"><EmptyState compact icon={ListTree} title="No headings yet" description="Use the Style menu (Heading 1–3, ⌘⌥1–3) to build an outline, or ask the assistant to structure the document." /></div>;
   const total = outline.reduce((n, o) => n + o.words, 0);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground"><span>{outline.length} heading{outline.length === 1 ? "" : "s"}</span><span className="tabular">{total.toLocaleString()} words</span></div>
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 scrollbar-thin">
+      <div className="flex items-center justify-between px-4 py-2 text-[11.5px] text-muted-foreground"><span>{outline.length} heading{outline.length === 1 ? "" : "s"}</span><span className="tabular">{total.toLocaleString()} words</span></div>
+      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-2 pb-2">
         <div style={{ height: virt.getTotalSize(), position: "relative" }}>
           {virt.getVirtualItems().map((v) => {
             const item = outline[v.index];
             const active = item.id === currentHeadingId;
             return (
-              <button key={item.id || v.index} onClick={() => go(item)} title={item.text} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: v.size, transform: `translateY(${v.start}px)` }} className={cn("flex items-center gap-2 rounded-md px-2 text-left text-xs transition-colors cursor-pointer", active ? "bg-primary/10 text-primary" : "text-foreground/85 hover:bg-accent")} aria-current={active ? "location" : undefined}>
+              <button key={item.id || v.index} onClick={() => go(item)} title={item.text} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: v.size, transform: `translateY(${v.start}px)` }} className={cn("flex items-center gap-2 rounded-md px-2 text-left text-[12.5px] transition-colors cursor-pointer", active ? "bg-primary/10 text-primary" : "text-foreground/85 hover:bg-accent")}>
                 <span className="shrink-0" style={{ width: (item.level - 1) * 12 }} />
                 <span className={cn("w-4 shrink-0 text-[10px] tabular", active ? "text-primary/80" : "text-muted-foreground/70")}>H{item.level}</span>
                 <span className={cn("min-w-0 flex-1 truncate", item.level === 1 && "font-medium")}>{item.text || <span className="italic text-muted-foreground">Untitled heading</span>}</span>
-                <span className="shrink-0 text-[10px] tabular text-muted-foreground">{item.words}</span>
+                <span className="shrink-0 text-[10.5px] tabular text-muted-foreground">{item.words}</span>
               </button>
             );
           })}

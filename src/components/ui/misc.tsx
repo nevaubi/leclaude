@@ -84,16 +84,21 @@ export function CountChip({ children, className, tone }: { children: React.React
  * Quiet chip: small rounded, thin border, muted text; `tone` adds a soft fill.
  * Use it for facts (Bates, stage, counts), not for shouting.
  */
-export function Chip({ children, className, icon: Icon, tone = "outline", title, onClick, active }: { children: React.ReactNode; className?: string; icon?: LucideIcon; tone?: "outline" | "muted" | "primary" | "destructive" | "warning" | "success" | "info"; title?: string; onClick?: () => void; active?: boolean }) {
-  const tones = {
+export type ChipTone = "outline" | "muted" | "primary" | "destructive" | "warning" | "success" | "info" | "quiet" | "accent" | "danger";
+
+export function Chip({ children, className, icon: Icon, tone = "outline", title, onClick, active }: { children: React.ReactNode; className?: string; icon?: LucideIcon; tone?: ChipTone; title?: string; onClick?: () => void; active?: boolean }) {
+  const tones: Record<ChipTone, string> = {
     outline: "border-border text-muted-foreground bg-transparent",
     muted: "border-transparent bg-muted text-muted-foreground",
+    quiet: "border-transparent bg-muted text-muted-foreground",
     primary: "border-primary/25 bg-primary/8 text-primary",
+    accent: "border-primary/25 bg-primary/8 text-primary",
     destructive: "border-destructive/25 bg-destructive/8 text-destructive",
+    danger: "border-destructive/25 bg-destructive/8 text-destructive",
     warning: "border-warning/40 bg-warning/12 text-warning-foreground dark:text-warning",
     success: "border-success/30 bg-success/10 text-success",
     info: "border-info/30 bg-info/10 text-info",
-  } as const;
+  };
   const cls = cn("inline-flex h-5 max-w-full items-center gap-1 whitespace-nowrap rounded-[var(--radius-chip)] border px-1.5 text-[11px] font-medium leading-none", tones[tone], onClick && "cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground", active && "border-primary/40 bg-primary/10 text-primary", className);
   const inner = <>{Icon && <Icon className="size-3 shrink-0" aria-hidden />}<span className="truncate">{children}</span></>;
   if (onClick) return <button type="button" onClick={onClick} className={cls} title={title} aria-pressed={active}>{inner}</button>;

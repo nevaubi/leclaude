@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Conflict } from "@/lib/types/domain";
 import { type AnalysisTabProps, type CrossExcerpt, type FactMatrix } from "../types";
 import { highlightTerms } from "../transcript";
-import { AiButtonHint, AiLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, SeverityBadge, ConflictStatusBadge, kindLabel, formatShortDate } from "./shared";
+import { AiButtonHint, AiLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, kindLabel, formatShortDate } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useCross, useDepositions, useFactMatrices, useOpenTestimony, useOverview } from "./use-analysis-data";
 
 function Highlighted({ text, re }: { text: string; re: RegExp | null }) {
@@ -175,6 +175,7 @@ function ConflictLine({ c, fresh }: { c: Conflict; fresh?: boolean }) {
         <span className="text-[10.5px] text-muted-foreground">{kindLabel(c.kind)}</span>
         {fresh && <Badge variant="success" className="h-[16px] px-1 py-0 text-[10px]">new</Badge>}
         {c.createdBy === "ai" && <AiLabel />}
+        <ProvenanceBadge record={c} />
       </div>
       <div className="mt-1 text-[12px] font-medium leading-snug">{c.title}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1">{c.sides.map((s, i) => <React.Fragment key={i}>{i > 0 && <ArrowRight className="size-3 text-muted-foreground" />}<CiteChip cite={s.cite} kind={s.sourceKind} /></React.Fragment>)}</div>
@@ -220,8 +221,8 @@ function FactMatrixSection({ matterId, topic, witnessId, aiConfigured, matrices,
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="text-sm font-semibold">Fact matrix</div>
-        <span className="text-xs text-muted-foreground">Topics × sources for “{topic || "…"}”. Each cell is what the source says, with a cite and stance relative to the client.</span>
+        <div className="flex items-center gap-1.5 text-sm font-semibold">Fact matrix {active && <ProvenanceBadge record={active} compact={false} />}</div>
+        <span className="hidden text-xs text-muted-foreground xl:inline">Topics × sources for “{topic || "…"}”. Each cell is what the source says, with a cite and stance relative to the client.</span>
         <div className="flex-1" />
         {matrices.length > 1 && <Select value={active?.id ?? ""} onValueChange={setActiveId}><SelectTrigger size="sm" className="h-8 w-[260px]"><SelectValue placeholder="Saved matrices" /></SelectTrigger><SelectContent>{matrices.map((m) => <SelectItem key={m.id} value={m.id}>{m.topic} · {formatShortDate(m.createdAt.slice(0, 10))}</SelectItem>)}</SelectContent></Select>}
         {active && <><Button size="sm" variant="outline" onClick={() => exportCsv(active)}><Download className="size-4" /> CSV</Button><Button size="sm" variant="outline" onClick={() => exportMarkdownToWord({ title: `Fact matrix — ${active.topic}`, markdown: toMarkdown(active), matterId, tags: ["fact-matrix", "ediscovery"] })}><FileText className="size-4" /> Word</Button><Tip label="Delete this matrix"><Button size="icon-sm" variant="ghost" onClick={() => remove(active)} aria-label="Delete matrix"><Trash2 className="size-4" /></Button></Tip></>}

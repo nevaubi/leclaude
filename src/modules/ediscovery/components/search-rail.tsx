@@ -1,16 +1,22 @@
 "use client";
 import * as React from "react";
-import { ChevronDown, Clock, Files, Flame, ShieldAlert, Sparkles, CircleDashed, X } from "lucide-react";
+import { ChevronDown, Clock, Files, Flame, ShieldAlert, Sparkles, CircleDashed, X, PanelLeftOpen, ListFilter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Tip } from "@/components/ui/tooltip";
 import { SAVED_VIEWS, type FacetBucket, type SavedView, type SearchFilters, type SearchResponse } from "../types";
 import { useReviewStore } from "./store";
 import { useReview } from "./review-page";
 import { SectionLabel, issueColorClasses } from "./shared";
 
 const VIEW_ICONS: Record<SavedView, React.ElementType> = { all: Files, needs_review: CircleDashed, hot: Flame, privileged: ShieldAlert, ai_responsive: Sparkles, recent: Clock };
+
+/** Number of active facet values (pure, tested). */
+export function activeFacetCount(filters: SearchFilters): number {
+  return Object.values(filters).reduce((n, v) => n + (v?.length ?? 0), 0);
+}
 
 export function SearchRail({ response, loading }: { response: SearchResponse | null; loading: boolean }) {
   const { issueCodes, viewCounts } = useReview();
@@ -21,7 +27,7 @@ export function SearchRail({ response, loading }: { response: SearchResponse | n
   const clearFilters = useReviewStore((s) => s.clearFilters);
   // Counts come from the page-level stats fetch so they refresh with the header after every coding change.
   const counts = React.useMemo(() => new Map(viewCounts?.map((v) => [v.view, v.count]) ?? []), [viewCounts]);
-  const activeCount = Object.values(filters).reduce((n, v) => n + (v?.length ?? 0), 0);
+  const activeCount = activeFacetCount(filters);
   const facets = response?.facets;
 
   return (
@@ -58,6 +64,43 @@ export function SearchRail({ response, loading }: { response: SearchResponse | n
           <FacetGroup title="Coding status" facetKey="statuses" buckets={facets.status} filters={filters} onToggle={toggleFilter} hideZero={false} />
           <FacetGroup title="Issue codes" facetKey="issues" buckets={facets.issues} filters={filters} onToggle={toggleFilter} renderLabel={(b) => { const ic = issueCodes.find((c) => c.code === b.value); const cls = issueColorClasses(ic?.color); return <span className="flex min-w-0 items-center gap-1.5"><span className={cn("size-1.5 shrink-0 rounded-full", cls.dot)} /><span className="font-mono text-[11px]">{b.value}</span><span className="truncate text-muted-foreground">{b.label}</span></span>; }} />
           <FacetGroup title="AI score" facetKey="scores" buckets={facets.score} filters={filters} onToggle={toggleFilter} hideZero={false} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Collapsed rail: the saved views as an icon column with counts, plus a badge for active facets. */
+export function SearchRailCollapsed({ onExpand }: { onExpand: () => void }) {
+  const { viewCounts } = useReview();
+  const view = useReviewStore((s) => s.view);
+  const setView = useReviewStore((s) => s.setView);
+  const filters = useReviewStore((s) => s.filters);
+  const counts = React.useMemo(() => new Map(viewCounts?.map((v) => [v.view, v.count]) ?? []), [viewCounts]);
+  const active = activeFacetCount(filters);
+  return (
+    <div className="flex h-full flex-col items-center gap-1 py-2" aria-label="Saved searches (collapsed)">
+      <Tip label="Show saved searches and facets" side="right"><Button variant="ghost" size="icon-xs" onClick={onExpand} aria-label="Expand rail"><PanelLeftOpen className="size-4" /></Button></Tip>
+      <span className="my-1 h-px w-6 bg-border" aria-hidden />
+      {SAVED_VIEWS.map((v) => {
+        const Icon = VIEW_ICONS[v.id];
+        const n = counts.get(v.id);
+        const on = view === v.id;
+        return (
+          <Tip key={v.id} label={`${v.label}${n != null ? ` · ${n.toLocaleString()}` : ""}`} side="right">
+            <button onClick={() => setView(v.id)} aria-label={v.label} aria-current={on ? "true" : undefined} className={cn("relative flex size-8 items-center justify-center rounded-md transition-colors cursor-pointer", on ? "bg-accent text-primary" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground")}>
+              <Icon className="size-4" />
+              {n != null && n > 0 && <span className={cn("absolute -right-0.5 -top-0.5 min-w-[14px] rounded-full px-0.5 text-center text-[9px] font-medium tabular leading-[14px]", on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{n > 999 ? "1k" : n}</span>}
+            </button>
+          </Tip>
+        );
+      })}
+      {active > 0 && (
+        <>
+          <span className="my-1 h-px w-6 bg-border" aria-hidden />
+          <Tip label={`${active} facet filter${active === 1 ? "" : "s"} active · expand to edit`} side="right">
+            <button onClick={onExpand} className="relative flex size-8 items-center justify-center rounded-md text-primary hover:bg-sidebar-accent cursor-pointer" aria-label="Active filters"><ListFilter className="size-4" /><span className="absolute -right-0.5 -top-0.5 min-w-[14px] rounded-full bg-primary px-0.5 text-center text-[9px] font-medium tabular leading-[14px] text-primary-foreground">{active}</span></button>
+          </Tip>
         </>
       )}
     </div>

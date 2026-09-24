@@ -6,10 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tip } from "@/components/ui/tooltip";
 import type { Conflict } from "@/lib/types/domain";
-import { NoKeyCallout, formatShortDate } from "../../components/shared";
+import { NoKeyCallout, ProvenanceBadge, formatShortDate, provenanceOf } from "../../components/shared";
 import { type QAFlag, type TimelineCategory, TIMELINE_CATEGORIES, CONFLICT_KINDS } from "../types";
 
-export { NoKeyCallout, formatShortDate };
+export { NoKeyCallout, ProvenanceBadge, formatShortDate, provenanceOf };
 
 export const FLAG_STYLES: Record<QAFlag, { icon: LucideIcon; cls: string; label: string }> = {
   admission: { icon: CircleCheck, cls: "bg-success/12 text-success border-success/30", label: "Admission" },
@@ -146,4 +146,25 @@ export function useNarrowViewport(px: number) {
 export function typingTarget(e: KeyboardEvent | React.KeyboardEvent) {
   const t = e.target as HTMLElement | null;
   return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.getAttribute("role") === "combobox");
+}
+
+/**
+ * One header pattern shared by the analysis tabs (Chronology, Cross-analysis,
+ * Depositions, People, Conflicts): icon, title, a quiet summary line, then the
+ * actions right-aligned. 40px tall, thin rule below. Filters go in a second
+ * row (`children`) so the first row never wraps.
+ */
+export function TabHeader({ icon: Icon, title, summary, actions, children, className }: { icon: LucideIcon; title: React.ReactNode; summary?: React.ReactNode; actions?: React.ReactNode; children?: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("shrink-0 border-b", className)}>
+      <div className="flex h-10 items-center gap-2 px-4">
+        <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <h2 className="text-[13px] font-semibold tracking-tight">{title}</h2>
+        {summary && <span className="hidden min-w-0 truncate text-[11.5px] tabular text-muted-foreground md:inline">{summary}</span>}
+        <div className="flex-1" />
+        {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
+      </div>
+      {children && <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-1.5">{children}</div>}
+    </div>
+  );
 }

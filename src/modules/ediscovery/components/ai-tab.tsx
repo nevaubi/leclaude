@@ -10,7 +10,7 @@ import type { CodingDecision } from "@/lib/types/domain";
 import type { AIAnalysis } from "../types";
 import { useReview } from "./review-page";
 import { ApiError, api, type DocDetailResponse } from "./use-review-data";
-import { IssueChip, NoKeyCallout } from "./shared";
+import { IssueChip, NoKeyCallout, ProvenanceBadge } from "./shared";
 
 export function AiTab({ detail, analysis, onAnalysis, onApply }: { detail: DocDetailResponse; analysis: AIAnalysis | null; onAnalysis: (a: AIAnalysis) => void; onApply: (patch: Partial<CodingDecision>) => void }) {
   const { aiConfigured, issueCodes } = useReview();
@@ -56,7 +56,8 @@ export function AiTab({ detail, analysis, onAnalysis, onApply }: { detail: DocDe
       <section>
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Sparkles className="size-3.5" /> Document analysis</h3>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            {analysis && <ProvenanceBadge record={analysis} compact={false} />}
             {analysis && <span className="text-[10.5px] text-muted-foreground">{new Date(analysis.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · {analysis.model}</span>}
             <Button size="xs" variant={analysis ? "ghost" : "default"} onClick={() => run(!!analysis)} disabled={running}>{running ? <Loader2 className="size-3.5 animate-spin" /> : analysis ? <RefreshCw className="size-3.5" /> : <Sparkles className="size-3.5" />} {analysis ? "Re-run" : "Analyze"}</Button>
           </div>
@@ -64,7 +65,7 @@ export function AiTab({ detail, analysis, onAnalysis, onApply }: { detail: DocDe
         {!analysis ? (
           doc.aiSummary ? (
             <div className="mt-2 rounded-md border bg-muted/30 p-3 text-sm">
-              <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Seeded summary</div>
+              <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Seeded summary <ProvenanceBadge record={doc} /></div>
               <p className="leading-relaxed">{doc.aiSummary}</p>
               {doc.aiScore != null && <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">Predicted responsiveness <ScoreBar value={doc.aiScore} /></div>}
               {doc.aiIssues?.length ? <div className="mt-2 flex flex-wrap gap-1">{doc.aiIssues.map((c) => <IssueChip key={c} code={c} codes={issueCodes} size="xs" />)}</div> : null}
@@ -88,9 +89,9 @@ export function AiTab({ detail, analysis, onAnalysis, onApply }: { detail: DocDe
               </div>
             </div>
             <div className="rounded-md border p-3">
-              <div className="flex items-center justify-between">
-                <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Suggested coding</div>
-                <Button size="xs" onClick={applyAll}><Wand2 className="size-3.5" /> Apply to panel</Button>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Suggested coding <ProvenanceBadge record={analysis} /></div>
+                <Button size="xs" onClick={applyAll}><Wand2 className="size-3.5" /> Apply suggestion</Button>
               </div>
               <div className="mt-2 grid grid-cols-[110px_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
                 <span className="text-xs text-muted-foreground">Responsive</span><span className="flex items-center gap-2"><Badge variant={analysis.suggestedCoding.responsive ? "success" : "muted"}>{analysis.suggestedCoding.responsive ? "Yes" : "No"}</Badge><ScoreBar value={analysis.suggestedCoding.responsiveConfidence} /><span className="text-[11px] text-muted-foreground">confidence</span></span>

@@ -1,12 +1,18 @@
 "use client";
+/**
+ * Excel toolbar in the spirit of the reference: Undo/Redo · size · B I U ·
+ * colors/borders · alignment · number format (select + $ %) · Σ · chart icons ·
+ * comment · Data ▾ · Insert ▾ · … · Page breaks. Everything else lives in the
+ * menus so the row stays calm at 1024px.
+ */
 import * as React from "react";
-import { AlignCenter, AlignLeft, AlignRight, ArrowDownAZ, ArrowUpZA, BarChart3, Bold, ChevronDown, Filter, Grid2x2, Italic, LineChart, MessageSquarePlus, PaintBucket, PieChart, Plus, Redo2, Rows3, Search, Sigma, Snowflake, SquareStack, TableProperties, Type, Underline, Undo2, WrapText, Columns3, Sheet as SheetIcon, Tags, ListChecks, Printer, Percent, DollarSign, Hash, Calendar, Baseline, Braces } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, ArrowDownAZ, ArrowUpZA, BarChart3, Bold, Braces, Calendar, Columns3, Database, DollarSign, Filter, Grid2x2, Hash, Italic, LineChart, ListChecks, MessageSquarePlus, PaintBucket, Percent, PieChart, Plus, Printer, Redo2, Rows3, Search, Sheet as SheetIcon, Sigma, Snowflake, SquareStack, TableProperties, Tags, Type, Underline, Undo2, WrapText, Baseline } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { OfficeToolbar, ToolButton, ToolMenuTrigger, ToolSep, ToolbarToggle } from "@/modules/office/shared/office-chrome";
 import { colToLetter, rangeToA1, toA1 } from "./a1";
 import { currentRegion, getStyle, NUMBER_FORMATS, type BorderSpec, type CellStyle, type NumFmt } from "./model";
 import { useSheetStore } from "./store";
@@ -27,11 +33,13 @@ const TEXT_COLORS = ["#111827", "#1F3A5F", "#5B6B85", "#9F1239", "#92400E", "#16
 const FONT_SIZES = [9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28];
 const BORDERS: { id: BorderSpec; label: string }[] = [{ id: "all", label: "All borders" }, { id: "outline", label: "Outline" }, { id: "bottom", label: "Bottom border" }, { id: "top", label: "Top border" }, { id: "thick", label: "Thick" }, { id: "none", label: "No border" }];
 
-function ToolBtn({ label, shortcut, active, onClick, children, disabled }: { label: string; shortcut?: string; active?: boolean; onClick: () => void; children: React.ReactNode; disabled?: boolean }) {
+/** Swatch trigger (text color / fill) for the toolbar. */
+function SwatchButton({ label, icon: Icon, color, checker }: { label: string; icon: React.ComponentType<{ className?: string }>; color: string | null | undefined; checker?: boolean }) {
   return (
-    <Tip label={label} shortcut={shortcut}>
-      <button type="button" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={onClick} aria-pressed={active} aria-label={label} className={cn("flex h-7 min-w-7 items-center justify-center gap-1 rounded px-1.5 text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default", active ? "bg-accent text-accent-foreground" : "text-foreground/80 hover:bg-accent hover:text-foreground")}>{children}</button>
-    </Tip>
+    <button type="button" onMouseDown={(e) => e.preventDefault()} className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md px-1.5 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground cursor-pointer" aria-label={label}>
+      <Icon className="size-4" />
+      <span className="h-3 w-1.5 rounded-sm border" style={{ background: color ?? (checker ? "repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%) 0 0/6px 6px" : "currentColor") }} aria-hidden />
+    </button>
   );
 }
 
@@ -54,6 +62,7 @@ export function SheetToolbar({ onOpen, onInsertChart, onAddComment, disabled }: 
   const toggle = (k: "bold" | "italic" | "underline" | "wrap") => styleSel({ [k]: style[k] ? null : true });
   const setFmt = (fmt: NumFmt) => styleSel({ numFmt: fmt === "General" ? null : fmt });
   const currentFmt = style.numFmt ?? "General";
+  const currentFmtLabel = NUMBER_FORMATS.find((f) => f.id === currentFmt)?.label ?? (currentFmt === "$#,##0.00;($#,##0.00)" ? "Accounting" : currentFmt === "0.0%" ? "Percent (1 dp)" : currentFmt);
   const adjustDecimals = (delta: number) => {
     let fmt = currentFmt === "General" ? "0" : String(currentFmt);
     if (/(yy|mmm|d)/i.test(fmt) && !/[#0]/.test(fmt)) return;
@@ -70,11 +79,9 @@ export function SheetToolbar({ onOpen, onInsertChart, onAddComment, disabled }: 
     const multi = r.end.row > r.start.row || r.end.col > r.start.col;
     const cells: { ref: string; formula: string }[] = [];
     if (multi) {
-      // sum each column of the selection into the row below (or each row to the right for a single row)
       if (r.end.row > r.start.row) for (let c = r.start.col; c <= r.end.col; c++) cells.push({ ref: toA1(r.end.row + 1, c), formula: `=SUM(${toA1(r.start.row, c)}:${toA1(r.end.row, c)})` });
       else cells.push({ ref: toA1(r.start.row, r.end.col + 1), formula: `=SUM(${rangeToA1(r)})` });
     } else {
-      // find the numeric run above (or to the left)
       const { row, col } = st.selection.active;
       let top = row - 1;
       while (top >= 0 && toNumber(sheet.cells[toA1(top, col)]?.f ? st.computed[sheet.id]?.[toA1(top, col)]?.v ?? null : sheet.cells[toA1(top, col)]?.v ?? null) !== null) top--;
@@ -123,67 +130,91 @@ export function SheetToolbar({ onOpen, onInsertChart, onAddComment, disabled }: 
     if (what === "colRight") st.apply({ type: "insert_cols", sheet: sheet.id, index: r.end.col + 1, count: r.end.col - r.start.col + 1 });
   };
   const merged = sheet.merges.some((m) => m === store.getState().selectionA1());
+  const frozen = Boolean(sheet.freeze.rows || sheet.freeze.cols);
 
   return (
-    <div className={cn("flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b bg-background px-2 scrollbar-none", disabled && "pointer-events-none opacity-60")}>
-      <ToolBtn label="Undo" shortcut={`${MOD}Z`} onClick={() => store.getState().undo()} disabled={!past}><Undo2 className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Redo" shortcut={`${MOD}Y`} onClick={() => store.getState().redo()} disabled={!future}><Redo2 className="size-3.5" /></ToolBtn>
-      <Separator orientation="vertical" className="mx-1 h-5" />
+    <OfficeToolbar disabled={disabled} right={<ToolbarToggle icon={Printer} label="Page breaks (print preview on the grid)" pressed={pageBreaks} onClick={() => store.getState().setPageBreaks(!pageBreaks)} text={<span className="hidden md:inline">Page breaks</span>} />}>
+      <ToolButton icon={Undo2} label="Undo" shortcut={`${MOD}Z`} onClick={() => store.getState().undo()} disabled={!past} />
+      <ToolButton icon={Redo2} label="Redo" shortcut={`${MOD}Y`} onClick={() => store.getState().redo()} disabled={!future} />
+      <ToolSep />
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button onMouseDown={(e) => e.preventDefault()} className="flex h-7 items-center gap-1 rounded px-1.5 text-xs hover:bg-accent cursor-pointer" aria-label="Font size"><Type className="size-3.5" /><span className="tabular">{style.fontSize ?? 12}</span><ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
+        <Tip label="Font size"><DropdownMenuTrigger asChild><ToolMenuTrigger icon={Type} label={<span className="tabular">{style.fontSize ?? 12}</span>} aria-label="Font size" /></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="start" className="w-24">{FONT_SIZES.map((s) => <DropdownMenuItem key={s} onSelect={() => styleSel({ fontSize: s === 12 ? null : s })} className={cn("tabular", (style.fontSize ?? 12) === s && "bg-accent")}>{s}</DropdownMenuItem>)}</DropdownMenuContent>
       </DropdownMenu>
-      <ToolBtn label="Bold" shortcut={`${MOD}B`} active={Boolean(style.bold)} onClick={() => toggle("bold")}><Bold className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Italic" shortcut={`${MOD}I`} active={Boolean(style.italic)} onClick={() => toggle("italic")}><Italic className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Underline" shortcut={`${MOD}U`} active={Boolean(style.underline)} onClick={() => toggle("underline")}><Underline className="size-3.5" /></ToolBtn>
+      <ToolButton icon={Bold} label="Bold" shortcut={`${MOD}B`} active={Boolean(style.bold)} onClick={() => toggle("bold")} />
+      <ToolButton icon={Italic} label="Italic" shortcut={`${MOD}I`} active={Boolean(style.italic)} onClick={() => toggle("italic")} />
+      <ToolButton icon={Underline} label="Underline" shortcut={`${MOD}U`} active={Boolean(style.underline)} onClick={() => toggle("underline")} />
       <Popover>
-        <PopoverTrigger asChild><button onMouseDown={(e) => e.preventDefault()} className="flex h-7 items-center gap-0.5 rounded px-1.5 text-xs hover:bg-accent cursor-pointer" aria-label="Text color"><Baseline className="size-3.5" /><span className="h-1 w-3.5 rounded-sm border" style={{ background: style.color ?? "currentColor" }} /></button></PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-2"><div className="grid grid-cols-5 gap-1">{TEXT_COLORS.map((c) => <button key={c} onClick={() => styleSel({ color: c })} className="size-6 rounded border hover:scale-110 transition-transform cursor-pointer" style={{ background: c }} aria-label={c} />)}<button onClick={() => styleSel({ color: null })} className="col-span-5 mt-1 rounded border px-2 py-0.5 text-[11px] hover:bg-accent cursor-pointer">Automatic</button></div></PopoverContent>
+        <Tip label="Text color"><PopoverTrigger asChild><SwatchButton label="Text color" icon={Baseline} color={style.color} /></PopoverTrigger></Tip>
+        <PopoverContent align="start" className="w-auto p-2"><div className="grid grid-cols-5 gap-1">{TEXT_COLORS.map((c) => <button key={c} onClick={() => styleSel({ color: c })} className={cn("size-6 rounded-md border cursor-pointer transition-transform hover:scale-110", style.color === c && "ring-2 ring-ring ring-offset-1 ring-offset-background")} style={{ background: c }} aria-label={c} />)}<button onClick={() => styleSel({ color: null })} className="col-span-5 mt-1 rounded-md border px-2 py-0.5 text-[11px] hover:bg-accent cursor-pointer">Automatic</button></div></PopoverContent>
       </Popover>
       <Popover>
-        <PopoverTrigger asChild><button onMouseDown={(e) => e.preventDefault()} className="flex h-7 items-center gap-0.5 rounded px-1.5 text-xs hover:bg-accent cursor-pointer" aria-label="Fill color"><PaintBucket className="size-3.5" /><span className="h-1 w-3.5 rounded-sm border" style={{ background: style.fill ?? "transparent" }} /></button></PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-2"><div className="grid grid-cols-7 gap-1">{FILLS.map((c) => <button key={c} onClick={() => styleSel({ fill: c })} className="size-6 rounded border hover:scale-110 transition-transform cursor-pointer" style={{ background: c }} aria-label={c} />)}<button onClick={() => styleSel({ fill: null })} className="col-span-7 mt-1 rounded border px-2 py-0.5 text-[11px] hover:bg-accent cursor-pointer">No fill</button></div></PopoverContent>
+        <Tip label="Fill color"><PopoverTrigger asChild><SwatchButton label="Fill color" icon={PaintBucket} color={style.fill} checker /></PopoverTrigger></Tip>
+        <PopoverContent align="start" className="w-auto p-2"><div className="grid grid-cols-7 gap-1">{FILLS.map((c) => <button key={c} onClick={() => styleSel({ fill: c })} className={cn("size-6 rounded-md border cursor-pointer transition-transform hover:scale-110", style.fill === c && "ring-2 ring-ring ring-offset-1 ring-offset-background")} style={{ background: c }} aria-label={c} />)}<button onClick={() => styleSel({ fill: null })} className="col-span-7 mt-1 rounded-md border px-2 py-0.5 text-[11px] hover:bg-accent cursor-pointer">No fill</button></div></PopoverContent>
       </Popover>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button onMouseDown={(e) => e.preventDefault()} className="flex h-7 items-center gap-0.5 rounded px-1.5 text-xs hover:bg-accent cursor-pointer" aria-label="Borders"><Grid2x2 className="size-3.5" /><ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
+        <Tip label="Borders"><DropdownMenuTrigger asChild><ToolMenuTrigger icon={Grid2x2} label="Borders" aria-label="Borders" className="[&>span]:sr-only" /></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="start">{BORDERS.map((b) => <DropdownMenuItem key={b.id} onSelect={() => styleSel({ border: b.id === "none" ? null : b.id })}>{b.label}</DropdownMenuItem>)}</DropdownMenuContent>
       </DropdownMenu>
-      <Separator orientation="vertical" className="mx-1 h-5" />
-      <ToolBtn label="Align left" active={(style.align ?? "left") === "left" && Boolean(style.align)} onClick={() => styleSel({ align: "left" })}><AlignLeft className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Align center" active={style.align === "center"} onClick={() => styleSel({ align: "center" })}><AlignCenter className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Align right" active={style.align === "right"} onClick={() => styleSel({ align: "right" })}><AlignRight className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Wrap text" active={Boolean(style.wrap)} onClick={() => toggle("wrap")}><WrapText className="size-3.5" /></ToolBtn>
-      <ToolBtn label={merged ? "Unmerge cells" : "Merge cells"} active={merged} onClick={() => store.getState().apply({ type: merged ? "unmerge_cells" : "merge_cells", sheet: sheet.id, range: store.getState().selectionA1() })}><SquareStack className="size-3.5" /></ToolBtn>
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <ToolSep />
+      <ToolButton icon={AlignLeft} label="Align left" active={style.align === "left"} onClick={() => styleSel({ align: "left" })} />
+      <ToolButton icon={AlignCenter} label="Align center" active={style.align === "center"} onClick={() => styleSel({ align: "center" })} />
+      <ToolButton icon={AlignRight} label="Align right" active={style.align === "right"} onClick={() => styleSel({ align: "right" })} />
+      <ToolButton icon={WrapText} label="Wrap text" active={Boolean(style.wrap)} onClick={() => toggle("wrap")} className="hidden lg:inline-flex" />
+      <ToolButton icon={SquareStack} label={merged ? "Unmerge cells" : "Merge cells"} active={merged} onClick={() => store.getState().apply({ type: merged ? "unmerge_cells" : "merge_cells", sheet: sheet.id, range: store.getState().selectionA1() })} className="hidden lg:inline-flex" />
+      <ToolSep />
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button onMouseDown={(e) => e.preventDefault()} className="flex h-7 min-w-[7.5rem] items-center gap-1 rounded border px-2 text-xs hover:bg-accent cursor-pointer" aria-label="Number format"><span className="truncate">{NUMBER_FORMATS.find((f) => f.id === currentFmt)?.label ?? currentFmt}</span><ChevronDown className="ml-auto size-3 opacity-60" /></button></DropdownMenuTrigger>
+        <Tip label="Number format"><DropdownMenuTrigger asChild><ToolMenuTrigger label={currentFmtLabel} aria-label="Number format" width={132} className="border" /></DropdownMenuTrigger></Tip>
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuLabel>Number format</DropdownMenuLabel>
           {NUMBER_FORMATS.map((f) => <DropdownMenuItem key={f.id} onSelect={() => setFmt(f.id)} className={cn(currentFmt === f.id && "bg-accent")}>{f.label}<span className="ml-auto text-[10px] text-muted-foreground tabular">{f.example}</span></DropdownMenuItem>)}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setFmt("$#,##0.00;($#,##0.00)")}>Accounting (negatives in parentheses)</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setFmt("0.0%")}>Percent (1 dp)</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setFmt("#,##0")}><Hash /> Thousands separator</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setFmt("mmm d yyyy")}><Calendar /> Date</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => adjustDecimals(-1)}>Fewer decimals <span className="ml-auto text-[10px] tabular text-muted-foreground">.0</span></DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => adjustDecimals(1)}>More decimals <span className="ml-auto text-[10px] tabular text-muted-foreground">.00</span></DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <ToolBtn label="Currency" onClick={() => setFmt("$#,##0.00")}><DollarSign className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Percent" onClick={() => setFmt("0.0%")}><Percent className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Thousands separator" onClick={() => setFmt("#,##0")}><Hash className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Date" onClick={() => setFmt("mmm d yyyy")}><Calendar className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Fewer decimals" onClick={() => adjustDecimals(-1)}><span className="text-[10px] tabular">.0</span></ToolBtn>
-      <ToolBtn label="More decimals" onClick={() => adjustDecimals(1)}><span className="text-[10px] tabular">.00</span></ToolBtn>
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <ToolButton icon={DollarSign} label="Currency" onClick={() => setFmt("$#,##0.00")} active={currentFmt === "$#,##0.00"} />
+      <ToolButton icon={Percent} label="Percent" onClick={() => setFmt("0.0%")} active={currentFmt === "0.0%"} />
+      <ToolSep />
+      <ToolButton icon={Sigma} label="Autosum" shortcut="Alt+=" onClick={autosum} />
+      <ToolButton icon={BarChart3} label="Bar chart from selection" onClick={() => onInsertChart("bar")} />
+      <ToolButton icon={LineChart} label="Line chart from selection" onClick={() => onInsertChart("line")} className="hidden md:inline-flex" />
+      <ToolButton icon={PieChart} label="Pie chart from selection" onClick={() => onInsertChart("pie")} className="hidden md:inline-flex" />
+      <ToolButton icon={MessageSquarePlus} label={`Comment on ${activeRef}`} shortcut={`${MOD}⇧M`} onClick={onAddComment} />
+      <ToolSep />
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button onMouseDown={(e) => e.preventDefault()} className={cn("flex h-7 items-center gap-1 rounded px-1.5 text-xs hover:bg-accent cursor-pointer", (sheet.freeze.rows || sheet.freeze.cols) && "bg-accent")} aria-label="Freeze panes"><Snowflake className="size-3.5" /><ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
-        <DropdownMenuContent align="start"><DropdownMenuItem onSelect={() => freeze("row")}>Freeze top row</DropdownMenuItem><DropdownMenuItem onSelect={() => freeze("col")}>Freeze first column</DropdownMenuItem><DropdownMenuItem onSelect={() => freeze("here")}>Freeze up to {activeRef}</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onSelect={() => freeze("none")}>Unfreeze</DropdownMenuItem></DropdownMenuContent>
+        <DropdownMenuTrigger asChild><ToolMenuTrigger icon={Database} label="Data" aria-label="Data" active={Boolean(sheet.filters) || frozen || showFormulas} hideLabelBelow="lg" /></DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuItem onSelect={() => sort("asc")}><ArrowDownAZ /> Sort A → Z</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => sort("desc")}><ArrowUpZA /> Sort Z → A</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpen("sort")}><Rows3 /> Sort by columns…</DropdownMenuItem>
+          <DropdownMenuCheckboxItem checked={Boolean(sheet.filters)} onCheckedChange={filter}><Filter /> Filter</DropdownMenuCheckboxItem>
+          <DropdownMenuItem onSelect={() => onOpen("conditional")}><TableProperties /> Conditional formatting…</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger><Snowflake /> Freeze panes{frozen ? " · on" : ""}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onSelect={() => freeze("row")}>Freeze top row</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => freeze("col")}>Freeze first column</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => freeze("here")}>Freeze up to {activeRef}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => freeze("none")} disabled={!frozen}>Unfreeze</DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuItem onSelect={() => onOpen("names")}><Tags /> Named ranges…</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpen("validation")}><ListChecks /> Data validation (list)…</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpen("find")}><Search /> Find & replace… <span className="ml-auto text-[10px] text-muted-foreground">{MOD}F</span></DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem checked={showFormulas} onCheckedChange={() => store.getState().setShowFormulas(!showFormulas)}><Braces /> Show formulas <span className="ml-auto text-[10px] text-muted-foreground">{MOD}`</span></DropdownMenuCheckboxItem>
+        </DropdownMenuContent>
       </DropdownMenu>
-      <ToolBtn label="Sort A → Z" onClick={() => sort("asc")}><ArrowDownAZ className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Sort Z → A" onClick={() => sort("desc")}><ArrowUpZA className="size-3.5" /></ToolBtn>
-      <ToolBtn label={sheet.filters ? "Remove filter" : "Filter"} active={Boolean(sheet.filters)} onClick={filter}><Filter className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Conditional formatting" onClick={() => onOpen("conditional")}><TableProperties className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Sort…" onClick={() => onOpen("sort")}><Rows3 className="size-3.5" /></ToolBtn>
-      <Separator orientation="vertical" className="mx-1 h-5" />
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button onMouseDown={(e) => e.preventDefault()} className="flex h-7 items-center gap-1 rounded px-1.5 text-xs hover:bg-accent cursor-pointer" aria-label="Insert"><Plus className="size-3.5" /> Insert <ChevronDown className="size-3 opacity-60" /></button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><ToolMenuTrigger icon={Plus} label="Insert" aria-label="Insert" hideLabelBelow="lg" /></DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuItem onSelect={() => insert("rowAbove")}><Rows3 /> Rows above</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => insert("rowBelow")}><Rows3 /> Rows below</DropdownMenuItem>
@@ -197,17 +228,7 @@ export function SheetToolbar({ onOpen, onInsertChart, onAddComment, disabled }: 
           <DropdownMenuItem onSelect={onAddComment}><MessageSquarePlus /> Comment on {activeRef}</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <ToolBtn label="Autosum" shortcut="Alt+=" onClick={autosum}><Sigma className="size-4" /></ToolBtn>
-      <ToolBtn label="Bar chart from selection" onClick={() => onInsertChart("bar")}><BarChart3 className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Line chart from selection" onClick={() => onInsertChart("line")}><LineChart className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Pie chart from selection" onClick={() => onInsertChart("pie")}><PieChart className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Comment" shortcut={`${MOD}⇧M`} onClick={onAddComment}><MessageSquarePlus className="size-3.5" /></ToolBtn>
-      <Separator orientation="vertical" className="mx-1 h-5" />
-      <ToolBtn label="Find & replace" shortcut={`${MOD}F`} onClick={() => onOpen("find")}><Search className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Named ranges" onClick={() => onOpen("names")}><Tags className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Show formulas" shortcut={`${MOD}\``} active={showFormulas} onClick={() => store.getState().setShowFormulas(!showFormulas)}><Braces className="size-3.5" /></ToolBtn>
-      <ToolBtn label="Page breaks (print view)" active={pageBreaks} onClick={() => store.getState().setPageBreaks(!pageBreaks)}><Printer className="size-3.5" /><span className="hidden xl:inline">Page breaks</span></ToolBtn>
-    </div>
+    </OfficeToolbar>
   );
 }
 

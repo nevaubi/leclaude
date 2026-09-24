@@ -18,7 +18,16 @@ import { useReview } from "./review-page";
 import { ReviewListContext } from "./review-tab";
 import { CodingPanel } from "./coding-panel";
 import { AiTab } from "./ai-tab";
-import { CodingBadges, IssueChip, TypeIcon, formatShortDate } from "./shared";
+import { CodingBadges, IssueChip, ProvenanceBadge, TypeIcon, formatShortDate } from "./shared";
+
+/** Viewer width at which the coding panel becomes a fixed right column instead of an overlay. */
+export const CODING_COLUMN_MIN_WIDTH = 560;
+
+/** Coding column width for a given viewer width: 240px in tight viewers, 272px when there is room. */
+export function codingColumnWidth(viewerWidth: number): number {
+  if (viewerWidth <= 0) return 272;
+  return viewerWidth < 720 ? 240 : 272;
+}
 
 const TABS: { id: ViewerTab; label: string }[] = [
   { id: "text", label: "Text" }, { id: "metadata", label: "Metadata" }, { id: "family", label: "Family" }, { id: "similar", label: "Similar" }, { id: "ai", label: "AI" },
@@ -84,18 +93,21 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
   const thread = family?.thread ?? [];
   const threadIdx = thread.findIndex((t) => t.id === docId);
 
-  // Below ~640px the text column and the 264px coding panel cannot share the width: the panel then
-  // opens as an overlay (closed by default) so the document itself stays readable.
+  // At 560px and wider the coding panel is a fixed right column (never an overlay), so the
+  // primary decisions stay one glance away; narrower than that it opens as an overlay so the
+  // document itself stays readable.
   const sectionRef = React.useRef<HTMLElement>(null);
-  const [narrow, setNarrow] = React.useState(false);
+  const [width, setWidth] = React.useState(0);
   const [overlayOpen, setOverlayOpen] = React.useState(false);
   React.useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
-    const ro = new ResizeObserver((entries) => { for (const e of entries) setNarrow(e.contentRect.width < 640); });
+    const ro = new ResizeObserver((entries) => { for (const e of entries) setWidth(e.contentRect.width); });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  const narrow = width > 0 && width < CODING_COLUMN_MIN_WIDTH;
+  const codingWidth = codingColumnWidth(width);
   const codingVisible = narrow ? overlayOpen : codingOpen;
   const toggleCoding = () => (narrow ? setOverlayOpen((v) => !v) : setCodingOpen(!codingOpen));
 
@@ -131,6 +143,7 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
             {t.label}
             {t.id === "family" && family && <span className="ml-1 rounded bg-muted px-1 text-[10px] tabular">{(family.attachments.length + (family.parent ? 1 : 0) + Math.max(0, family.thread.length - 1) + family.duplicates.length + family.nearDuplicates.length + (family.duplicateOf ? 1 : 0))}</span>}
             {t.id === "ai" && doc?.aiScore != null && <span className="ml-1 rounded bg-muted px-1 text-[10px] tabular">{doc.aiScore}</span>}
+            {t.id === "ai" && <ProvenanceBadge record={doc} className="ml-1 align-middle" />}
             {tab === t.id && <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-full bg-primary" />}
           </button>
         ))}
@@ -154,7 +167,7 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count }: {
           )}
         </div>
         {codingVisible && draft && doc && (
-          <CodingPanel draft={draft} onChange={setDraft} onSave={() => save()} saving={saving} dirty={dirty} reviewedBy={detail.data?.reviewerName} reviewedAt={doc.coding.reviewedAt} className={narrow ? "absolute inset-y-0 right-0 z-20 bg-card shadow-xl" : undefined} />
+          <CodingPanel draft={draft} onChange={setDraft} onSave={() => save()} saving={saving} dirty={dirty} reviewedBy={detail.data?.reviewerName} reviewedAt={doc.coding.reviewedAt} width={narrow ? 272 : codingWidth} className={narrow ? "absolute inset-y-0 right-0 z-20 bg-card shadow-xl" : undefined} />
         )}
         {narrow && !overlayOpen && draft && doc && (
           <Button variant="secondary" size="sm" className="absolute bottom-3 right-3 z-10 shadow-md" onClick={() => setOverlayOpen(true)}><PanelRightOpen className="size-4" /> Coding{dirty ? " · unsaved" : ""}</Button>

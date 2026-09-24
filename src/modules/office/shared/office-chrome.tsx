@@ -410,3 +410,146 @@ export function approximatePages(words: number, lineSpacing: number): number {
   const perPage = lineSpacing >= 2 ? 275 : lineSpacing >= 1.5 ? 360 : 500;
   return Math.max(1, Math.ceil(words / perPage));
 }
+
+// ---------------------------------------------------------------------------
+// Additive helpers shared by the Sheet / Slides / PDF editors and the office
+// home (appended; everything above is the base API the Word editor uses).
+// ---------------------------------------------------------------------------
+
+/** Upper-case file-type badge label: DOCX / XLSX / PPTX / PDF. */
+export function kindBadgeLabel(kind: OfficeKind): string {
+  return KIND_CHROME[kind].badge;
+}
+
+/** "5 tracked changes" / "1 tracked change" / "No tracked changes". */
+export function trackedChangesLabel(count: number): string {
+  if (count <= 0) return "No tracked changes";
+  return `${count} tracked change${count === 1 ? "" : "s"}`;
+}
+
+/** "3 / 5" position label, or "–" when there is nothing to step through. */
+export function changePositionLabel(index: number, count: number): string {
+  if (count <= 0) return "–";
+  return `${Math.max(0, Math.min(index, count - 1)) + 1} / ${count}`;
+}
+
+export function pluralize(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? noun : plural}`;
+}
+
+/** "Rows 1–100" style range label for the sheet status bar. */
+export function rowRangeLabel(first: number, last: number): string {
+  return first === last ? `Row ${first}` : `Rows ${first}–${last}`;
+}
+
+/** "Page 1 of 3". */
+export function pageOfLabel(page: number, pages: number): string {
+  return `Page ${Math.max(1, page)} of ${Math.max(1, pages)}`;
+}
+
+/** Platform modifier for shortcut hints: ⌘ on Apple platforms, Ctrl elsewhere. */
+export function modKeyFor(platform: string | undefined): "⌘" | "Ctrl" {
+  if (!platform) return "⌘";
+  if (/Mac|iPhone|iPad|iPod/i.test(platform)) return "⌘";
+  return /Win|Linux|Android|CrOS|X11/i.test(platform) ? "Ctrl" : "⌘";
+}
+
+/** Rewrites "⌘" in a shortcut hint for the current platform. */
+export function shortcutFor(hint: string, mod: "⌘" | "Ctrl"): string {
+  return mod === "Ctrl" ? hint.replace(/⌘/g, "Ctrl+") : hint;
+}
+
+/** Viewports narrower than this open editors with side panels collapsed. */
+export const NARROW_VIEWPORT = 1180;
+
+/** True when the viewport is narrower than `max` (false during SSR so wide layouts hydrate cleanly). */
+export function useNarrowViewport(max = NARROW_VIEWPORT): boolean {
+  const query = `(max-width: ${max - 1}px)`;
+  const subscribe = React.useCallback((cb: () => void) => {
+    if (typeof window === "undefined") return () => {};
+    const mq = window.matchMedia(query);
+    mq.addEventListener("change", cb);
+    return () => mq.removeEventListener("change", cb);
+  }, [query]);
+  return React.useSyncExternalStore(subscribe, () => (typeof window === "undefined" ? false : window.matchMedia(query).matches), () => false);
+}
+
+/** "⌘" or "Ctrl" for shortcut hints, resolved after mount to avoid hydration drift. */
+export function useModKey(): "⌘" | "Ctrl" {
+  const [mod, setMod] = React.useState<"⌘" | "Ctrl">("⌘");
+  React.useEffect(() => { setMod(modKeyFor(navigator.platform || navigator.userAgent)); }, []);
+  return mod;
+}
+
+/** Icon toggle for a header or toolbar right cluster (assistant, comments, panel…), with an optional count. */
+export function ChromeToggle({ icon: Icon, label, shortcut, pressed, onClick, count, className, disabled }: { icon: LucideIcon; label: string; shortcut?: string; pressed: boolean; onClick: () => void; count?: number; className?: string; disabled?: boolean }) {
+  return (
+    <Tip label={label} shortcut={shortcut}>
+      <Button variant={pressed ? "secondary" : "ghost"} size="icon-sm" onClick={onClick} aria-pressed={pressed} aria-label={label} className={cn("relative", className)} disabled={disabled}>
+        <Icon className={cn("size-4", pressed && "text-primary")} />
+        {count ? <span className="absolute -right-0.5 -top-0.5 min-w-[14px] rounded-full bg-primary px-1 text-center text-[9px] leading-[14px] text-primary-foreground tabular">{count > 99 ? "99+" : count}</span> : null}
+      </Button>
+    </Tip>
+  );
+}
+
+/** Labelled on/off toolbar control ("Page breaks", "Track changes"). */
+export function ToolbarToggle({ icon: Icon, label, shortcut, pressed, onClick, text, className }: { icon: LucideIcon; label: string; shortcut?: string; pressed: boolean; onClick: () => void; text?: React.ReactNode; className?: string }) {
+  return (
+    <Tip label={label} shortcut={shortcut}>
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClick} aria-pressed={pressed} aria-label={label} className={cn("inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[12px] transition-colors cursor-pointer", pressed ? "border-primary/40 bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground", className)}>
+        <Icon className="size-3.5" />
+        {text ?? label}
+      </button>
+    </Tip>
+  );
+}
+
+/** Flexible gap for toolbars. */
+export const ToolSpacer = () => <span className="min-w-2 flex-1" aria-hidden />;
+
+/** Quiet panel header: icon, title, count, actions, close. */
+export function PanelHeader({ icon: Icon, title, count, children, onClose, className }: { icon?: LucideIcon; title: string; count?: number | string; children?: React.ReactNode; onClose?: () => void; className?: string }) {
+  return (
+    <div className={cn("flex h-10 shrink-0 items-center gap-2 border-b px-3", className)}>
+      {Icon && <Icon className="size-4 text-muted-foreground" />}
+      <span className="truncate text-[13px] font-semibold">{title}</span>
+      {count != null && <span className="text-[11px] tabular text-muted-foreground">{count}</span>}
+      <span className="flex-1" />
+      {children}
+      {onClose && <Tip label="Close"><Button variant="ghost" size="icon-xs" onClick={onClose} aria-label={`Close ${title.toLowerCase()}`}><X className="size-3.5" /></Button></Tip>}
+    </div>
+  );
+}
+
+/** Empty / loading placeholder for side panels. */
+export function PanelEmpty({ icon: Icon, title, description, action, className }: { icon?: LucideIcon; title: string; description?: React.ReactNode; action?: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex flex-col items-center justify-center gap-1.5 px-6 py-10 text-center", className)}>
+      {Icon && <span className="mb-1 flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground"><Icon className="size-4" /></span>}
+      <div className="text-[13px] font-medium">{title}</div>
+      {description && <div className="max-w-[260px] text-xs leading-relaxed text-muted-foreground">{description}</div>}
+      {action && <div className="mt-2">{action}</div>}
+    </div>
+  );
+}
+
+/** Icon-only tab strip for narrow panels (PDF sidebar): tooltips carry the labels, counts sit as small badges. */
+export function IconPanelTabs<T extends string>({ tabs, value, onChange, onClose, className }: { tabs: PanelTab<T>[]; value: T | null; onChange: (t: T) => void; onClose?: () => void; className?: string }) {
+  return (
+    <div role="tablist" className={cn("flex h-9 shrink-0 items-center gap-0.5 border-b bg-background px-1", className)}>
+      {tabs.map((t) => {
+        const active = t.id === value;
+        return (
+          <Tip key={t.id} label={t.count ? `${t.label} (${t.count})` : t.label} shortcut={t.shortcut}>
+            <button role="tab" aria-selected={active} aria-label={t.label} onClick={() => onChange(t.id)} className={cn("relative flex h-7 flex-1 items-center justify-center rounded-md transition-colors cursor-pointer", active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}>
+              {t.icon && <t.icon className="size-4" />}
+              {t.count ? <span className="absolute -top-0.5 right-0.5 min-w-[14px] rounded-full bg-primary px-1 text-center text-[9px] leading-[14px] text-primary-foreground tabular">{t.count > 99 ? "99+" : t.count}</span> : null}
+            </button>
+          </Tip>
+        );
+      })}
+      {onClose && <button onClick={onClose} className="ml-0.5 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Close panel"><X className="size-3.5" /></button>}
+    </div>
+  );
+}
