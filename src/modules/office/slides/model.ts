@@ -157,7 +157,7 @@ const FONT_STACKS: Record<string, string> = {
 };
 export const FONT_FACES = Object.keys(FONT_STACKS);
 
-export function resolveFontFace(family: string | undefined, theme: DeckTheme, fallback: "heading" | "body" = "body"): string {
+export function resolveFontFace(family: string | undefined, theme: DeckTheme): string {
   if (!family || family === "body") return theme.fonts.body;
   if (family === "heading") return theme.fonts.heading;
   return family;
@@ -300,7 +300,7 @@ export function findByRole(slide: DeckSlide, role: PlaceholderRole): DeckElement
 }
 
 export function slideTitle(slide: DeckSlide): string {
-  const t = findByRole(slide, "title") ?? findByRole(slide, "quote") ?? slide.elements.filter((e) => e.type === "text" && e.role !== "footer" && e.role !== "logo" && e.text?.trim()).sort((a, b) => a.y - b.y)[0];
+  const t = findByRole(slide, "title") ?? findByRole(slide, "quote") ?? slide.elements.filter((e) => e.type === "text" && e.role !== "footer" && e.role !== "logo" && e.role !== "decor" && e.text?.trim()).sort((a, b) => (b.style.fontSize ?? 18) - (a.style.fontSize ?? 18) || a.y - b.y)[0];
   return plainText(t?.text).split("\n")[0]?.trim() ?? "";
 }
 
@@ -341,7 +341,7 @@ export function clampToSlide(el: DeckElement): DeckElement {
 }
 
 export function withinSlide(el: Rect, tolerance = 0): boolean {
-  return el.x >= -tolerance && el.y >= -tolerance && el.x + el.w <= SLIDE_W + tolerance && el.y + el.h <= SLIDE_H + tolerance && el.w > 0 && el.h > 0;
+  return el.x >= -tolerance && el.y >= -tolerance && el.x + el.w <= SLIDE_W + tolerance && el.y + el.h <= SLIDE_H + tolerance && el.w > 0 && el.h >= 0;
 }
 
 export function unionRect(rects: Rect[]): Rect {

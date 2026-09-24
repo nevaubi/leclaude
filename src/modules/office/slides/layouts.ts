@@ -224,8 +224,8 @@ export function buildSlide(layout: SlideLayout, c: SlideContent, theme: DeckThem
 }
 
 export function parseTimelineLine(line: string): TimelineItem {
-  const m = line.match(/^\**([^*—–:-]+?)\**\s*(?:—|–|-|:)\s*(.+?)(?:\s*(?:—|–)\s*(.+))?$/);
-  if (m) return { date: m[1].trim(), label: m[2].trim(), detail: m[3]?.trim() };
+  const m = line.match(/^\**(.+?)\**\s*(?:\s[—–-]\s|—|–|:\s)\s*(.+?)(?:\s+[—–-]\s+(.+))?$/);
+  if (m) return { date: m[1].replace(/\*/g, "").trim(), label: m[2].trim(), detail: m[3]?.trim() };
   return { date: "", label: line };
 }
 
@@ -427,8 +427,11 @@ export function parseOutline(outline: string, theme: DeckTheme, opts: { footer?:
         continue;
       }
       if (target === "timeline") { const t = line.replace(/^\s*[-*•]\s+/, ""); if (t) timeline.push(parseTimelineLine(t)); continue; }
+      if (c.chart && !/^\s*[-*•]\s|^\s*\d+[.)]\s/.test(line)) { const sr = parseSeriesLine(line.trim()); if (sr) { c.chart = { ...c.chart, series: [...c.chart.series, sr] }; continue; } }
       if (target === "body" || target === "left" || target === "right") bullets[target].push(line);
     }
+    if (c.chart && !c.chart.series.length) c.chart = { ...c.chart, series: [{ name: "Series", values: c.chart.categories.map(() => 0) }] };
+    if (c.chart) c.chart = { ...c.chart, showLegend: c.chart.series.length > 1 || c.chart.type === "pie" };
     if (bullets.body.length) c.body = bullets.body.join("\n");
     if (bullets.left.length) c.left = bullets.left.join("\n");
     if (bullets.right.length) c.right = bullets.right.join("\n");
@@ -458,18 +461,27 @@ export function inferLayout(c: SlideContent, index: number): SlideLayout {
   return "bullets";
 }
 
-/** "bar | A, B, C | Series 1: 1, 2, 3 | Series 2: 4, 5, 6" */
+/**
+ * Chart directive forms:
+ *   "bar | A, B, C | Series 1: 1, 2, 3 | Series 2: 4, 5, 6"   (inline series)
+ *   "bar | A | B | C"  or  "bar | A, B, C"                     (categories only; series follow on "Name: 1, 2, 3" lines)
+ */
 export function parseChartSpec(spec: string, base?: ChartSpec): ChartSpec {
   const parts = spec.split("|").map((p) => p.trim()).filter(Boolean);
   const type = (["bar", "line", "pie"] as const).find((t) => t === parts[0]?.toLowerCase()) ?? base?.type ?? "bar";
-  const categories = parts[1] ? parts[1].split(",").map((s) => s.trim()).filter(Boolean) : base?.categories ?? [];
-  const series = parts.slice(2).map((p) => {
-    const i = p.indexOf(":");
-    const name = i > 0 ? p.slice(0, i).trim() : "Series";
-    const values = (i > 0 ? p.slice(i + 1) : p).split(",").map((v) => Number(v.replace(/[^0-9.\-]/g, "")) || 0);
-    return { name, values };
-  });
-  return { ...(base ?? {}), type, categories, series: series.length ? series : base?.series ?? [{ name: "Series", values: categories.map(() => 0) }], showLegend: base?.showLegend ?? (series.length > 1 || type === "pie"), showValues: base?.showValues ?? true };
+  const inlineSeries = parts.length > 2 && parts.slice(2).every((p) => /:\s*-?[\d$%.,\s]+$/.test(p));
+  const categories = inlineSeries || parts.length === 2 ? (parts[1] ? parts[1].split(",").map((s) => s.trim()).filter(Boolean) : base?.categories ?? []) : parts.slice(1);
+  const series = inlineSeries ? parts.slice(2).map((p) => parseSeriesLine(p)!).filter(Boolean) : [];
+  return { ...(base ?? {}), type, categories, series: series.length ? series : base?.series ?? [], showLegend: base?.showLegend ?? (series.length > 1 || type === "pie"), showValues: base?.showValues ?? true };
+}
+
+/** "Revenue: 1, 2, 3" → { name, values } (null when the value list is not numeric). */
+export function parseSeriesLine(line: string): { name: string; values: number[] } | null {
+  const m = line.match(/^([^:|]{1,80}):\s*(-?[\d$%.,\s]+)$/);
+  if (!m) return null;
+  const values = m[2].split(",").map((v) => v.trim()).filter(Boolean).map((v) => Number(v.replace(/[^0-9.\-]/g, "")));
+  if (!values.length || values.some((v) => Number.isNaN(v))) return null;
+  return { name: m[1].trim(), values };
 }
 
 /** Serialize a deck back to the outline grammar (for the agent's condense/review tools and exports). */

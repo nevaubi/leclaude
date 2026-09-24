@@ -1,0 +1,33 @@
+/* Excel editor styles: gridlines, print view, marquee. Colors come from design tokens. */
+.sheet-grid {
+  --sheet-gridline: color-mix(in oklab, var(--border) 85%, transparent);
+  --sheet-border-strong: color-mix(in oklab, var(--foreground) 45%, var(--border));
+  font-variant-numeric: tabular-nums;
+}
+.dark .sheet-grid {
+  --sheet-gridline: color-mix(in oklab, var(--border) 90%, transparent);
+  --sheet-border-strong: color-mix(in oklab, var(--foreground) 55%, var(--border));
+}
+.sheet-cell {
+  box-shadow: inset -1px -1px 0 var(--sheet-gridline);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+.sheet-cell-error {
+  color: var(--destructive);
+  font-weight: 500;
+}
+@keyframes sheet-marquee {
+  from { background-position: 0 0; }
+  to { background-position: 8px 0; }
+}
+.sheet-print-root { display: none; }
+@media print {
+  body * { visibility: hidden; }
+  .sheet-print-root, .sheet-print-root * { visibility: visible; }
+  .sheet-print-root { display: block; position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #111; font-family: Inter, system-ui, sans-serif; }
+  .sheet-print-root table { page-break-inside: auto; }
+  .sheet-print-root tr { page-break-inside: avoid; }
+  .sheet-print-root .print-header, .sheet-print-root .print-footer { font-size: 10px; color: #6b7280; padding: 4px 0; }
+  .sheet-print-root .print-footer { margin-top: 8px; text-align: right; }
+}
