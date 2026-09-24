@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/integrity/audit";
 import { matterFrom } from "@/modules/ediscovery/api-utils";
 import { production, productionCsv } from "@/modules/ediscovery/service";
 
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
   if ("error" in m) return m.error;
   if (req.nextUrl.searchParams.get("format") === "csv") {
     const matter = db().matters.get(m.matterId)!;
+    audit("export", { kind: "production", label: `production load file (${matter.shortName})`, matterId: m.matterId }, { format: "csv" });
     return new Response(productionCsv(m.matterId), {
       headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="production-${matter.slug}-${new Date().toISOString().slice(0, 10)}.csv"` },
     });

@@ -13,13 +13,13 @@ export async function GET(req: NextRequest) {
   return Response.json({ maps: listKnowledgeMaps(m.matterId) });
 }
 
-/** POST { matterId, topic } → 201 { map } (503 no_api_key without a key) */
+/** POST { matterId, topic, verify? } → 201 { map: KnowledgeMap & { provenance, duplicateOf? } } (503 no_api_key without a key) */
 export async function POST(req: NextRequest) {
-  const body = await readJson<{ matterId?: string; topic?: string }>(req);
+  const body = await readJson<{ matterId?: string; topic?: string; verify?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
   if (!body?.topic?.trim()) return jsonError("`topic` is required");
   try {
-    return Response.json({ map: await knowledgeMap(m.matterId, { topic: body.topic.trim(), signal: req.signal }) }, { status: 201 });
+    return Response.json({ map: await knowledgeMap(m.matterId, { topic: body.topic.trim(), verify: body.verify, signal: req.signal }) }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }

@@ -7,13 +7,15 @@ import type { CodingPatch } from "@/modules/ediscovery/types";
 
 export const runtime = "nodejs";
 
+/** GET → { doc, row, family, reviewerName, analysis: AIAnalysis & { provenance? } | null, provenance: doc.aiProvenance } */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const detail = getDocument(id, { recordView: req.nextUrl.searchParams.get("view") !== "0" });
   if (!detail) return jsonError(`No document ${id}`, 404);
-  return Response.json({ ...detail, analysis: cachedAnalysis(detail.doc.id) });
+  return Response.json({ ...detail, analysis: cachedAnalysis(detail.doc.id), provenance: detail.doc.aiProvenance ?? null });
 }
 
+/** PATCH { coding, reviewerId? } → { doc: { id, coding, aiProvenance } } (audited as coding.change) */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<{ coding?: CodingPatch; reviewerId?: string }>(req);
@@ -21,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const doc = updateCoding(id, body.coding, body.reviewerId);
     if (!doc) return jsonError(`No document ${id}`, 404);
-    return Response.json({ doc: { id: doc.id, coding: doc.coding } });
+    return Response.json({ doc: { id: doc.id, coding: doc.coding, aiProvenance: doc.aiProvenance ?? null } });
   } catch (e) {
     return errorResponse(e);
   }

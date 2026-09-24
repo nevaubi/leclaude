@@ -8,12 +8,13 @@ import { extractTimelineEvents } from "@/modules/ediscovery/analysis/ai";
 export const runtime = "nodejs";
 
 /**
- * POST { matterId, docIds, mode?: "ai" | "metadata" } → SSE
- * {type:"start", total, ai} → {type:"progress", done, total} → {type:"done", added, merged, extracted} | {type:"error", code:"no_api_key"}.
- * "metadata" mode builds one event per document deterministically (no key needed).
+ * POST { matterId, docIds, mode?: "ai" | "metadata", verify? } → SSE
+ * {type:"start", total, ai} → {type:"progress", done, total} → {type:"done", added (each with provenance), merged, extracted, dropped, duplicates: [{title, date, duplicateOf}], needsReview} | {type:"error", code:"no_api_key"}.
+ * "metadata" mode builds one event per document deterministically (no key needed). AI events are self-corrected against
+ * the documents, near-duplicates are merged into the existing chronology, and low-confidence events are gated for review.
  */
 export async function POST(req: NextRequest) {
-  const body = await readJson<{ matterId?: string; docIds?: string[]; mode?: "ai" | "metadata" }>(req);
+  const body = await readJson<{ matterId?: string; docIds?: string[]; mode?: "ai" | "metadata"; verify?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
   if (!body?.docIds?.length) return jsonError("`docIds` is required");
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
         send({ type: "done", added: res.added, merged: res.merged, extracted: events.length, ai: false });
         return;
       }
-      const res = await extractTimelineEvents(m.matterId, { docIds, signal, onProgress: (done, total) => send({ type: "progress", done, total }) });
+      const res = await extractTimelineEvents(m.matterId, { docIds, verify: body.verify, signal, onProgress: (done, total) => send({ type: "progress", done, total }) });
       send({ type: "done", ...res, ai: true });
     } catch (e) {
       if (isAIConfigError(e)) send({ type: "error", code: "no_api_key", message: (e as Error).message });

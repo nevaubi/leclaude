@@ -254,7 +254,8 @@ class RunExecution {
     if (node.type === "logic.loop") return this.runLoop(node, frame, activeSources);
     const startedAt = new Date().toISOString();
     const report: ResolveReport = { missing: [], errors: [] };
-    this.setStep(frame, id, { status: "running", startedAt, error: undefined, logs: [] });
+    // Re-executed nodes (a lifted trust gate) keep the gate's log lines so the panel shows why it paused.
+    this.setStep(frame, id, { status: "running", startedAt, error: undefined, logs: (frame.steps.get(id)?.logs ?? []).filter((l) => /^Trust gate/.test(l)) });
     const ctx: ExecContext = {
       node, run: this.run, workflow: this.workflow, config: node.config, ctx: this.templateContext(frame), report,
       signal: this.signal,

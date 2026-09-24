@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/integrity/audit";
 import { matterFrom } from "@/modules/ediscovery/api-utils";
 import { listEvents } from "@/modules/ediscovery/analysis/service";
 import { chronologyCsv, chronologyMarkdown } from "@/modules/ediscovery/analysis/chronology";
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
   const events = listEvents(m.matterId);
   const people = new Map(db().people.all().map((p) => [p.id, p.name]));
   const format = req.nextUrl.searchParams.get("format") ?? "csv";
+  audit("export", { kind: "timeline", label: `chronology (${events.length} events)`, matterId: m.matterId }, { format, count: events.length });
   if (format === "markdown") {
     const title = `Chronology — ${matter?.shortName ?? m.matterId}`;
     return Response.json({ title, markdown: chronologyMarkdown(events, { title, matterName: matter?.name, people }), count: events.length });

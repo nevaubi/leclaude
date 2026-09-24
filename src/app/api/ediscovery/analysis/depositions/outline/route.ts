@@ -5,14 +5,14 @@ import { prepareOutline } from "@/modules/ediscovery/analysis/ai";
 
 export const runtime = "nodejs";
 
-/** POST { matterId, witnessName, witnessId?, topics?, depositionId? } → { markdown, title, sources } (503 no_api_key without a key) */
+/** POST { matterId, witnessName, witnessId?, topics?, depositionId?, verify? } → { markdown, title, sources, provenance, unresolvedCites } (503 no_api_key without a key) */
 export async function POST(req: NextRequest) {
-  const body = await readJson<{ matterId?: string; witnessName?: string; witnessId?: string; topics?: string[]; depositionId?: string }>(req);
+  const body = await readJson<{ matterId?: string; witnessName?: string; witnessId?: string; topics?: string[]; depositionId?: string; verify?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
   if (!body?.witnessName?.trim()) return jsonError("`witnessName` is required");
   try {
-    const res = await prepareOutline(m.matterId, { witnessName: body.witnessName, witnessId: body.witnessId, topics: body.topics, depositionId: body.depositionId, signal: req.signal });
+    const res = await prepareOutline(m.matterId, { witnessName: body.witnessName, witnessId: body.witnessId, topics: body.topics, depositionId: body.depositionId, verify: body.verify, signal: req.signal });
     return Response.json(res);
   } catch (e) { return errorResponse(e); }
 }

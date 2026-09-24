@@ -2,19 +2,20 @@ import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
 import { getDeposition, listDesignations, objectionRulings, objectionSummary, resolveExhibit, setObjectionRuling, toggleFlag, updateQA } from "@/modules/ediscovery/analysis/service";
+import { getProvenance } from "@/lib/integrity/store";
 import type { ObjectionRuling, QAFlag } from "@/modules/ediscovery/analysis/types";
 
 export const runtime = "nodejs";
 
 const RULINGS: ObjectionRuling[] = ["pending", "sustained", "overruled"];
 
-/** GET → { deposition, designations, objections, rulings: {[index]: ruling}, exhibits: [{id, description, bates, docId}] } */
+/** GET → { deposition, designations, objections, rulings: {[index]: ruling}, exhibits: [{id, description, bates, docId}], digestProvenance: Provenance | null } */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dep = getDeposition(id);
   if (!dep) return jsonError(`No deposition ${id}`, 404);
   const exhibits = (dep.exhibits ?? []).map((e) => ({ ...e, docId: resolveExhibit(dep, e.id).docId }));
-  return Response.json({ deposition: dep, designations: listDesignations(id), objections: objectionSummary(id), rulings: objectionRulings(id), exhibits });
+  return Response.json({ deposition: dep, designations: listDesignations(id), objections: objectionSummary(id), rulings: objectionRulings(id), exhibits, digestProvenance: dep.aiDigest ? getProvenance("deposition.digest", dep.id) : null });
 }
 
 /**

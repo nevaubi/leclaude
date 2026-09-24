@@ -4,7 +4,12 @@
  * pairs) so a second extraction over the same evidence merges into the first
  * record instead of creating a twin.
  */
-import { contentHash } from "./hash";
+import { fnv1a64 } from "./hash-pure";
+
+/** Normalized text key (whitespace/case-insensitive), client-safe. */
+function textKey(text: string): string {
+  return fnv1a64(text.toLowerCase().replace(/\s+/g, " ").trim());
+}
 
 const STOP = new Set(["the", "a", "an", "of", "to", "in", "on", "for", "and", "at", "by", "with", "re", "from", "is", "that", "this", "as", "was", "were", "be", "or", "its", "it", "vs", "v"]);
 
@@ -81,11 +86,11 @@ export function findNearDuplicateTask<T extends { id: string; title: string; mat
 
 /** Stable content hash of an arbitrary item's key fields (for data.dedupe and ingest). */
 export function itemHash(item: unknown, fields?: string[]): string {
-  if (item == null) return contentHash("");
-  if (typeof item !== "object") return contentHash(String(item));
+  if (item == null) return textKey("");
+  if (typeof item !== "object") return textKey(String(item));
   const o = item as Record<string, unknown>;
   const keys = fields?.length ? fields : Object.keys(o).filter((k) => !k.startsWith("_") && k !== "id").sort();
-  return contentHash(keys.map((k) => `${k}=${typeof o[k] === "object" ? JSON.stringify(o[k]) : String(o[k] ?? "")}`).join("\n"));
+  return textKey(keys.map((k) => `${k}=${typeof o[k] === "object" ? JSON.stringify(o[k]) : String(o[k] ?? "")}`).join("\n"));
 }
 
 /** Name collision helper: "Memo.docx" → "Memo (2).docx" (skips taken suffixes). */

@@ -13,14 +13,14 @@ export async function GET(req: NextRequest) {
   return Response.json({ matrices: listFactMatrices(m.matterId) });
 }
 
-/** POST { matterId, topic, witnessId? } → 201 { matrix } (503 no_api_key without a key) */
+/** POST { matterId, topic, witnessId?, verify? } → 201 { matrix: FactMatrix & { provenance } } (503 no_api_key without a key) */
 export async function POST(req: NextRequest) {
-  const body = await readJson<{ matterId?: string; topic?: string; witnessId?: string }>(req);
+  const body = await readJson<{ matterId?: string; topic?: string; witnessId?: string; verify?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
   if (!body?.topic?.trim()) return jsonError("`topic` is required");
   try {
-    return Response.json({ matrix: await buildFactMatrix(m.matterId, { topic: body.topic.trim(), witnessId: body.witnessId, signal: req.signal }) }, { status: 201 });
+    return Response.json({ matrix: await buildFactMatrix(m.matterId, { topic: body.topic.trim(), witnessId: body.witnessId, verify: body.verify, signal: req.signal }) }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }
 

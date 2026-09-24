@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/integrity/audit";
 import { matterFrom } from "@/modules/ediscovery/api-utils";
 import { listPrivilegeLog } from "@/modules/ediscovery/service";
 import { privilegeLogCsv, privilegeLogMarkdown } from "@/modules/ediscovery/privilege";
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
   const rows = listPrivilegeLog(m.matterId);
   const format = req.nextUrl.searchParams.get("format") ?? "csv";
   const stamp = new Date().toISOString().slice(0, 10);
+  audit("export", { kind: "privilegeLog", label: `privilege log (${rows.length} entries)`, matterId: m.matterId }, { format, count: rows.length });
   if (format === "markdown") {
     return Response.json({ title: `Privilege Log — ${matter.shortName} — ${stamp}`, markdown: privilegeLogMarkdown(rows, matter.name, matter.caption), count: rows.length });
   }
