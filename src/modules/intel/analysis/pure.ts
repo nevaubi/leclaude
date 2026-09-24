@@ -129,7 +129,7 @@ export const OUTCOME_LABEL: Record<MotionOutcome, string> = { granted: "Granted"
 /** Outcome from an order's title/text; null when the record does not state one. */
 export function classifyOutcome(title: string, text?: string): MotionOutcome | null {
   const s = `${title} ${text?.slice(0, 800) ?? ""}`;
-  if (/granted\s+in\s+part|denied\s+in\s+part|in\s+part\s+and\s+denied|in\s+part\s+and\s+granted/i.test(s)) return "partial";
+  if (/(?:grant|den)(?:ed|ing|s|ies)\s+in\s+part|in\s+part\s+and\s+(?:denied|denying|granted|granting)/i.test(s)) return "partial";
   if (/\b(?:reversed|vacated)\b/i.test(s) && !/\baffirmed\b/i.test(s)) return "reversed";
   if (/\baffirm(?:ed|s|ing)\b/i.test(s)) return "affirmed";
   if (/\b(?:denying|denied|denies)\b|\boverrul(?:ed|ing)\b|\brejected\b/i.test(s)) return "denied";

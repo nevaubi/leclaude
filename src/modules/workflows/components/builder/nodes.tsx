@@ -4,49 +4,11 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { nodeSpec, sourceHandles } from "../../registry";
-import { describeSchedule, normalizeSchedule } from "../../schedule";
 import { NodeTypeIcon, StepStatusIcon, toneFor } from "../shared";
+import { nodeSummary } from "../node-summary";
 import { useBuilderStore, type WfNode } from "./store";
 
-function s(v: unknown, n = 60): string {
-  const t = typeof v === "string" ? v : v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
-  const one = t.replace(/\s+/g, " ").trim();
-  return one.length > n ? one.slice(0, n - 1) + "…" : one;
-}
-
-/** One-line summary of a node's configuration shown on the canvas card. */
-export function nodeSummary(type: string, c: Record<string, unknown>): string {
-  switch (type) {
-    case "trigger.manual": return "Run from the toolbar with a form";
-    case "trigger.schedule": return describeSchedule(normalizeSchedule(c.schedule));
-    case "trigger.document_added": return `Docs${Array.isArray(c.kinds) && c.kinds.length ? ` (${(c.kinds as string[]).join(", ")})` : ""}${c.folderName ? ` in "${s(c.folderName, 20)}"` : ""}`;
-    case "trigger.docket_update": return c.docketQuery ? `"${s(c.docketQuery, 40)}"` : "Any monitored docket";
-    case "trigger.email": return s(c.address, 40);
-    case "ai.prompt": return s(c.prompt, 70) || "No prompt";
-    case "ai.extract": return `${Array.isArray(c.fields) ? c.fields.length : 0} fields from ${s(c.source, 30)}`;
-    case "ai.classify": return (Array.isArray(c.labels) ? (c.labels as { label: string }[]).map((l) => l.label) : []).join(" · ") || "No labels";
-    case "ai.summarize": return `${s(c.style, 12)} · ${s(c.length, 8)}${c.focus ? ` · ${s(c.focus, 30)}` : ""}`;
-    case "ai.draft": return `${s(c.kind, 14)} · ${s(c.tone, 12)} · for ${s(c.audience, 10)}`;
-    case "ai.review": return `${Array.isArray(c.checklist) ? c.checklist.length : 0} checklist items`;
-    case "ai.research": return s(c.question, 70) || "No question";
-    case "data.search_library": return s(c.query, 60) || "No query";
-    case "data.search_ediscovery": return `${s(c.query, 40) || "*"}${c.privilegedOnly ? " · privileged" : ""}${c.hotOnly ? " · hot" : ""}`;
-    case "data.legal_search": return `${s(c.source, 18)} · ${s(c.source === "verify_citations" ? c.text : c.query, 40)}`;
-    case "data.fetch_url": return s(c.url, 60);
-    case "logic.branch": return `${Array.isArray(c.rules) ? c.rules.length : 0} rule(s) + else`;
-    case "logic.loop": return `over ${s(c.over, 50)} (max ${c.maxIterations ?? 50})`;
-    case "logic.merge": return c.mode === "any" ? "Continue when any branch succeeds" : "Wait for all branches";
-    case "logic.approval": return s(c.title, 50) || "Approval";
-    case "logic.delay": return `Wait ${c.minutes ?? 0} min`;
-    case "action.create_task": return s(c.title, 60);
-    case "action.create_event": return `${s(c.kind, 12)} · ${s(c.title, 45)}`;
-    case "action.save_document": return `${c.kind === "sheet" ? "Workbook" : "Word"} · ${s(c.title, 45)}`;
-    case "action.notify": return `${Array.isArray(c.recipientIds) ? c.recipientIds.length : 0} recipient(s) · ${s(c.message, 40)}`;
-    case "action.export": return `${s(c.format, 10)} · ${s(c.filename, 40)}`;
-    case "action.update_coding": return `${s(c.field, 16)} = ${s(c.value, 20)}`;
-    default: return "";
-  }
-}
+export { nodeSummary };
 
 function WorkflowNodeViewInner({ id, data, selected }: NodeProps<WfNode>) {
   const status = useBuilderStore((st) => st.stepStatuses[id]);

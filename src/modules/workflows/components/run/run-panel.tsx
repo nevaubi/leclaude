@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, BellRing, Calendar, Check, ChevronRight, Coins, ExternalLink, FileText, KeyRound, Library, ListTodo, Loader2, Paperclip, RotateCcw, ShieldAlert, SkipForward, Square, Stamp, ThumbsDown, ThumbsUp, Unlock, X } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, BellRing, Calendar, Check, ChevronRight, Coins, Download, ExternalLink, FileText, KeyRound, Library, ListChecks, ListTodo, Loader2, Paperclip, RotateCcw, ShieldAlert, SkipForward, Square, Stamp, ThumbsDown, ThumbsUp, Unlock, X } from "lucide-react";
 import { toast } from "sonner";
 import type { WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,8 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { executionPlan } from "../../graph";
 import { nodeSpec } from "../../registry";
 import { apiJson, ApiError, useRunStream } from "../../hooks";
-import type { RunArtifact, WorkflowRunRecord } from "../../types";
+import type { RunArtifact, RunOutput, WorkflowRunRecord } from "../../types";
+import { OUTPUT_FORMAT_LABEL, type OutputFormat } from "../../frontend";
 import { formatDuration, formatTokens, formatUsd, InlineAlert, NodeTypeIcon, RunStatusBadge, SectionLabel, StepStatusIcon, stepDuration, useNow } from "../shared";
 import { CopyButton, OutputViewer } from "./step-output";
 import { artifactProvenance, outputWithoutProvenance, stepDotTone, stepProvenance, stepSummary } from "./timeline-helpers";
@@ -126,6 +127,55 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
           </ol>
         </div>
 
+        {(run.deliverables?.length ?? 0) > 0 && <DeliverablesSection outputs={run.deliverables!} />}
+
+        {(run.handoffs?.length ?? 0) > 0 && (
+          <div className="border-t p-3 space-y-1.5">
+            <SectionLabel right={<span className="normal-case tracking-normal tabular">{run.handoffs!.length}</span>}>Handoffs</SectionLabel>
+            <ol className="divide-y divide-line-quiet rounded-md border" aria-label="Agent handoffs">
+              {run.handoffs!.map((h, i) => (
+                <li key={`${h.at}-${i}`} className="px-2 py-1.5 text-[11.5px]">
+                  <div className="flex items-center gap-1.5">
+                    <ArrowRightLeft className="size-3 shrink-0 text-muted-foreground" />
+                    <span className="font-medium capitalize">{h.from}</span><span className="text-muted-foreground">→</span><span className="font-medium capitalize">{h.to}</span>
+                    {h.nodeId && <span className="font-mono text-[10px] text-muted-foreground">{nodeMap.get(h.nodeId)?.label ?? h.nodeId}</span>}
+                    <span className="ml-auto shrink-0 text-[10.5px] text-muted-foreground"><RelativeTime value={h.at} /></span>
+                  </div>
+                  <div className="mt-0.5 line-clamp-3 text-muted-foreground" title={h.brief}>{h.brief}</div>
+                  {h.evidenceIds && h.evidenceIds.length > 0 && <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{h.evidenceIds.slice(0, 6).join(", ")}{h.evidenceIds.length > 6 ? ` +${h.evidenceIds.length - 6}` : ""}</div>}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {(run.stewardship?.length ?? 0) > 0 && (
+          <div className="border-t p-3 space-y-1.5">
+            <SectionLabel right={<span className="normal-case tracking-normal tabular">{run.stewardship!.filter((s) => s.fixed).length} fixed · {run.stewardship!.filter((s) => s.escalated).length} escalated</span>}>Steward</SectionLabel>
+            <ul className="divide-y divide-line-quiet rounded-md border">
+              {run.stewardship!.map((s, i) => (
+                <li key={`${s.nodeId}-${i}`} className="flex min-h-7 items-center gap-2 px-2 py-1 text-[11.5px]">
+                  <ListChecks className={cn("size-3 shrink-0", s.fixed ? "text-success" : s.escalated ? "text-warning" : "text-muted-foreground")} />
+                  <span className="min-w-0 flex-1 truncate"><span className="font-medium">{nodeMap.get(s.nodeId)?.label ?? s.nodeId}</span>{s.code && <span className="text-muted-foreground"> · {s.code}</span>}{s.action && <span className="text-muted-foreground"> · {s.action}</span>}</span>
+                  <span className="shrink-0 text-[10.5px] text-muted-foreground">{s.note ?? (s.fixed ? "Fixed" : s.escalated ? "Escalated" : "")}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {run.followUps && (run.followUps.taskIds.length > 0 || run.followUps.triggered.length > 0 || run.followUps.notified.length > 0) && (
+          <div className="border-t p-3 space-y-1.5">
+            <SectionLabel>After the run</SectionLabel>
+            <ul className="space-y-0.5 text-[11.5px]">
+              {run.followUps.taskIds.map((id) => <li key={id}><Link href={`/?task=${id}`} className="flex h-6 items-center gap-1.5 hover:underline"><ListTodo className="size-3 text-muted-foreground" /> Task created <span className="font-mono text-[10px] text-muted-foreground">{id}</span></Link></li>)}
+              {run.followUps.triggered.map((t) => <li key={t.runId}><Link href={`/workflows/runs/${t.runId}`} className="flex h-6 items-center gap-1.5 hover:underline"><ArrowUpRight className="size-3 text-muted-foreground" /> Started {t.name ?? t.workflowId}</Link></li>)}
+              {run.followUps.notified.length > 0 && <li className="flex h-6 items-center gap-1.5 text-muted-foreground"><BellRing className="size-3" /> Notified {run.followUps.notified.length} {run.followUps.notified.length === 1 ? "person" : "people"}</li>}
+              {run.followUps.notes.map((n, i) => <li key={`n-${i}`} className="text-muted-foreground">{n}</li>)}
+            </ul>
+          </div>
+        )}
+
         {(run.artifacts?.length ?? 0) > 0 && (
           <div className="border-t p-3 space-y-1.5">
             <SectionLabel>Created</SectionLabel>
@@ -162,6 +212,34 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Files and documents the run delivered: open in Office / the library, or download the bytes. */
+function DeliverablesSection({ outputs }: { outputs: RunOutput[] }) {
+  return (
+    <div className="border-t p-3 space-y-1.5">
+      <SectionLabel right={<span className="normal-case tracking-normal tabular">{outputs.length}</span>}>Outputs</SectionLabel>
+      <ul className="divide-y divide-line-quiet rounded-md border" aria-label="Run outputs">
+        {outputs.map((o) => {
+          const prov = o.meta?.provenance as Parameters<typeof TrustBadge>[0]["provenance"] | undefined;
+          const fmt = o.format ? (OUTPUT_FORMAT_LABEL[o.format as OutputFormat] ?? o.format.toUpperCase()) : o.kind;
+          return (
+            <li key={o.id} className="flex min-h-7 items-center gap-2 px-2 py-1 text-[12px]">
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium" title={o.title}>{o.title}</span>
+                <span className="block truncate text-[10.5px] text-muted-foreground">{fmt}{o.size ? ` · ${(o.size / 1024).toFixed(o.size < 10_240 ? 1 : 0)} KB` : ""}{o.libraryItemId ? " · in library" : ""}</span>
+              </span>
+              {prov && <TrustBadge provenance={prov} compact />}
+              {o.href && <Button variant="ghost" size="xs" asChild><Link href={o.href}>{o.kind === "insight" ? "View" : o.libraryItemId && !o.docId ? "Library" : "Open"}</Link></Button>}
+              {o.libraryItemId && o.docId && <Button variant="ghost" size="xs" asChild><Link href={`/library?item=${o.libraryItemId}`}><Library className="size-3" /></Link></Button>}
+              {o.downloadHref && <Button variant="ghost" size="icon-xs" asChild><a href={o.downloadHref} download aria-label={`Download ${o.title}`}><Download className="size-3.5" /></a></Button>}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
