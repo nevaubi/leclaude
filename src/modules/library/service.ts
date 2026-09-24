@@ -84,6 +84,7 @@ export function toView(item: LibraryItem, ctx: ViewCtx): LibraryItemView {
   const doc = item.officeDocId ? db().officeDocs.get(item.officeDocId) : null;
   return {
     ...item,
+    tags: item.tags ? Array.from(new Set(item.tags)) : undefined,
     ownerName: item.ownerId ? ctx.people.get(item.ownerId) : undefined,
     matterName: matter?.name,
     matterShortName: matter?.shortName,

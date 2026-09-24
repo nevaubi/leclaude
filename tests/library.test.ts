@@ -38,8 +38,10 @@ describe("library seed", () => {
       expect(extractVariables(it.content!).length).toBeGreaterThan(0);
     }
     for (const id of LIBRARY_SEED_IDS.notes) expect(d.library.get(id)!.content!.length).toBeGreaterThan(800);
-    // no lorem ipsum anywhere
+    // no lorem ipsum anywhere, and no duplicate tags on any item (React keys)
     expect(items.some((i) => /lorem ipsum|sample text/i.test(`${i.name} ${i.content ?? ""}`))).toBe(false);
+    const dupes = items.filter((i) => i.id.startsWith("lib_") && !i.id.startsWith("lib_word_") && i.tags && new Set(i.tags).size !== i.tags.length).map((i) => `${i.id}: ${i.tags!.join(",")}`);
+    expect(dupes).toEqual([]);
   });
   it("is idempotent", () => {
     const d = db();

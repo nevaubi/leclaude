@@ -30,9 +30,9 @@ export interface OfficeHomeData {
 
 export const OFFICE_KINDS: OfficeKind[] = ["word", "sheet", "slides", "pdf"];
 
-export const KIND_META: Record<OfficeKind, { label: string; plural: string; app: string; ext: string; blurb: string; accept: string }> = {
-  word: { label: "Document", plural: "Documents", app: "Word", ext: "docx", blurb: "Briefs, memos, letters and agreements with tracked changes and a drafting agent.", accept: ".docx,.doc,.rtf,.md,.txt,.html" },
-  sheet: { label: "Workbook", plural: "Workbooks", app: "Excel", ext: "xlsx", blurb: "Damages models, privilege logs and trackers with formulas and an analysis agent.", accept: ".xlsx,.xlsm,.xls,.csv,.tsv" },
-  slides: { label: "Deck", plural: "Decks", app: "PowerPoint", ext: "pptx", blurb: "Case themes, pitches and hearing decks with layouts and a storyline agent.", accept: ".pptx" },
-  pdf: { label: "PDF", plural: "PDFs", app: "PDF", ext: "pdf", blurb: "Stamp, redact, annotate and split productions with an extraction agent.", accept: ".pdf" },
+export const KIND_META: Record<OfficeKind, { label: string; plural: string; lower: string; lowerPlural: string; app: string; ext: string; blurb: string; accept: string }> = {
+  word: { label: "Document", plural: "Documents", lower: "document", lowerPlural: "documents", app: "Word", ext: "docx", blurb: "Briefs, memos, letters and agreements with tracked changes and a drafting agent.", accept: ".docx,.doc,.rtf,.md,.txt,.html" },
+  sheet: { label: "Workbook", plural: "Workbooks", lower: "workbook", lowerPlural: "workbooks", app: "Excel", ext: "xlsx", blurb: "Damages models, privilege logs and trackers with formulas and an analysis agent.", accept: ".xlsx,.xlsm,.xls,.csv,.tsv" },
+  slides: { label: "Deck", plural: "Decks", lower: "deck", lowerPlural: "decks", app: "PowerPoint", ext: "pptx", blurb: "Case themes, pitches and hearing decks with layouts and a storyline agent.", accept: ".pptx" },
+  pdf: { label: "PDF", plural: "PDFs", lower: "PDF", lowerPlural: "PDFs", app: "PDF", ext: "pdf", blurb: "Stamp, redact, annotate and split productions with an extraction agent.", accept: ".pdf" },
 };

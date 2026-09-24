@@ -26,7 +26,6 @@ const AK = "Aisha Khan";
 const DO = "Daniel Okafor";
 const JW = "Jordan Whitfield";
 const PR = "Priya Raman";
-const SC = "Samuel Chen";
 
 export const SEED_CLAUSES: SeedClause[] = [
   // -------------------------------------------------------------------------

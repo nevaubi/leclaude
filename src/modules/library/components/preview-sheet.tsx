@@ -237,7 +237,7 @@ function PreviewBody({ id }: { id: string }) {
           ) : <p className="text-xs text-muted-foreground">{isText ? "No earlier versions." : item.officeDocId ? "Office document versions are managed in the editor (History)." : "This item type is not versioned."}</p>
         )}
       </SheetBody>
-      {editorHref && <div className="border-t px-5 py-2 text-[11px] text-muted-foreground">Tip: the editor's Draft / Review / Ask agent can cite this document's matter context automatically. <button onClick={() => router.push(editorHref)} className="text-primary hover:underline cursor-pointer">Open now</button></div>}
+      {editorHref && <div className="border-t px-5 py-2 text-[11px] text-muted-foreground">Tip: the editor&apos;s Draft / Review / Ask agent can cite this document&apos;s matter context automatically. <button onClick={() => router.push(editorHref)} className="text-primary hover:underline cursor-pointer">Open now</button></div>}
     </>
   );
 }

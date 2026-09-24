@@ -1,4 +1,5 @@
 import "server-only";
+import { matterFolderId } from "@/modules/library/ids";
 import type { Database } from "@/lib/db";
 import type { LibraryItem, OfficeComment } from "@/lib/types/domain";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
@@ -415,7 +416,7 @@ export function seedWord(db: Database) {
       return { id: c.id, docId: sd.id, anchor, quote: c.quote, body: c.body, authorId: author?.id, authorName: c.agent ? AGENT.name : author?.name ?? "Jordan Whitfield", createdAt: c.createdAt, resolved: c.resolved, replies: c.replies ?? [], source: c.agent ? "agent" : "user" };
     });
     db.officeComments.putMany(comments);
-    const lib: LibraryItem = { id: `lib_word_${sd.id}`, parentId: null, name: sd.title, type: "docx", matterId: sd.matterId, officeDocId: sd.id, size: doc.size, tags: sd.tags, ownerId: PEOPLE.jordanWhitfield, sharedWith: ["matter-team"], createdAt: sd.createdAt, updatedAt: finalDoc.updatedAt, version: finalDoc.contentVersion, status: "draft" };
+    const lib: LibraryItem = { id: `lib_word_${sd.id}`, parentId: sd.matterId ? matterFolderId(sd.matterId) : null, name: sd.title, type: "docx", matterId: sd.matterId, officeDocId: sd.id, size: doc.size, tags: sd.tags, ownerId: PEOPLE.jordanWhitfield, sharedWith: ["matter-team"], createdAt: sd.createdAt, updatedAt: finalDoc.updatedAt, version: finalDoc.contentVersion, status: "draft" };
     db.library.put(lib);
     void sterling;
   }

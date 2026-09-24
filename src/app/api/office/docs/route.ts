@@ -5,6 +5,7 @@ import { getTemplate } from "@/modules/office/shared/template-registry";
 import type { OfficeKind } from "@/lib/types/domain";
 import { db } from "@/lib/db";
 import { nanoid } from "nanoid";
+import { matterFolderId, LIBRARY_FOLDERS } from "@/modules/library/ids";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (body.addToLibrary !== false) {
     const now = new Date().toISOString();
     const ext = { word: "docx", sheet: "xlsx", slides: "pptx", pdf: "pdf" }[doc.kind] as "docx" | "xlsx" | "pptx" | "pdf";
-    db().library.put({ id: `lib_${nanoid(10)}`, parentId: body.folderId ?? null, name: doc.title, type: ext, matterId: doc.matterId, officeDocId: doc.id, createdAt: now, updatedAt: now, size: doc.size, ownerId: doc.createdById, sharedWith: ["firm"] });
+    db().library.put({ id: `lib_${nanoid(10)}`, parentId: body.folderId ?? (doc.matterId ? matterFolderId(doc.matterId) : LIBRARY_FOLDERS.myFiles), name: doc.title, type: ext, matterId: doc.matterId, officeDocId: doc.id, createdAt: now, updatedAt: now, size: doc.size, ownerId: doc.createdById, sharedWith: ["firm"] });
   }
   return Response.json({ doc });
 }

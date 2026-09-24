@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronRight, FolderInput, Keyboard, Library as LibraryIcon, Loader2, Sparkles, Star, Trash2, X, Download } from "lucide-react";
+import { ChevronRight, FolderInput, Keyboard, KeyRound, Library as LibraryIcon, Loader2, Sparkles, Star, Trash2, X, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
@@ -52,12 +52,12 @@ function Layout() {
         <FolderTree className="min-w-0 flex-1" />
         <div onPointerDown={onResizeStart} className="w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-ring/40 transition-colors" aria-hidden />
       </div>
-      <main className="flex min-w-0 flex-1 flex-col">
+      <section className="flex min-w-0 flex-1 flex-col" aria-label="Library contents">
         <Toolbar />
         <SelectionBar />
         <ItemGrid />
         <UploadStrip />
-      </main>
+      </section>
       {hydrated && askOpen && <AskLibraryPanel className="hidden lg:flex" />}
       {hydrated && !askOpen && (
         <Tip label="Ask the library" shortcut="A" side="left">
@@ -88,7 +88,7 @@ function Topbar() {
       {list?.total != null && !isSearching && <span className="hidden text-xs text-muted-foreground md:inline">{list.total} item{list.total === 1 ? "" : "s"}</span>}
       <div className="hidden items-center gap-1 md:flex">
         <Tip label="Keyboard shortcuts" shortcut="?"><Button variant="ghost" size="icon-sm" onClick={() => openDialog({ kind: "shortcuts" })} aria-label="Keyboard shortcuts"><Keyboard className="size-4" /></Button></Tip>
-        <Button variant={askOpen ? "secondary" : "ghost"} size="sm" onClick={() => setAskOpen(!askOpen)} className="gap-1.5"><Sparkles className="size-3.5" /> Ask{!aiConfigured && <span className="text-[10px] text-muted-foreground">(key)</span>}</Button>
+        <Tip label={aiConfigured ? "Ask the library (internal research)" : "Ask the library — OpenAI key required for answers"} shortcut="A"><Button variant={askOpen ? "secondary" : "ghost"} size="sm" onClick={() => setAskOpen(!askOpen)} className="gap-1.5"><Sparkles className="size-3.5" /> Ask{!aiConfigured && <KeyRound className="size-3 text-warning" />}</Button></Tip>
       </div>
     </TopbarSlot>
   );

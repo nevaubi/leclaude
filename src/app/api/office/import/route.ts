@@ -4,6 +4,9 @@ import { jsonError } from "@/lib/ai/sse";
 import { blobs, db } from "@/lib/db";
 import type { OfficeKind } from "@/lib/types/domain";
 import { createOfficeDoc } from "@/modules/office/shared/docs-service";
+import { matterFolderId, LIBRARY_FOLDERS } from "@/modules/library/ids";
+import { dispatchInboundEvent } from "@/modules/workflows/inbound";
+import { extractPlainText } from "@/lib/ai/toolkit/internal";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -36,6 +39,9 @@ export async function POST(req: NextRequest) {
   const doc = createOfficeDoc({ kind, title: imported.title || file.name.replace(/\.[^.]+$/, ""), content: imported.content, matterId, folderId, meta: { ...(imported.meta ?? {}), originalBlobId: original.id, originalName: file.name } });
   const now = new Date().toISOString();
   const libType = ({ word: "docx", sheet: "xlsx", slides: "pptx", pdf: "pdf" } as const)[kind];
-  db().library.put({ id: `lib_${nanoid(10)}`, parentId: folderId ?? null, name: doc.title, type: libType, matterId, officeDocId: doc.id, size: bytes.byteLength, createdAt: now, updatedAt: now, sharedWith: ["firm"] });
+  db().library.put({ id: `lib_${nanoid(10)}`, parentId: folderId ?? (matterId ? matterFolderId(matterId) : LIBRARY_FOLDERS.myFiles), name: doc.title, type: libType, matterId, officeDocId: doc.id, size: bytes.byteLength, createdAt: now, updatedAt: now, sharedWith: ["firm"] });
+  // Fire document_added workflows (fire-and-forget; runs stream their own progress).
+  const folder = folderId ? db().library.get(folderId)?.name : undefined;
+  void dispatchInboundEvent({ type: "document_added", matterId, payload: { documentId: doc.id, title: doc.title, kind, folderName: folder, text: extractPlainText(imported.content).slice(0, 200_000), url: `/office/${kind}/${doc.id}` } }).catch((e) => console.warn("[import] workflow dispatch failed", (e as Error).message));
   return Response.json({ doc: { ...doc, content: undefined }, kind, url: `/office/${kind}/${doc.id}` });
 }

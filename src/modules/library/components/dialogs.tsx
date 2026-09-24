@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { AlertTriangle, ChevronRight, FolderInput, Loader2 } from "lucide-react";
+import { AlertTriangle, FolderInput, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -206,4 +206,3 @@ function findName(nodes: FolderNode[], id: string): string | null {
   return null;
 }
 
-export { ChevronRight };

@@ -31,7 +31,7 @@ export interface LibraryActions {
 
 export interface LibraryContextValue {
   filters: LibraryFilters;
-  setFilters: (patch: Partial<LibraryFilters>, opts?: { keepFolder?: boolean }) => void;
+  setFilters: (patch: Partial<LibraryFilters>, opts?: { replace?: boolean }) => void;
   folderId: string | null;
   view: LibraryView;
   currentMatterId: string | null;
@@ -119,18 +119,20 @@ export function LibraryProvider({ initial, children }: { initial: LibraryInitial
     }
   }, [filters, previewId, pathname, router]);
 
-  const navigate = React.useCallback((next: LibraryFilters, item?: string | null) => {
+  const navigate = React.useCallback((next: LibraryFilters, item?: string | null, mode: "push" | "replace" = "push") => {
     const params = filtersToParams(next);
     const itemId = item === undefined ? previewId : item;
     if (itemId) params.set("item", itemId);
     const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    const href = qs ? `${pathname}?${qs}` : pathname;
+    if (mode === "replace") router.replace(href); else router.push(href);
   }, [pathname, router, previewId]);
 
-  const setFilters = React.useCallback((patch: Partial<LibraryFilters>) => {
+  const setFilters = React.useCallback((patch: Partial<LibraryFilters>, opts?: { replace?: boolean }) => {
     const next: LibraryFilters = { ...filters, ...patch };
-    // sort/dir live in the persisted UI store, not the URL, unless explicitly set
-    navigate(next);
+    // sort/dir live in the persisted UI store, not the URL, unless explicitly set.
+    // Typing in the search box replaces the entry so Back leaves the library in one step.
+    navigate(next, undefined, opts?.replace || ("q" in patch && Object.keys(patch).length === 1) ? "replace" : "push");
   }, [filters, navigate]);
 
   const effective = React.useMemo<LibraryFilters>(() => ({ ...filters, sort: filters.sort ?? uiSort, dir: filters.dir ?? uiDir }), [filters, uiSort, uiDir]);
