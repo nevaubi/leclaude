@@ -127,6 +127,10 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   // Narrow viewports (≤1180px) open with the outline and comment margin collapsed; the user can reopen them.
   const autoCollapsed = React.useRef(false);
   React.useEffect(() => { if (narrow && !autoCollapsed.current) { autoCollapsed.current = true; setSidebarOpen(false); setCommentsOpen(false); } }, [narrow]);
+  // Mid-width viewports (≤1440px) cannot fit outline + page + comment margin + assistant side by side: fold the outline once when all three are open.
+  const mid = useNarrowViewport(1440);
+  const autoFolded = React.useRef(false);
+  React.useEffect(() => { if (mid && !narrow && agentOpen && commentsOpen && sidebarOpen && !autoFolded.current) { autoFolded.current = true; setSidebarOpen(false); } }, [mid, narrow, agentOpen, commentsOpen, sidebarOpen]);
 
   const ask = React.useCallback((req: PromptRequest) => new Promise<{ value: string; secondary?: string } | null>((res) => { promptResolver.current = res; setPrompt(req); }), []);
 
