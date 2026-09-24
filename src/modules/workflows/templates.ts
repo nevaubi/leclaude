@@ -17,7 +17,7 @@ function E(source: string, target: string, sourceHandle?: string, targetHandle?:
   return { id: `e_${source}__${target}${sourceHandle ? `__${sourceHandle}` : ""}`, source, target, sourceHandle, targetHandle, label };
 }
 
-export interface TemplateDef extends Omit<Workflow, "createdAt" | "updatedAt" | "status" | "isTemplate" | "ownerId"> { }
+export type TemplateDef = Omit<Workflow, "createdAt" | "updatedAt" | "status" | "isTemplate" | "ownerId">;
 
 const T0 = "2026-06-01T09:00:00.000Z";
 

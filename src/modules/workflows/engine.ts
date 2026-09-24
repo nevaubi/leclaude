@@ -70,8 +70,6 @@ class TimeoutError extends Error { constructor(ms: number) { super(`Step timed o
 
 function isSkippable(spec: ReturnType<typeof nodeSpec>) { return Boolean(spec); }
 
-interface StepMap { get(id: string): WorkflowRunStep | undefined; set(id: string, s: WorkflowRunStep): void; values(): IterableIterator<WorkflowRunStep> }
-
 interface Frame {
   /** Step states visible for edge activation and templates (top-level or loop iteration). */
   steps: Map<string, WorkflowRunStep>;
@@ -215,12 +213,17 @@ class RunExecution {
       if (this.paused || this.failed || this.signal.aborted) return;
       for (const id of Array.from(pendingIds)) {
         if (inflight.has(id)) continue;
-        const inc = this.incoming(id).filter((e) => ids.includes(e.source) || frame.parent?.steps.has(e.source));
+        // Inside a loop body the edge from the loop's "each" handle is the entry edge: always ready and active.
+        const loopId = frame.iteration?.loopId;
+        const all = this.incoming(id);
+        const entry = Boolean(loopId) && all.some((e) => e.source === loopId && e.sourceHandle === "each");
+        const inc = all.filter((e) => e.source !== loopId && (ids.includes(e.source) || frame.parent?.steps.has(e.source)));
         const ready = inc.every((e) => this.settled(frame.steps.get(e.source) ?? frame.parent?.steps.get(e.source)));
         if (!ready) continue;
         pendingIds.delete(id);
         const active = inc.filter((e) => this.isEdgeActive(e, frame)).map((e) => e.source);
-        if (inc.length && !active.length) {
+        if (entry) active.push(loopId!);
+        if ((inc.length || all.length) && !active.length) {
           this.setStep(frame, id, { status: "skipped", finishedAt: new Date().toISOString(), logs: ["Skipped: no active incoming path"] });
           continue;
         }

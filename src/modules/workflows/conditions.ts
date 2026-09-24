@@ -59,7 +59,7 @@ function list(v: unknown): string[] {
 }
 
 /** Evaluate one condition against already-resolved operands. */
-export function compare(op: ConditionOp, left: unknown, right: unknown): boolean {
+export function compare(op: ConditionOp, left: unknown, right?: unknown): boolean {
   switch (op) {
     case "equals": {
       const ln = num(left), rn = num(right);
