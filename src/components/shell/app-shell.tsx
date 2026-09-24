@@ -198,7 +198,8 @@ function ReviewQueueIndicator() {
   const [pending, setPending] = React.useState<number | null>(null);
   React.useEffect(() => {
     let alive = true;
-    fetch("/api/integrity/scan").then((r) => (r.ok ? r.json() : null)).then((j) => { if (alive && j?.review) setPending(Number(j.review.pending ?? 0)); }).catch(() => {});
+    // Counts only: the review endpoint is far lighter than shipping the whole last scan report on every navigation.
+    fetch("/api/integrity/review?limit=1").then((r) => (r.ok ? r.json() : null)).then((j) => { if (alive && j?.counts) setPending(Number(j.counts.pending ?? 0)); }).catch(() => {});
     return () => { alive = false; };
   }, [pathname]);
   if (!pending) return null;

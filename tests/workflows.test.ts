@@ -492,13 +492,22 @@ describe("service and seeds", () => {
     expect(list.runs.every((r) => r.status === "waiting_approval")).toBe(true);
     expect(listRuns({ q: "docket" }).runs.length).toBeGreaterThan(0);
   });
+  /** Scheduled runs finish asynchronously: poll for `count` settled runs instead of sleeping a fixed time (flaky under load). */
+  async function settledRuns(workflowId: string, count: number, timeoutMs = 15_000) {
+    const started = Date.now();
+    for (;;) {
+      const runs = listRuns({ workflowId }).runs;
+      if (runs.filter((r) => r.status !== "running" && r.status !== "queued").length >= count) return runs;
+      if (Date.now() - started > timeoutMs) return runs;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  }
   it("fires due schedules through the scheduler tick", async () => {
     const w = wf("wf_test_sched", [N("sched", "trigger.schedule", { schedule: { frequency: "daily", time: "06:00" }, enabled: true, presetInputs: { who: "Maria" } }), N("task", "action.create_task", { title: "Scheduled for {{inputs.who}} at {{steps.sched.output.scheduledFor | date:date}}" })], [E("sched", "task")]);
     db().kv.set(`wf:schedule:last:${w.id}`, new Date(Date.now() - 3 * 86_400_000).toISOString());
     const res = await tick(new Date(), {});
     expect(res.fired).toContain(w.id);
-    await new Promise((r) => setTimeout(r, 200));
-    const run = listRuns({ workflowId: w.id }).runs[0];
+    const run = (await settledRuns(w.id, 1))[0];
     expect(run.triggeredBy).toBe("schedule");
     expect(run.status).toBe("succeeded");
     const task = db().tasks.find((t) => t.title.startsWith("Scheduled for Maria"));
@@ -509,6 +518,6 @@ describe("service and seeds", () => {
     // Forced fire ignores the schedule.
     const forced = await tick(new Date(), { force: [w.id] });
     expect(forced.fired).toContain(w.id);
-    await new Promise((r) => setTimeout(r, 200));
+    await settledRuns(w.id, 2);
   });
 });

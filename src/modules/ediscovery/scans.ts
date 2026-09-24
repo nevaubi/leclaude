@@ -147,16 +147,26 @@ registerScan({
   run: (d) => {
     const findings: Finding[] = [];
     let checked = 0;
+    // Uncertain AI scores (40–69) that nobody has coded are a review-grid backlog, not AI records awaiting a decision:
+    // one finding per matter keeps this scan and the review queue telling the same story.
+    const uncoded = new Map<string, number>();
     for (const doc of d.edocs.all()) {
       if (doc.aiScore == null && !doc.aiProvenance) continue;
       checked++;
       const conf = doc.aiProvenance?.confidence;
       const uncertain = doc.aiScore != null && doc.aiScore >= 40 && doc.aiScore < 70;
       const belowGate = conf != null && conf < CONFIDENCE_GATE;
-      if ((belowGate || uncertain) && doc.coding.responsive == null && doc.aiProvenance?.review?.status !== "approved" && doc.aiProvenance?.review?.status !== "rejected") {
-        findings.push({ severity: "low", title: `${doc.bates} was AI-scored ${doc.aiScore ?? "—"}${conf != null ? ` (confidence ${(conf * 100).toFixed(0)}%)` : ""} and has no reviewer decision`, detail: "Below the confidence gate: the prediction must not drive production or privilege calls until a reviewer codes it.", target: { kind: "edoc", id: doc.id, href: docHref(doc.matterId, doc.id) } });
+      const undecided = doc.coding.responsive == null && doc.aiProvenance?.review?.status !== "approved" && doc.aiProvenance?.review?.status !== "rejected";
+      if (belowGate && undecided) {
+        findings.push({ severity: "low", title: `${doc.bates} was AI-scored ${doc.aiScore ?? "—"} (confidence ${((conf ?? 0) * 100).toFixed(0)}%) and has no reviewer decision`, detail: "Below the confidence gate: the prediction must not drive production or privilege calls until a reviewer codes it.", target: { kind: "edoc", id: doc.id, href: docHref(doc.matterId, doc.id) } });
+      } else if (uncertain && undecided) {
+        uncoded.set(doc.matterId, (uncoded.get(doc.matterId) ?? 0) + 1);
       }
       if (doc.aiProvenance?.verification?.status === "contradicted") findings.push({ severity: "medium", title: `${doc.bates}: AI analysis was contradicted by the document text`, detail: doc.aiProvenance.verification.notes ?? "", target: { kind: "edoc", id: doc.id, href: docHref(doc.matterId, doc.id) } });
+    }
+    for (const [matterId, n] of uncoded) {
+      const matter = d.matters.get(matterId);
+      findings.push({ severity: "info", title: `${n} AI-scored document${n === 1 ? "" : "s"} in ${matter?.shortName ?? matterId} ${n === 1 ? "has" : "have"} no reviewer decision`, detail: "Scores between 40 and 69 are suggestions only and must not drive production or privilege calls until a reviewer codes the documents. Sort the review grid by AI score to work through them.", target: { kind: "matter", id: matterId, href: `/ediscovery?matter=${matterId}` } });
     }
     const stale = Date.now() - 14 * 86400000;
     for (const r of listProvenance({ pending: true })) {
