@@ -4,7 +4,10 @@
  * still has its user space unrotated), outlines/bookmarks and native
  * annotation dictionaries (sticky notes, links, text markups).
  */
-import { PDFArray, PDFDocument, PDFFont, PDFHexString, PDFName, PDFNull, PDFNumber, PDFPage, PDFRef, PDFString, degrees, rgb, type Color } from "pdf-lib";
+import { PDFArray, PDFDocument, PDFFont, PDFHexString, PDFName, PDFNull, PDFNumber, PDFObject, PDFPage, PDFRef, PDFString, degrees, rgb, type Color } from "pdf-lib";
+
+/** Literal dictionary accepted by PDFContext.obj(). */
+type DictLiteral = Record<string, PDFObject | string | number | boolean | null | undefined | (PDFObject | number | string)[]>;
 import { hexToRgb, type PdfRect } from "./model";
 
 export type TextAnchor = "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right" | "center";
@@ -140,7 +143,7 @@ export function setOutline(doc: PDFDocument, items: OutlineSpec[]) {
     let total = 0;
     list.forEach((it, i) => {
       const page = pages[Math.min(Math.max(1, it.page), pages.length) - 1];
-      const dict: Record<string, unknown> = { Title: PDFHexString.fromText(it.title), Parent: parent, Dest: ctx.obj([page.ref, PDFName.of("XYZ"), PDFNull, PDFNumber.of(page.getHeight()), PDFNull]) };
+      const dict: DictLiteral = { Title: PDFHexString.fromText(it.title), Parent: parent, Dest: ctx.obj([page.ref, PDFName.of("XYZ"), PDFNull, PDFNumber.of(page.getHeight()), PDFNull]) };
       if (i > 0) dict.Prev = refs[i - 1];
       if (i < list.length - 1) dict.Next = refs[i + 1];
       total++;
@@ -164,7 +167,7 @@ export function setOutline(doc: PDFDocument, items: OutlineSpec[]) {
 
 function annotBase(subtype: string, rect: PdfRect, o: { author?: string; contents?: string; color?: string; opacity?: number; date?: string }) {
   const c = hexToRgb(o.color ?? "#FACC15");
-  const d: Record<string, unknown> = {
+  const d: DictLiteral = {
     Type: PDFName.of("Annot"),
     Subtype: PDFName.of(subtype),
     Rect: [rect.x, rect.y, rect.x + rect.w, rect.y + rect.h],
@@ -225,7 +228,7 @@ export function addShapeAnnotation(doc: PDFDocument, page: PDFPage, kind: "Squar
 /** Ink annotation from freehand paths. */
 export function addInkAnnotation(doc: PDFDocument, page: PDFPage, rect: PdfRect, paths: { x: number; y: number }[][], o: { author?: string; contents?: string; color?: string; opacity?: number; strokeWidth?: number; date?: string }) {
   const dict = annotBase("Ink", rect, o);
-  dict.InkList = paths.map((p) => p.flatMap((pt) => [pt.x, pt.y]));
+  dict.InkList = paths.map((p) => doc.context.obj(p.flatMap((pt) => [pt.x, pt.y])));
   dict.BS = doc.context.obj({ W: PDFNumber.of(o.strokeWidth ?? 1.5) });
   const ref = doc.context.register(doc.context.obj(dict));
   page.node.addAnnot(ref);
