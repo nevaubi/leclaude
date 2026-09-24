@@ -6,6 +6,15 @@
  */
 import type { WorkflowNodeType } from "@/lib/types/domain";
 
+/**
+ * Node types added by the AI-integrity layer (verification, deduplication and
+ * trust review). They are registered here and executed by the engine; the
+ * shared `WorkflowNodeType` union in lib/types/domain.ts lists the original
+ * types, so `AnyNodeType` is the full catalogue until that union is extended.
+ */
+export type IntegrityNodeType = "ai.verify" | "data.dedupe" | "logic.review";
+export type AnyNodeType = WorkflowNodeType | IntegrityNodeType;
+
 export type NodeCategory = "trigger" | "ai" | "data" | "logic" | "action";
 
 export const CATEGORY_META: Record<NodeCategory, { label: string; plural: string; description: string; tone: string }> = {
@@ -233,6 +242,23 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     outputShape: "{ text (memo), citations[], toolCalls }", outputPaths: ["output.text", "output.citations", "output.toolCalls"],
   },
 
+  {
+    type: "ai.verify" as WorkflowNodeType, category: "ai", label: "Verify against sources", short: "Verify", icon: "ShieldCheck", usesAI: true,
+    description: "Checks a prior step's output against its sources: every factual claim is graded supported / unsupported / contradicted, record cites (Bates, page:line) are cross-checked, and the result is written into the step's provenance. Downstream actions only act on trusted output.",
+    keywords: ["verification", "hallucination", "citations", "provenance", "trust", "fact-check", "self-correct"],
+    defaultConfig: { output: "{{steps.draft.output.text}}", sources: "{{steps.search.output.text}}", stepId: "draft", mode: "claims", maxClaims: 25, modelTier: "fast", retries: 1, timeoutSec: 180 },
+    fields: [
+      { key: "output", label: "Output to verify", type: "template", rows: 3, required: true, help: "Text or JSON produced by an earlier AI step." },
+      { key: "sources", label: "Sources", type: "template", rows: 3, required: true, help: "Evidence text, or an array of search results / documents ({ bates, passage, text… })." },
+      { key: "stepId", label: "Step being verified", type: "text", help: "Node id of the AI step; its provenance is updated with the verdict so later actions can trust it." },
+      { key: "mode", label: "Mode", type: "select", options: [{ value: "claims", label: "Claims (narrative text)" }, { value: "structured", label: "Structured (self-correct JSON rows)" }] },
+      { key: "maxClaims", label: "Max claims", type: "number", min: 5, max: 60 },
+      MODEL_TIER, RETRIES, TIMEOUT,
+    ],
+    outputShape: "{ status, trusted, supported, unsupported, contradicted, score, unresolvedCites[], verdicts[], corrected, changes[], provenance }",
+    outputPaths: ["output.status", "output.trusted", "output.score", "output.contradicted", "output.unresolvedCites", "output.corrected", "output.changes"],
+  },
+
   // ───────────────────────── Data ─────────────────────────
   {
     type: "data.search_library", category: "data", label: "Search library", short: "Library", icon: "Library",
@@ -298,6 +324,20 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     outputShape: "{ url, title, text }", outputPaths: ["output.title", "output.text", "output.url"],
   },
 
+  {
+    type: "data.dedupe" as WorkflowNodeType, category: "data", label: "Deduplicate", short: "Dedupe", icon: "CopyMinus",
+    description: "Drops items that already exist in a target collection (same content hash of the key fields, or a near-duplicate title on the same date) so a workflow never creates twins of timeline events, conflicts, tasks or documents.",
+    keywords: ["duplicate", "unique", "hash", "merge", "twins", "idempotent"],
+    defaultConfig: { items: "{{steps.events.output.events}}", collection: "timeline", keyFields: "date,event", matterId: "{{matter.id}}" },
+    fields: [
+      { key: "items", label: "Items", type: "template", rows: 2, required: true, help: "An array (objects or strings)." },
+      { key: "collection", label: "Check against", type: "select", required: true, options: [{ value: "timeline", label: "Matter timeline events" }, { value: "conflicts", label: "Conflicts register" }, { value: "tasks", label: "Open tasks" }, { value: "edocs", label: "E-discovery documents" }, { value: "library", label: "Library items" }, { value: "self", label: "Only within the list" }] },
+      { key: "keyFields", label: "Key fields", type: "text", placeholder: "date,event", help: "Comma-separated fields that identify an item; all fields when empty." },
+      { key: "matterId", label: "Matter", type: "matter" },
+    ],
+    outputShape: "{ items[], kept, dropped, droppedItems[{ item, duplicateOf }], hashes[] }", outputPaths: ["output.items", "output.kept", "output.dropped", "output.droppedItems"],
+  },
+
   // ───────────────────────── Logic ─────────────────────────
   {
     type: "logic.branch", category: "logic", label: "Branch", short: "Branch", icon: "GitBranch",
@@ -355,6 +395,22 @@ export const NODE_TYPES: NodeTypeSpec[] = [
     defaultConfig: { minutes: 5 },
     fields: [{ key: "minutes", label: "Minutes", type: "number", min: 0, max: 10080, required: true }],
     outputShape: "{ waitedMs, requestedMs, capped }", outputPaths: ["output.waitedMs"],
+  },
+
+  {
+    type: "logic.review" as WorkflowNodeType, category: "logic", label: "Trust review", short: "Review", icon: "ShieldAlert",
+    description: "Gate on AI provenance: continues when every referenced AI step is trusted (source-backed, verified, above the confidence gate); otherwise pauses the run for a person with the reason (e.g. '3 extracted events failed verification'). Approving lets the run proceed; rejecting skips the gated path.",
+    keywords: ["gate", "trust", "provenance", "human", "review", "confidence", "pause"],
+    defaultConfig: { steps: "events, memo", approverId: "p_jwhitfield", title: "Review AI output", message: "AI output needs a look before the workflow acts on it.", minConfidence: 0.6 },
+    fields: [
+      { key: "steps", label: "Steps to review", type: "text", required: true, help: "Comma-separated node ids of AI steps; the gate reads their provenance." },
+      { key: "approverId", label: "Reviewer", type: "person" },
+      { key: "title", label: "Title", type: "text" },
+      { key: "message", label: "Message to reviewer", type: "template", rows: 4 },
+      { key: "minConfidence", label: "Minimum confidence", type: "number", min: 0, max: 1, help: "0..1; defaults to the platform gate (0.6)." },
+    ],
+    outputs: [{ id: "approved", label: "Trusted / approved" }, { id: "rejected", label: "Rejected" }],
+    outputShape: "{ trusted, approved, reasons[], steps[{ id, trusted, reason, confidence }], decidedBy, comment }", outputPaths: ["output.trusted", "output.approved", "output.reasons", "output.steps", "output.comment"],
   },
 
   // ───────────────────────── Actions ─────────────────────────
@@ -466,7 +522,7 @@ export function isTriggerType(type: string) {
 }
 
 /** Deep-clone a node type's default config. */
-export function defaultConfigFor(type: WorkflowNodeType): Record<string, unknown> {
+export function defaultConfigFor(type: AnyNodeType): Record<string, unknown> {
   return JSON.parse(JSON.stringify(NODE_TYPE_MAP[type]?.defaultConfig ?? {}));
 }
 

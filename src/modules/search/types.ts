@@ -3,6 +3,8 @@
  * shared by the API routes, the seed, the React components and the tests.
  */
 import type { CodingDecision } from "@/lib/types/domain";
+import type { Provenance } from "@/lib/integrity/types";
+import type { AnswerBanner, ResearchMode, ResearchSource, RunStats } from "./engine/types";
 
 export type SearchSource = "caselaw" | "statutes" | "regulations" | "federal_register" | "dockets" | "web" | "library" | "ediscovery";
 
@@ -115,6 +117,8 @@ export const DEFAULT_SETTINGS: SearchSettings = {
 export interface SearchRunRequest extends SearchSettings {
   message: string;
   runId?: string;
+  threadId?: string | null;
+  savedSearchId?: string;
   history?: unknown[];
   previousResponseId?: string | null;
 }
@@ -139,6 +143,8 @@ export interface SourceError { source: SearchSource; message: string; durationMs
 
 export interface SearchRun {
   id: string;
+  /** Research thread this run belongs to (new engine). Seeded/legacy runs may omit it. */
+  threadId?: string;
   query: string;
   settings: SearchSettings;
   createdAt: string;
@@ -152,15 +158,18 @@ export interface SearchRun {
   matterId?: string | null;
   savedSearchId?: string;
   aiStatus?: "ok" | "no_api_key" | "error" | "skipped";
+  // --- research engine fields ---
+  mode?: ResearchMode;
+  stats?: RunStats;
+  verification?: { status: "verified" | "partially-verified" | "unverified" | "contradicted"; supported: number; unsupported: number; contradicted: number; score: number; checkedAt: string };
+  provenance?: Provenance;
+  banner?: Exclude<AnswerBanner, null>;
+  followUps?: string[];
+  sources?: ResearchSource[];
 }
 
-/** SSE events emitted by /api/search/run in addition to the agent's events. */
-export type SearchStreamEvent =
-  | { type: "run.start"; runId: string; query: string; sources: SearchSource[]; effectiveQuery: string }
-  | { type: "results"; source: SearchSource; results: SearchHit[]; total: number; durationMs: number }
-  | { type: "source.error"; source: SearchSource; message: string; durationMs: number }
-  | { type: "retrieval.done"; durationMs: number }
-  | { type: "run.done"; runId: string; counts: Partial<Record<SearchSource, number>>; durationMs: number };
+/** SSE events emitted by /api/search/run: see engine/types.ts (ResearchStreamEvent) plus the agent's text/tool events. */
+export type { ResearchStreamEvent as SearchStreamEvent } from "./engine/types";
 
 export interface ReadResult {
   kind: ReadRef["kind"];

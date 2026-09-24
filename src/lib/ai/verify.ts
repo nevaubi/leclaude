@@ -21,7 +21,11 @@ export interface VerificationResult {
   /** 0..1 share of claims supported by the provided sources. */
   score: number;
   checkedAt: string;
+  /** Set when the loop could not run (no key, model error); the output is then marked "unverified", never lost. */
+  error?: string;
 }
+
+export interface VerifySource { title?: string; cite?: string; url?: string; text: string }
 
 const VERDICT_SCHEMA = {
   type: "object",
@@ -44,16 +48,20 @@ const VERDICT_SCHEMA = {
   required: ["verdicts"],
 };
 
+function unverified(checkedAt: string, error?: string): VerificationResult {
+  return { verdicts: [], supported: 0, unsupported: 0, contradicted: 0, status: "unverified", sourceBacked: false, score: 0, checkedAt, error };
+}
+
 /**
  * Self-correcting verification loop: extract the factual claims in `answer`
  * and check each one strictly against the supplied sources. Nothing outside
  * the sources counts as support. Used by research, e-discovery analysis and
  * the office agents before an AI output is marked source-backed.
  */
-export async function verifyClaims(input: { answer: string; sources: { title?: string; cite?: string; url?: string; text: string }[]; maxClaims?: number; signal?: AbortSignal; fast?: boolean }): Promise<VerificationResult> {
+export async function verifyClaims(input: { answer: string; sources: VerifySource[]; maxClaims?: number; signal?: AbortSignal; fast?: boolean }): Promise<VerificationResult> {
   const checkedAt = new Date().toISOString();
   const sources = input.sources.filter((s) => s.text?.trim()).slice(0, 24);
-  if (!sources.length) return { verdicts: [], supported: 0, unsupported: 0, contradicted: 0, status: "unverified", sourceBacked: false, score: 0, checkedAt };
+  if (!sources.length) return unverified(checkedAt);
   const sourceBlock = sources.map((s, i) => `[${i}] ${s.title ?? s.cite ?? s.url ?? "source"}${s.cite ? ` (${s.cite})` : ""}\n${s.text.slice(0, 6000)}`).join("\n\n");
   const res = await generateJSON<{ verdicts: ClaimVerdict[] }>({
     fast: input.fast ?? true,
@@ -75,9 +83,30 @@ export async function verifyClaims(input: { answer: string; sources: { title?: s
   return { verdicts, supported, unsupported, contradicted, status, sourceBacked: supported > 0 && contradicted === 0, score, checkedAt };
 }
 
+/**
+ * Fail-soft variant used by every module wrapper: never throws, returns an
+ * "unverified" result (with `error`) when no key is configured, the caller
+ * opted out (`verify: false`) or the model call fails.
+ */
+export async function safeVerifyClaims(input: Parameters<typeof verifyClaims>[0] & { verify?: boolean }): Promise<VerificationResult> {
+  const checkedAt = new Date().toISOString();
+  if (input.verify === false) return unverified(checkedAt, "skipped");
+  if (!aiConfig().hasKey) return unverified(checkedAt, "no_api_key");
+  try {
+    return await verifyClaims(input);
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") throw e;
+    return unverified(checkedAt, (e as Error).message);
+  }
+}
+
 /** Fold a verification result into a provenance record. */
 export function applyVerification(p: Provenance, v: VerificationResult, method: NonNullable<Provenance["verification"]>["method"] = "claims"): Provenance {
-  return { ...p, verification: { status: v.status, checkedAt: v.checkedAt, method, supported: v.supported, unsupported: v.unsupported, contradicted: v.contradicted, notes: v.contradicted ? `${v.contradicted} claim(s) contradicted by sources` : undefined } };
+  const notes: string[] = [];
+  if (v.contradicted) notes.push(`${v.contradicted} claim(s) contradicted by sources`);
+  if (v.error && v.error !== "skipped") notes.push(`verification did not run (${v.error})`);
+  if (v.error === "skipped") notes.push("verification skipped by caller");
+  return { ...p, verification: { ...(p.verification ?? {}), status: v.status, checkedAt: v.checkedAt, method, supported: v.supported, unsupported: v.unsupported, contradicted: v.contradicted, notes: notes.length ? notes.join("; ") : p.verification?.notes } };
 }
 
 /**
@@ -98,4 +127,92 @@ export async function selfCorrect<T>(input: { label: string; output: T; evidence
     signal: input.signal,
   });
   return { corrected: res.corrected ?? input.output, changes: res.changes ?? [] };
+}
+
+/** Fail-soft self-correction: on any error the original output is kept and the error is reported. */
+export async function safeSelfCorrect<T>(input: Parameters<typeof selfCorrect<T>>[0] & { verify?: boolean }): Promise<{ corrected: T; changes: string[]; ran: boolean; error?: string }> {
+  if (input.verify === false) return { corrected: input.output, changes: [], ran: false, error: "skipped" };
+  if (!aiConfig().hasKey) return { corrected: input.output, changes: [], ran: false, error: "no_api_key" };
+  try {
+    const r = await selfCorrect<T>(input);
+    return { ...r, ran: true };
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") throw e;
+    return { corrected: input.output, changes: [], ran: false, error: (e as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Citation cross-check (pure)
+// ---------------------------------------------------------------------------
+
+/** Bates numbers such as MFC-0041877, NG_000123, ABC-DEF-000001 (prefix of letters, separator, ≥4 digits). */
+const BATES_RE = /\b([A-Z]{2,}(?:[-_][A-Z]{2,})*[-_]\d{4,})\b/g;
+/** page:line cites such as 24:05, 142:8–143:2 and "Voss 19:15". */
+const PAGE_LINE_RE = /\b(\d{1,4}):(\d{1,2})\b(?:\s*[–-]\s*(\d{1,4}):(\d{1,2}))?/g;
+
+export interface CiteCheck {
+  /** Distinct record cites found in the text. */
+  cites: string[];
+  resolved: string[];
+  unresolved: string[];
+  /** Text with " [VERIFY]" appended after every unresolved cite (idempotent). */
+  text: string;
+}
+
+/** Extract Bates and page:line cites from generated text. */
+export function extractRecordCites(text: string): { bates: string[]; pageLines: string[] } {
+  const bates = new Set<string>();
+  const pageLines = new Set<string>();
+  for (const m of text.matchAll(BATES_RE)) bates.add(m[1].toUpperCase());
+  for (const m of text.matchAll(PAGE_LINE_RE)) { pageLines.add(`${Number(m[1])}:${Number(m[2])}`); if (m[3]) pageLines.add(`${Number(m[3])}:${Number(m[4])}`); }
+  return { bates: Array.from(bates), pageLines: Array.from(pageLines) };
+}
+
+/**
+ * Cross-check the record cites in `text` against the evidence set. Bates
+ * numbers must belong to `evidence.bates`; page:line cites must fall inside
+ * one of the evidence transcript ranges (pages are checked, lines within a
+ * cited page are allowed to differ by ≤ 25 so line-level rounding does not
+ * false-flag). Unresolved cites are marked [VERIFY] in the returned text.
+ */
+export function crossCheckCitations(text: string, evidence: { bates?: Iterable<string>; pageLines?: Iterable<string>; pages?: Iterable<number> }): CiteCheck {
+  const bates = new Set(Array.from(evidence.bates ?? []).map((b) => b.toUpperCase()));
+  const pages = new Set<number>(Array.from(evidence.pages ?? []));
+  for (const pl of evidence.pageLines ?? []) { const p = Number(String(pl).split(":")[0]); if (Number.isFinite(p)) pages.add(p); }
+  const cites = new Set<string>();
+  const resolved = new Set<string>();
+  const unresolved = new Set<string>();
+  let out = text;
+  if (bates.size || !pages.size) {
+    out = out.replace(BATES_RE, (m, b: string) => {
+      const key = b.toUpperCase();
+      cites.add(key);
+      if (bates.has(key)) { resolved.add(key); return m; }
+      unresolved.add(key);
+      return `${m} [VERIFY]`;
+    });
+  }
+  if (pages.size) {
+    out = out.replace(PAGE_LINE_RE, (m, p1: string, l1: string, p2?: string, l2?: string) => {
+      const a = `${Number(p1)}:${Number(l1)}`;
+      cites.add(a);
+      const okA = pages.has(Number(p1));
+      let okB = true;
+      if (p2) { const b = `${Number(p2)}:${Number(l2)}`; cites.add(b); okB = pages.has(Number(p2)); if (okB) resolved.add(b); else unresolved.add(b); }
+      if (okA) resolved.add(a); else unresolved.add(a);
+      return okA && okB ? m : `${m} [VERIFY]`;
+    });
+  }
+  out = out.replace(/(\[VERIFY\])(?:\s*\[VERIFY\])+/g, "$1");
+  return { cites: Array.from(cites), resolved: Array.from(resolved), unresolved: Array.from(unresolved), text: out };
+}
+
+/** Fold a citation cross-check into provenance (method "citations"); keeps a claims verification if one already ran. */
+export function applyCiteCheck(p: Provenance, check: CiteCheck): Provenance {
+  if (!check.cites.length) return p;
+  const v = p.verification;
+  const status: NonNullable<Provenance["verification"]>["status"] = v?.status === "contradicted" ? "contradicted" : check.unresolved.length === 0 ? (v?.status ?? "verified") : check.unresolved.length < check.cites.length ? (v?.status === "verified" ? "partially-verified" : (v?.status ?? "partially-verified")) : (v?.status ?? "unverified");
+  const notes = [v?.notes, check.unresolved.length ? `${check.unresolved.length} record cite(s) not found in the evidence: ${check.unresolved.slice(0, 6).join(", ")}` : undefined].filter(Boolean).join("; ");
+  return { ...p, verification: { status, checkedAt: v?.checkedAt ?? new Date().toISOString(), method: v?.method ?? "citations", supported: v?.supported ?? check.resolved.length, unsupported: v?.unsupported ?? check.unresolved.length, contradicted: v?.contradicted ?? 0, notes: notes || undefined, changes: v?.changes, unresolvedCites: check.unresolved } };
 }

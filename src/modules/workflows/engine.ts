@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { AIConfigError } from "@/lib/ai/config";
 import type { Workflow, WorkflowEdge, WorkflowNode, WorkflowRun, WorkflowRunStep } from "@/lib/types/domain";
 import { executionPlan, isLoopBackEdge, validateWorkflow, type ExecutionPlan } from "./graph";
-import { EXECUTORS, StepError, matterContext, type ExecContext } from "./executors";
+import { EXECUTORS, StepError, TrustGateError, matterContext, type ExecContext, type RunTrustState } from "./executors";
+import { audit } from "@/lib/integrity/audit";
 import { resolveDeep, resolveTemplate, resolveText, type ResolveReport, type TemplateContext } from "./template-expr";
 import { publishRunEvent } from "./events";
 import { nodeSpec } from "./registry";
@@ -156,6 +157,7 @@ class RunExecution {
     if (["succeeded", "failed", "cancelled"].includes(status)) {
       this.run.finishedAt = new Date().toISOString();
       this.run.durationMs = new Date(this.run.finishedAt).getTime() - new Date(this.run.startedAt).getTime();
+      audit("workflow.run", { kind: "workflowRun", id: this.run.id, label: `${this.workflow.name}: ${status}`, matterId: this.run.matterId }, { workflowId: this.workflow.id, status, error: this.run.error, errorCode: this.run.errorCode, durationMs: this.run.durationMs, usage: this.usage, artifacts: (this.run.artifacts ?? []).length });
     }
     this.persist();
     publishRunEvent(this.run.id, { type: "run.status", runId: this.run.id, status, error: this.run.error, errorCode: this.run.errorCode, finishedAt: this.run.finishedAt, usage: this.usage });
@@ -191,11 +193,12 @@ class RunExecution {
   private isEdgeActive(e: WorkflowEdge, frame: Frame): boolean {
     const src = frame.steps.get(e.source) ?? frame.parent?.steps.get(e.source);
     if (!src || src.status !== "succeeded") return false;
-    const type = this.nodes.get(e.source)?.type;
+    const type: string | undefined = this.nodes.get(e.source)?.type;
     const out = (src.output ?? {}) as Record<string, unknown>;
     switch (type) {
       case "logic.branch": return !e.sourceHandle || e.sourceHandle === out.matched;
       case "logic.approval": return out.approved ? !e.sourceHandle || e.sourceHandle === "approved" || e.sourceHandle === "out" : e.sourceHandle === "rejected";
+      case "logic.review": return out.approved || out.trusted ? !e.sourceHandle || e.sourceHandle === "approved" || e.sourceHandle === "out" : e.sourceHandle === "rejected";
       case "logic.loop": return e.sourceHandle !== "each";
       default: return true;
     }
@@ -295,6 +298,15 @@ class RunExecution {
         this.setStep(frame, id, { status: "succeeded", finishedAt, output: capStrings(result.output), input: capStrings(summarizeInput(node.config, ctx.ctx), 2000), tokens: result.usage?.total });
         return;
       } catch (e) {
+        if (e instanceof TrustGateError) {
+          if (frame.parent) {
+            // Inside a loop body the run cannot pause; the action is skipped so nothing is created from untrusted output.
+            this.setStep(frame, id, { status: "skipped", finishedAt: new Date().toISOString(), output: { gated: true, reason: e.message, reasons: e.reasons, stepIds: e.stepIds }, logs: [...(frame.steps.get(id)?.logs ?? []), `Trust gate: ${e.message}`] });
+            return;
+          }
+          this.pauseForTrust(node, frame, e);
+          return;
+        }
         lastErr = e;
         const info = errorInfo(e);
         const fatal = e instanceof AIConfigError || e instanceof StepError || info.code === "cancelled" || info.code === "bad_api_key" || this.signal.aborted;
@@ -336,6 +348,24 @@ class RunExecution {
     this.run.approvals = [...(this.run.approvals ?? []).filter((a) => a.nodeId !== node.id), approval];
     this.paused = true;
     this.setStep(frame, node.id, { status: "waiting_approval", startedAt: approval.requestedAt, output: { approved: null, title: approval.title, message: approval.message }, logs: [`Waiting for ${approval.approverId ? db().people.get(approval.approverId)?.name ?? approval.approverId : "approval"}`] });
+    publishRunEvent(this.run.id, { type: "approval.requested", runId: this.run.id, approval });
+  }
+
+  /**
+   * Trust gate: an action (or a logic.review node) refused to act on AI output
+   * that is not trusted. The run pauses like an approval; the approval carries
+   * kind "trust-gate", the reasons and the AI step ids so the run panel can
+   * show exactly what failed verification.
+   */
+  private pauseForTrust(node: WorkflowNode, frame: Frame, e: TrustGateError) {
+    const approverId = node.config.approverId ? String(node.config.approverId) : WORKFLOW_CURRENT_USER.id;
+    const title = (node.type as string) === "logic.review" ? String(node.config.title || `Trust review: ${node.label}`) : `Trust gate: ${node.label}`;
+    const approval = { nodeId: node.id, title, message: e.message, approverId, requestedAt: new Date().toISOString(), kind: "trust-gate", reasons: e.reasons, stepIds: e.stepIds } as RunApproval;
+    this.run.approvals = [...(this.run.approvals ?? []).filter((a) => a.nodeId !== node.id), approval];
+    this.paused = true;
+    this.run.logs = [...(this.run.logs ?? []), `Paused at "${node.label}": ${e.message}`];
+    this.setStep(frame, node.id, { status: "waiting_approval", startedAt: approval.requestedAt, output: { approved: null, trusted: false, reasons: e.reasons, stepIds: e.stepIds, title, message: e.message }, logs: [...(frame.steps.get(node.id)?.logs ?? []), `Trust gate: ${e.message}`, `Waiting for ${db().people.get(approverId)?.name ?? approverId}`] });
+    audit("workflow.approve", { kind: "workflowRun", id: this.run.id, label: `${this.workflow.name} › ${node.label}: trust gate`, matterId: this.run.matterId }, { requested: true, nodeId: node.id, reasons: e.reasons, stepIds: e.stepIds });
     publishRunEvent(this.run.id, { type: "approval.requested", runId: this.run.id, approval });
   }
 
@@ -480,6 +510,7 @@ export async function startRun(workflow: Workflow, opts: StartRunOptions = {}): 
   const run = createRunRecord(workflow, opts);
   db().workflowRuns.put(run);
   db().workflows.update(workflow.id, (w) => ({ ...w, runsCount: (w.runsCount ?? 0) + 1, lastRunAt: run.startedAt }));
+  audit("workflow.run", { kind: "workflowRun", id: run.id, label: `${workflow.name}: started`, matterId: run.matterId }, { workflowId: workflow.id, triggeredBy: run.triggeredBy, inputs: Object.keys(run.inputs).filter((k) => k !== "__event") }, { id: run.triggeredById ?? WORKFLOW_CURRENT_USER.id, name: db().people.get(run.triggeredById ?? WORKFLOW_CURRENT_USER.id)?.name ?? "Workflow" });
   const promise = launch(run, workflow);
   if (opts.wait) { await promise; return db().workflowRuns.get(run.id) as WorkflowRunRecord; }
   return run;
@@ -526,8 +557,33 @@ export async function resumeRun(runId: string, decision: { approved: boolean; co
   const now = new Date().toISOString();
   const decidedBy = decision.decidedBy ?? WORKFLOW_CURRENT_USER.id;
   const output = { approved: decision.approved, comment: decision.comment ?? "", decidedBy, decidedByName: d.people.get(decidedBy)?.name ?? decidedBy, decidedAt: now };
-  run.steps = run.steps.map((s) => (s.nodeId === step.nodeId ? { ...s, status: "succeeded", finishedAt: now, output, logs: [...(s.logs ?? []), `${decision.approved ? "Approved" : "Rejected"} by ${output.decidedByName}${decision.comment ? `: ${decision.comment}` : ""}`] } : s));
+  const approval = (run.approvals ?? []).find((a) => a.nodeId === step.nodeId) as (RunApproval & { kind?: string; stepIds?: string[]; reasons?: string[] }) | undefined;
+  const actor = { id: decidedBy, name: output.decidedByName };
+  audit("workflow.approve", { kind: "workflowRun", id: run.id, label: `${workflow.name} › ${step.nodeId}: ${decision.approved ? "approved" : "rejected"}`, matterId: run.matterId }, { nodeId: step.nodeId, approved: decision.approved, comment: decision.comment, kind: approval?.kind ?? "approval", stepIds: approval?.stepIds }, actor);
   run.approvals = (run.approvals ?? []).map((a) => (a.nodeId === step.nodeId ? { ...a, approved: decision.approved, comment: decision.comment, decidedAt: now, decidedBy } : a));
+  if (approval?.kind === "trust-gate") {
+    const node = (run.snapshot?.nodes ?? workflow.nodes).find((n) => n.id === step.nodeId);
+    const trust = run as WorkflowRunRecord & RunTrustState;
+    const log = `${decision.approved ? "Trust gate lifted" : "Trust gate rejected"} by ${output.decidedByName}${decision.comment ? `: ${decision.comment}` : ""}`;
+    if (decision.approved) {
+      // The reviewer vouched for the AI output: remember it for this run and re-execute the node with the gate lifted.
+      trust.trustOverrides = Array.from(new Set([...(trust.trustOverrides ?? []), step.nodeId, ...(approval.stepIds ?? [])]));
+      run.steps = run.steps.map((s) => (s.nodeId === step.nodeId ? { nodeId: s.nodeId, status: "pending", logs: [...(s.logs ?? []), log] } : s));
+    } else if ((node?.type as string | undefined) === "logic.review") {
+      run.steps = run.steps.map((s) => (s.nodeId === step.nodeId ? { ...s, status: "succeeded", finishedAt: now, output: { ...output, trusted: false, reasons: approval.reasons ?? [], steps: (approval.stepIds ?? []).map((id) => ({ id, trusted: false })) }, logs: [...(s.logs ?? []), log] } : s));
+    } else {
+      // An action was refused: it is skipped (nothing is created) and the rest of the run continues.
+      run.steps = run.steps.map((s) => (s.nodeId === step.nodeId ? { ...s, status: "skipped", finishedAt: now, output: { gated: true, reasons: approval.reasons ?? [], ...output }, logs: [...(s.logs ?? []), log, "Skipped: reviewer rejected the AI output"] } : s));
+    }
+    run.logs = [...(run.logs ?? []), log];
+    publishRunEvent(runId, { type: "step.status", runId, nodeId: step.nodeId, step: run.steps.find((s) => s.nodeId === step.nodeId)! });
+    run.status = "running"; run.updatedAt = now;
+    d.workflowRuns.put(run);
+    const promise = launch(run, workflow);
+    if (opts.wait) { await promise; return d.workflowRuns.get(runId) as WorkflowRunRecord; }
+    return run;
+  }
+  run.steps = run.steps.map((s) => (s.nodeId === step.nodeId ? { ...s, status: "succeeded", finishedAt: now, output, logs: [...(s.logs ?? []), `${decision.approved ? "Approved" : "Rejected"} by ${output.decidedByName}${decision.comment ? `: ${decision.comment}` : ""}`] } : s));
   const edges = run.snapshot?.edges ?? workflow.edges;
   const hasRejectedPath = edges.some((e) => e.source === step.nodeId && e.sourceHandle === "rejected");
   publishRunEvent(runId, { type: "step.status", runId, nodeId: step.nodeId, step: run.steps.find((s) => s.nodeId === step.nodeId)! });

@@ -9,7 +9,25 @@ import type { ToolDef } from "@/lib/ai/tools";
 import { db } from "@/lib/db";
 import type { Matter, OfficeKind } from "@/lib/types/domain";
 import { LEGAL_STYLE_RULES, FIRM_NAME, todayLine } from "@/lib/ai/prompts";
+import { aiConfig } from "@/lib/ai/config";
+import { applyCiteCheck, crossCheckCitations } from "@/lib/ai/verify";
+import { audit } from "@/lib/integrity/audit";
+import { gateReview, makeProvenance } from "@/lib/integrity/provenance";
+import { putProvenance } from "@/lib/integrity/store";
+import type { Provenance, ProvenanceSource } from "@/lib/integrity/types";
 import type { EditProposal, OfficeAgentMode, OfficeAgentRequestBody, OfficeScope, ReviewFinding } from "./types";
+
+/** Proposals and findings carry the provenance of the agent turn that produced them (TrustBadge reads `provenance`). */
+export type ProvenancedProposal = EditProposal & { provenance?: Provenance };
+export type ProvenancedFinding = ReviewFinding & { provenance?: Provenance };
+
+function sourceKindOf(c: { url?: string; cite?: string; source?: string }): ProvenanceSource["kind"] {
+  if (c.source === "web") return "web";
+  if (c.source === "case-law" || /courtlistener/i.test(c.url ?? "")) return "case-law";
+  if (c.source === "regulation" || /ecfr|federalregister/i.test(c.url ?? "")) return "regulation";
+  if (c.cite && /^[A-Z]{2,}[-_]\d{4,}/.test(c.cite)) return "document";
+  return c.url ? "web" : "internal";
+}
 
 export interface OfficeAgentContext<S> {
   mode: OfficeAgentMode;
@@ -61,8 +79,14 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
     const matter = body.matterId ? db().matters.get(body.matterId) : null;
 
     return sseResponse(async (send, signal) => {
-      const proposals: EditProposal[] = [];
-      const findings: ReviewFinding[] = [];
+      const proposals: ProvenancedProposal[] = [];
+      const findings: ProvenancedFinding[] = [];
+      const citations: ProvenanceSource[] = [];
+      const model = aiConfig().model;
+      const surface = `office.${config.kind}`;
+      const startedAt = Date.now();
+      let usage: Provenance["usage"] | undefined;
+      const turnProvenance = () => makeProvenance({ surface, sources: citations, model, instructions: `${config.kind}:${mode}`, input: body.message });
       const ctx: OfficeAgentContext<S> = {
         mode,
         scope: body.scope ?? null,
@@ -76,13 +100,13 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
         findings,
         emit: (e) => send(e),
         propose: (p) => {
-          const full: EditProposal = { id: nanoid(8), status: "pending", ...p };
+          const full: ProvenancedProposal = { id: nanoid(8), status: "pending", ...p, provenance: turnProvenance() };
           proposals.push(full);
           send({ type: "proposal", proposal: full });
           return full;
         },
         finding: (f) => {
-          const full: ReviewFinding = { id: nanoid(8), ...f };
+          const full: ProvenancedFinding = { id: nanoid(8), ...f, provenance: turnProvenance() };
           findings.push(full);
           send({ type: "artifact", artifact: { kind: "review-finding", title: full.title, data: full } });
           return full;
@@ -131,13 +155,31 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
           signal,
           state: { snapshot, mode },
           metadata: { app: "leclaude", surface: `office-${config.kind}`, mode },
-          onEvent: (e) => send(e),
+          onEvent: (e) => {
+            if (e.type === "citation") citations.push({ kind: sourceKindOf(e.citation), cite: e.citation.cite, url: e.citation.url, title: e.citation.title });
+            if (e.type === "done" && e.usage) usage = e.usage;
+            send(e);
+          },
         });
       } catch (e) {
         if (e instanceof AIConfigError) { send({ type: "error", message: e.message, code: "no_api_key" }); return; }
         throw e;
       } finally {
-        send({ type: "artifact", artifact: { kind: "office-summary", title: "summary", data: { proposals: proposals.length, findings: findings.length } } });
+        // Final provenance for the turn: every proposal/finding gets the full source list, and record cites in the
+        // proposal text are cross-checked against the matter's Bates numbers (unresolved ones get [VERIFY] in the summary).
+        const known = matter ? db().edocs.find((x) => x.matterId === matter.id).flatMap((x) => [x.bates, ...(x.batesEnd ? [x.batesEnd] : [])]) : [];
+        const finalize = (p: Provenance, text: string): Provenance => {
+          let out: Provenance = { ...p, sources: citations.slice(), usage };
+          if (known.length) { const check = crossCheckCitations(text, { bates: known }); if (check.cites.length) out = applyCiteCheck(out, check); }
+          return gateReview(out);
+        };
+        for (const p of proposals) { p.provenance = finalize(p.provenance ?? turnProvenance(), `${p.title} ${p.summary ?? ""} ${JSON.stringify(p.payload).slice(0, 20_000)}`); if (p.provenance.verification?.unresolvedCites?.length && p.summary) p.summary = crossCheckCitations(p.summary, { bates: known }).text; }
+        for (const f of findings) f.provenance = finalize(f.provenance ?? turnProvenance(), `${f.title} ${f.detail} ${f.suggestion ?? ""}`);
+        const run = finalize(turnProvenance(), "");
+        if (body.docId) putProvenance({ kind: "office.proposal", recordId: `${body.docId}:${nanoid(6)}`, matterId: matter?.id, title: `${ctx.docTitle} — ${mode}: ${body.message.slice(0, 80)}`, href: `/office/${config.kind}/${body.docId}`, provenance: run });
+        audit("ai.generate", { kind: "officeDoc", id: body.docId, label: ctx.docTitle, matterId: matter?.id ?? undefined }, { surface, mode, research: ctx.research, model, tokens: usage?.total, proposals: proposals.length, findings: findings.length, sources: citations.slice(0, 10).map((c) => c.cite ?? c.url ?? c.title), durationMs: Date.now() - startedAt, message: body.message.slice(0, 200) });
+        send({ type: "artifact", artifact: { kind: "office-provenance", title: "provenance", data: { run, proposals: proposals.map((p) => ({ id: p.id, provenance: p.provenance })), findings: findings.map((f) => ({ id: f.id, provenance: f.provenance })) } } });
+        send({ type: "artifact", artifact: { kind: "office-summary", title: "summary", data: { proposals: proposals.length, findings: findings.length, sources: citations.length, verification: run.verification?.status ?? null } } });
       }
     });
   };

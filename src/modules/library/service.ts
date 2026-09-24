@@ -14,6 +14,12 @@ import { LIBRARY_FOLDERS, LIBRARY_USER, isSystemFolder, matterFolderId } from ".
 import { breadcrumbsFor, buildTree, descendantIds, folderSort, validateMove } from "./tree";
 import { clauseDiffSummary, extractVariables, fillClause, variableSpecs } from "./clauses";
 import { orphanedOfficeEntries, planOfficeDocMerge } from "./merge";
+import { audit } from "@/lib/integrity/audit";
+import { contentHash } from "@/lib/integrity/hash";
+import { suffixedName } from "@/lib/integrity/dedupe";
+import { gateReview, makeProvenance } from "@/lib/integrity/provenance";
+import { attachProvenance, verifyNarrative } from "@/lib/integrity/record";
+import type { Provenance } from "@/lib/integrity/types";
 import { CLAUSE_CATEGORIES, OFFICE_KIND_BY_TYPE, PRACTICE_AREAS, TYPE_BY_OFFICE_KIND, type ActivityAction, type ActivityEntry, type ClauseMeta, type CreateItemInput, type LibraryFilters, type LibraryItemDetail, type LibraryItemView, type LibraryListResponse, type LibrarySearchHit, type LibrarySearchResponse, type LibraryTreeResponse, type UpdateItemInput } from "./types";
 
 const OFFICE_VECTORS = "office_documents";
@@ -315,10 +321,25 @@ export function createItem(input: CreateItemInput): LibraryItemView {
   }
   if (input.type === "link" && !input.url?.trim()) throw new Error("A link needs a URL");
   const ts = now();
+  // Cross-context dedupe: an item with the same name in the same folder is either the same content (merge: return the
+  // existing item, touched) or a different one (rename with a " (2)" suffix so nothing is silently overwritten).
+  const siblings = items.filter((i) => (i.parentId ?? null) === (input.parentId ?? null) && i.type !== "folder");
+  const sameName = siblings.find((i) => i.name.toLowerCase() === name.toLowerCase());
+  if (sameName && input.type !== "folder") {
+    const incomingHash = input.content != null ? contentHash(input.content) : input.url ? contentHash(input.url) : undefined;
+    const existingHash = sameName.content != null ? contentHash(sameName.content) : sameName.url ? contentHash(sameName.url) : undefined;
+    if (incomingHash && existingHash && incomingHash === existingHash && sameName.type === input.type) {
+      const merged = d.library.update(sameName.id, (cur) => ({ ...cur, tags: dedupeTags([...(cur.tags ?? []), ...(input.tags ?? [])]), description: cur.description ?? input.description?.trim() ?? undefined, updatedAt: ts })) ?? sameName;
+      logActivity(merged, "updated", "merged duplicate create (identical content)");
+      audit("create", { kind: "library", id: merged.id, label: merged.name, matterId: merged.matterId }, { merged: true, duplicateOf: merged.id, reason: "same name and identical content in the same folder" });
+      return toView(merged, viewCtx(liveItems()));
+    }
+  }
+  const finalName = input.type === "folder" ? name : suffixedName(name, new Set(siblings.map((i) => i.name)));
   const item: LibraryItem = {
     id: `lib_${nanoid(10)}`,
     parentId: input.parentId ?? null,
-    name,
+    name: finalName,
     type: input.type,
     matterId: input.matterId ?? nearestMatterId(ctx.items, input.parentId),
     description: input.description?.trim() || undefined,
@@ -340,7 +361,8 @@ export function createItem(input: CreateItemInput): LibraryItemView {
     clauseMetaCollection().put(meta);
   }
   snapshotVersion(item, "Created");
-  logActivity(item, "created", item.type);
+  logActivity(item, "created", finalName !== name ? `${item.type} (renamed from "${name}": name already used in this folder)` : item.type);
+  audit("create", { kind: "library", id: item.id, label: item.name, matterId: item.matterId }, { type: item.type, parentId: item.parentId, renamedFrom: finalName !== name ? name : undefined });
   void reindexItem(item);
   return toView(item, viewCtx(liveItems()));
 }
@@ -586,49 +608,63 @@ function itemText(it: LibraryItem, max = 24_000) {
   return text.length > max ? text.slice(0, max) + "\n…[truncated]" : text;
 }
 
-export async function summarizeItem(id: string): Promise<{ summary: string; cached: boolean }> {
+export interface SummaryResult { summary: string; cached: boolean; provenance?: Provenance }
+
+export async function summarizeItem(id: string, opts: { verify?: boolean } = {}): Promise<SummaryResult> {
   const d = db();
   const it = d.library.get(id);
   if (!it) throw new Error("Item not found");
   if (!aiConfig().hasKey) throw new NoApiKeyError();
   const key = `library:summary:${id}:${it.updatedAt}:${it.version ?? 0}`;
-  const cached = d.kv.get<string>(key);
-  if (cached) return { summary: cached, cached: true };
+  const cached = d.kv.get<string | { summary: string; provenance?: Provenance }>(key);
+  if (cached) return typeof cached === "string" ? { summary: cached, cached: true } : { summary: cached.summary, provenance: cached.provenance, cached: true };
   const matter = it.matterId ? d.matters.get(it.matterId) : null;
-  const res = await generateText({
-    fast: true,
-    instructions: `You are the ${FIRM_NAME} knowledge-management assistant. ${todayLine()}\nSummarize the library item for a busy lawyer: 3–6 bullet points covering what it is, what it says or does, key dates/parties/authorities, and when to use it. Then one line "Watch out:" with the main risk or caveat. Do not invent facts or citations. Use Markdown.${matter ? `\nMatter context: ${matter.name} (${matter.caption ?? matter.shortName}), client ${matter.client}.` : ""}\n${LEGAL_STYLE_RULES}`,
-    input: `Item type: ${it.type}\nName: ${it.name}\n${it.description ? `Description: ${it.description}\n` : ""}${it.tags?.length ? `Tags: ${it.tags.join(", ")}\n` : ""}\n---\n${itemText(it)}`,
-    maxOutputTokens: 700,
-  });
-  d.kv.set(key, res.text);
-  logActivity(it, "summarized");
-  return { summary: res.text, cached: false };
+  const instructions = `You are the ${FIRM_NAME} knowledge-management assistant. ${todayLine()}\nSummarize the library item for a busy lawyer: 3–6 bullet points covering what it is, what it says or does, key dates/parties/authorities, and when to use it. Then one line "Watch out:" with the main risk or caveat. Do not invent facts or citations. Use Markdown.${matter ? `\nMatter context: ${matter.name} (${matter.caption ?? matter.shortName}), client ${matter.client}.` : ""}\n${LEGAL_STYLE_RULES}`;
+  const text = itemText(it);
+  const input = `Item type: ${it.type}\nName: ${it.name}\n${it.description ? `Description: ${it.description}\n` : ""}${it.tags?.length ? `Tags: ${it.tags.join(", ")}\n` : ""}\n---\n${text}`;
+  const res = await generateText({ fast: true, instructions, input, maxOutputTokens: 700 });
+  const target = { kind: "library", id: it.id, label: it.name, matterId: it.matterId };
+  const usage = res.usage ? { input: res.usage.input_tokens, output: res.usage.output_tokens, total: res.usage.total_tokens } : undefined;
+  let provenance = makeProvenance({ surface: "library.summary", instructions, input, sources: [{ kind: "library", id: it.id, title: it.name }], model: aiConfig().fastModel, usage });
+  audit("ai.generate", target, { surface: "library.summary", model: provenance.model, tokens: usage?.total });
+  const verified = await verifyNarrative(provenance, { answer: res.text, sources: [{ title: it.name, text }], verify: opts.verify, maxClaims: 15 }, target);
+  provenance = verified.provenance;
+  attachProvenance({ kind: "library.summary", recordId: it.id, matterId: it.matterId, title: `Summary — ${it.name}`, href: `/library?item=${it.id}`, provenance });
+  d.kv.set(key, { summary: verified.text, provenance });
+  logActivity(it, "summarized", provenance.verification ? `verification: ${provenance.verification.status}` : undefined);
+  return { summary: verified.text, cached: false, provenance };
 }
 
-export async function autoTagItem(id: string): Promise<{ skipped: boolean; reason?: string; tags?: string[]; practiceArea?: PracticeArea; description?: string }> {
+export async function autoTagItem(id: string): Promise<{ skipped: boolean; reason?: string; tags?: string[]; practiceArea?: PracticeArea; description?: string; provenance?: Provenance; needsReview?: boolean }> {
   const d = db();
   const it = d.library.get(id);
   if (!it) throw new Error("Item not found");
   if (!aiConfig().hasKey) return { skipped: true, reason: "no_api_key" };
-  const out = await generateJSON<{ tags: string[]; practiceArea: PracticeArea | null; description: string }>({
+  const instructions = `You classify documents for a law firm's shared library. Return 3–7 short lowercase tags (topics, document type, parties, jurisdiction), the best-fit practice area from the allowed list or null, a one-sentence description, and a calibrated confidence (0..1) that the classification is right. Never invent facts that are not in the text.`;
+  const input = `Allowed practice areas: ${PRACTICE_AREAS.join(" | ")}\nFile name: ${it.name}\nType: ${it.type}\n---\n${itemText(it, 12_000)}`;
+  const out = await generateJSON<{ tags: string[]; practiceArea: PracticeArea | null; description: string; confidence?: number }>({
     fast: true,
     name: "library_autotag",
-    instructions: `You classify documents for a law firm's shared library. Return 3–7 short lowercase tags (topics, document type, parties, jurisdiction), the best-fit practice area from the allowed list or null, and a one-sentence description. Never invent facts that are not in the text.`,
-    input: `Allowed practice areas: ${PRACTICE_AREAS.join(" | ")}\nFile name: ${it.name}\nType: ${it.type}\n---\n${itemText(it, 12_000)}`,
-    schema: { type: "object", properties: { tags: { type: "array", items: { type: "string" } }, practiceArea: { type: "string", enum: PRACTICE_AREAS }, description: { type: "string" } }, required: ["tags", "description"] },
+    instructions,
+    input,
+    schema: { type: "object", properties: { tags: { type: "array", items: { type: "string" } }, practiceArea: { type: "string", enum: PRACTICE_AREAS }, description: { type: "string" }, confidence: { type: "number" } }, required: ["tags", "description", "confidence"] },
     maxOutputTokens: 300,
   });
-  const tags = dedupeTags([...(it.tags ?? []), ...out.tags.slice(0, 7)]);
-  const practiceArea = out.practiceArea && PRACTICE_AREAS.includes(out.practiceArea) ? out.practiceArea : it.practiceArea;
+  const provenance = gateReview(makeProvenance({ surface: "library.autotag", instructions, input, sources: [{ kind: "library", id: it.id, title: it.name }], confidence: out.confidence, model: aiConfig().fastModel }));
+  audit("ai.generate", { kind: "library", id: it.id, label: it.name, matterId: it.matterId }, { surface: "library.autotag", model: provenance.model, tags: out.tags.slice(0, 7), practiceArea: out.practiceArea, confidence: out.confidence });
+  const needsReview = provenance.review?.status === "pending";
+  const tags = dedupeTags([...(it.tags ?? []), ...out.tags.slice(0, 7), ...(needsReview ? ["needs-review"] : [])]);
+  // Practice area is only overwritten by a confident classification; a low-confidence one keeps the current value.
+  const practiceArea = !needsReview && out.practiceArea && PRACTICE_AREAS.includes(out.practiceArea) ? out.practiceArea : it.practiceArea;
   d.library.update(id, { tags, practiceArea, description: it.description ?? out.description, updatedAt: now() });
-  logActivity(it, "tagged", `auto: ${out.tags.slice(0, 7).join(", ")}`);
+  attachProvenance({ kind: "library.autotag", recordId: it.id, matterId: it.matterId, title: `Auto-tags — ${it.name}`, href: `/library?item=${it.id}`, provenance });
+  logActivity(it, "tagged", `auto: ${out.tags.slice(0, 7).join(", ")}${needsReview ? " (low confidence — needs review)" : ""}`);
   const updated = d.library.get(id);
   if (updated) void reindexItem(updated);
-  return { skipped: false, tags, practiceArea, description: it.description ?? out.description };
+  return { skipped: false, tags, practiceArea, description: it.description ?? out.description, provenance, needsReview };
 }
 
-export async function compareClause(id: string, opts: { text?: string; againstId?: string }): Promise<{ analysis: string; mode: "ai" | "heuristic"; standardName?: string }> {
+export async function compareClause(id: string, opts: { text?: string; againstId?: string; verify?: boolean }): Promise<{ analysis: string; mode: "ai" | "heuristic"; standardName?: string; provenance?: Provenance }> {
   const d = db();
   const it = d.library.get(id);
   if (!it || it.type !== "clause") throw new Error("Clause not found");
@@ -658,11 +694,15 @@ export async function compareClause(id: string, opts: { text?: string; againstId
     ].join("\n");
     return { analysis: md, mode: "heuristic", standardName: right.name };
   }
-  const res = await generateText({
-    instructions: `You are a senior ${FIRM_NAME} transactional and litigation drafter comparing two clauses. ${todayLine()}\nProduce a Markdown report with: (1) a two-sentence verdict on which is more favorable to our client and why; (2) a table of material differences (topic | ${left.name} | ${right.name} | risk to client: low/medium/high); (3) missing protections in ${left.name} that ${right.name} has; (4) recommended redlines as concrete replacement language. Treat {{Variable}} placeholders as fill-ins, not differences. Be precise and do not invent terms that are not in either text.\n${LEGAL_STYLE_RULES}`,
-    input: `${meta?.notes ? `Drafting notes on the firm clause: ${meta.notes}\n\n` : ""}=== ${left.name} ===\n${left.text.slice(0, 16_000)}\n\n=== ${right.name} ===\n${right.text.slice(0, 16_000)}`,
-    maxOutputTokens: 1800,
-    reasoningEffort: "low",
-  });
-  return { analysis: res.text, mode: "ai", standardName: right.name };
+  const instructions = `You are a senior ${FIRM_NAME} transactional and litigation drafter comparing two clauses. ${todayLine()}\nProduce a Markdown report with: (1) a two-sentence verdict on which is more favorable to our client and why; (2) a table of material differences (topic | ${left.name} | ${right.name} | risk to client: low/medium/high); (3) missing protections in ${left.name} that ${right.name} has; (4) recommended redlines as concrete replacement language. Treat {{Variable}} placeholders as fill-ins, not differences. Be precise and do not invent terms that are not in either text.\n${LEGAL_STYLE_RULES}`;
+  const input = `${meta?.notes ? `Drafting notes on the firm clause: ${meta.notes}\n\n` : ""}=== ${left.name} ===\n${left.text.slice(0, 16_000)}\n\n=== ${right.name} ===\n${right.text.slice(0, 16_000)}`;
+  const res = await generateText({ instructions, input, maxOutputTokens: 1800, reasoningEffort: "low" });
+  const target = { kind: "library", id: it.id, label: it.name, matterId: it.matterId };
+  const usage = res.usage ? { input: res.usage.input_tokens, output: res.usage.output_tokens, total: res.usage.total_tokens } : undefined;
+  let provenance = makeProvenance({ surface: "library.compare", instructions, input, sources: [{ kind: "library", id: it.id, title: it.name }, ...(standard ? [{ kind: "library" as const, id: standard.id, title: standard.name }] : [])], usage });
+  audit("ai.generate", target, { surface: "library.compare", model: provenance.model, tokens: usage?.total, against: right.name });
+  const verified = await verifyNarrative(provenance, { answer: res.text, sources: [{ title: left.name, text: left.text.slice(0, 16_000) }, { title: right.name, text: right.text.slice(0, 16_000) }], verify: opts.verify, maxClaims: 20 }, target);
+  provenance = verified.provenance;
+  attachProvenance({ kind: "library.compare", recordId: `${it.id}:${standard?.id ?? "text"}`, matterId: it.matterId, title: `Clause comparison — ${it.name} vs ${right.name}`, href: `/library?item=${it.id}`, provenance });
+  return { analysis: verified.text, mode: "ai", standardName: right.name, provenance };
 }

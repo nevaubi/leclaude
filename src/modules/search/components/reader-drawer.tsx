@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { BookmarkPlus, BookOpen, Check, ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, MessageCircleQuestion, Quote, ScrollText, ShieldCheck, Sparkles, WifiOff, X } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, MessageCircleQuestion, Pin, Quote, ScrollText, ShieldCheck, Sparkles, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ import { courtAbbreviation } from "../jurisdictions";
 import { formatBluebook } from "../normalize";
 import { SOURCE_LABEL, type ReadResult, type SearchHit } from "../types";
 import { Highlighted, SOURCE_ICON } from "./result-card";
-import { NoKeyCard } from "./synthesis-pane";
+import { NoKeyCard } from "./no-key-card";
 import { CiteCheckTable, runCiteCheck, type CiteCheckResponse } from "./citecheck";
 
 export interface ReaderDrawerProps {
@@ -26,9 +26,11 @@ export interface ReaderDrawerProps {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCite: (hit: SearchHit) => void;
-  onMemo: (hit: SearchHit) => void;
+  onPin: (hit: SearchHit) => void;
   onSave: (hit: SearchHit) => void;
-  inMemo: boolean;
+  pinned: boolean;
+  /** Pin a selected passage of the text. */
+  onPinPassage?: (text: string, hit: SearchHit) => void;
   aiConfigured: boolean;
   terms: string[];
 }
@@ -139,7 +141,8 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-1">
                 <Tip label="Copy Bluebook citation" shortcut="c"><Button variant="outline" size="xs" onClick={copyCite}>{copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />} Copy cite</Button></Tip>
-                <Button variant="outline" size="xs" disabled={p.inMemo} onClick={() => p.onMemo(hit)}>{p.inMemo ? <Check className="size-3 text-success" /> : <BookOpen className="size-3" />} {p.inMemo ? "In memo" : "Add to memo"}</Button>
+                <Button variant="outline" size="xs" disabled={p.pinned} onClick={() => p.onPin(hit)}>{p.pinned ? <Check className="size-3 text-success" /> : <Pin className="size-3" />} {p.pinned ? "Pinned" : "Pin"}</Button>
+                {p.onPinPassage && <Tip label="Pin the selected text as a passage"><Button variant="outline" size="xs" onClick={() => { const sel = window.getSelection()?.toString().trim(); if (!sel) { toast.info("Select text in the document first"); return; } p.onPinPassage!(sel, hit); }}><Quote className="size-3" /> Pin passage</Button></Tip>}
                 <Button variant="outline" size="xs" onClick={() => p.onSave(hit)}><BookmarkPlus className="size-3" /> Save to library</Button>
                 {external && <Button asChild variant="outline" size="xs"><a href={external} target={isExternal ? "_blank" : undefined} rel="noreferrer"><ExternalLink className="size-3" /> {isExternal ? "Open external" : "Open in app"}</a></Button>}
                 <div className="flex-1" />

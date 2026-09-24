@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import type { OfficeComment, OfficeDocument, OfficeKind, OfficeVersion } from "@/lib/types/domain";
 import { indexDocument, VECTOR_COLLECTIONS_OFFICE } from "./indexing";
+import { audit } from "@/lib/integrity/audit";
 
 const CURRENT_USER = { id: "p_jwhitfield", name: "Jordan Whitfield" };
 const AUTOSAVE_VERSION_INTERVAL_MS = 10 * 60 * 1000;
@@ -75,7 +76,10 @@ export function saveOfficeDoc(id: string, opts: SaveOptions): OfficeDocument | n
     const last = versions[0];
     const stale = !last || Date.now() - new Date(last.createdAt).getTime() > AUTOSAVE_VERSION_INTERVAL_MS;
     if (explicitVersion || stale) {
-      d.officeVersions.put({ id: nanoid(10), docId: id, version: (last?.version ?? 0) + 1, label: opts.version?.label, summary: opts.version?.summary ?? "Saved changes", authorId: CURRENT_USER.id, authorName: opts.version?.authorName ?? CURRENT_USER.name, createdAt: now, content: next.content, changedFields: countChangedFields(last?.content, next.content) });
+      const changedFields = countChangedFields(last?.content, next.content);
+      d.officeVersions.put({ id: nanoid(10), docId: id, version: (last?.version ?? 0) + 1, label: opts.version?.label, summary: opts.version?.summary ?? "Saved changes", authorId: CURRENT_USER.id, authorName: opts.version?.authorName ?? CURRENT_USER.name, createdAt: now, content: next.content, changedFields });
+      // Agent edits applied through the editors save a version whose summary starts with "Agent edit"; that is an AI application.
+      if (/^agent edit/i.test(opts.version?.summary ?? "") || /^agent edit/i.test(opts.version?.label ?? "")) audit("ai.apply", { kind: "officeDoc", id, label: next.title, matterId: next.matterId }, { surface: `office.${next.kind}`, summary: opts.version?.summary ?? opts.version?.label, version: (last?.version ?? 0) + 1, changedFields, contentVersion: next.contentVersion });
     }
     if (contentChanged) void reindex(next);
   }

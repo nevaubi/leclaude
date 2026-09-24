@@ -3,22 +3,18 @@ import { nanoid } from "nanoid";
 import type { ResponseInput, ResponseInputItem } from "openai/resources/responses/responses";
 import { db } from "@/lib/db";
 import { runAgent, generateJSON, type AgentEvent } from "@/lib/ai/agent";
-import { aiConfig, AIConfigError } from "@/lib/ai/config";
+import { AIConfigError } from "@/lib/ai/config";
 import type { ToolContext, ToolDef } from "@/lib/ai/tools";
-import { researchToolset } from "@/lib/ai/toolkit";
 import { fetchUrlTool } from "@/lib/ai/toolkit/web";
-import {
-  searchCaseLawTool, searchDocketsTool, searchRegulationsTool, searchFederalRegisterTool, searchStatutesTool, getOpinionTextTool, getCfrSectionTool, getFederalRegisterDocumentTool, verifyCitationsTool, COURT_GROUPS,
-} from "@/lib/ai/toolkit/legal";
-import { searchLibraryTool, searchEdiscoveryTool, getLibraryItemTool, getEdiscoveryDocumentTool } from "@/lib/ai/toolkit/internal";
-import { FIRM_NAME, LEGAL_STYLE_RULES, RESEARCH_METHOD, todayLine } from "@/lib/ai/prompts";
-import type { LibraryItem, Matter } from "@/lib/types/domain";
-import { jurisdictionByKey, resolveCourts } from "./jurisdictions";
-import { normalizeToolResult, formatBluebook } from "./normalize";
-import { datePresetRange, toCourtListenerSyntax } from "./query-builder";
-import { ASK_SOURCE_INSTRUCTIONS, EXPAND_QUERY_INSTRUCTIONS, FAST_ANSWER_FORMAT, HEADNOTE_INSTRUCTIONS, SYNTHESIS_FORMAT, retrievalPlanLine } from "./prompts";
+import { getOpinionTextTool, getCfrSectionTool, getFederalRegisterDocumentTool, verifyCitationsTool, COURT_GROUPS } from "@/lib/ai/toolkit/legal";
+import { getLibraryItemTool, getEdiscoveryDocumentTool } from "@/lib/ai/toolkit/internal";
+import { FIRM_NAME, LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
+import type { LibraryItem } from "@/lib/types/domain";
+import { formatBluebook } from "./normalize";
+import { ASK_SOURCE_INSTRUCTIONS, EXPAND_QUERY_INSTRUCTIONS, HEADNOTE_INSTRUCTIONS } from "./prompts";
 import { extractCitations, type ExtractedCitation } from "./citations";
-import { ALL_SOURCES, DEFAULT_SETTINGS, type CitationCheck, type ReadRef, type ReadResult, type SavedSearch, type SearchHit, type SearchRun, type SearchRunRequest, type SearchSettings, type SearchSource, type SearchStreamEvent, type SourceError } from "./types";
+import { getCached, putCached } from "./engine/cache";
+import { ALL_SOURCES, DEFAULT_SETTINGS, type CitationCheck, type ReadRef, type ReadResult, type SavedSearch, type SearchHit, type SearchRun, type SearchRunRequest, type SearchSettings, type SearchSource, type SourceError } from "./types";
 
 export const CURRENT_USER = { id: "p_jwhitfield", name: "Jordan Whitfield" };
 
@@ -107,13 +103,14 @@ export function clearRuns() {
 }
 
 // ---------------------------------------------------------------------------
-// Structured retrieval fan-out
+// Provider helpers
 // ---------------------------------------------------------------------------
 
 function toolCtx(signal?: AbortSignal): ToolContext {
   return { emit: () => {}, signal, state: {} };
 }
 
+/** Legacy retrieval outcome shape kept for history records and tests. */
 export interface RetrievalOutcome {
   hits: Partial<Record<SearchSource, SearchHit[]>>;
   totals: Partial<Record<SearchSource, number>>;
@@ -121,61 +118,13 @@ export interface RetrievalOutcome {
   durationMs: number;
 }
 
-/** Human-readable provider failure (network, rate limit, proxy refusal) shared by retrieval, the reader and cite-check. */
+/** Human-readable provider failure (network, rate limit, proxy refusal) shared by the engine, the reader and cite-check. */
 export function providerMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|fetch failed|network|abort|timeout|ETIMEDOUT|ECONNRESET/i.test(msg)) return "Provider unreachable (network). Retry when online.";
   if (/429/.test(msg)) return "Provider rate limit reached. Retry in a minute or add an API token in Settings.";
   if (/403|401/.test(msg)) return "Provider refused the request (HTTP 403/401). Check outbound network/proxy access or the API token in Settings.";
   return msg.length > 160 ? msg.slice(0, 157) + "…" : msg;
-}
-
-/**
- * Run the selected providers concurrently, streaming each source as it lands.
- * Never throws: provider failures become `source.error` events.
- */
-export async function runStructuredRetrieval(query: string, settings: SearchSettings, send: (e: SearchStreamEvent) => void, signal?: AbortSignal): Promise<RetrievalOutcome> {
-  const started = Date.now();
-  const courts = resolveCourts(settings.jurisdiction, settings.courts);
-  const range = datePresetRange(settings.datePreset, { from: settings.dateFrom, to: settings.dateTo });
-  const clQuery = toCourtListenerSyntax(query);
-  const ctx = toolCtx(signal);
-  const nctx = { jurisdiction: settings.jurisdiction, courts: settings.courts };
-  const limit = settings.limit;
-  const outcome: RetrievalOutcome = { hits: {}, totals: {}, errors: [], durationMs: 0 };
-
-  const jobs: Record<SearchSource, (() => Promise<unknown>) | null> = {
-    caselaw: async () => searchCaseLawTool.execute({ query: clQuery, courts: courts || undefined, filed_after: range.from, filed_before: range.to, order_by: settings.order === "date" ? "dateFiled desc" : "score desc", limit: Math.min(limit, 20) }, ctx),
-    dockets: async () => searchDocketsTool.execute({ query: clQuery, courts: courts || undefined, filed_after: range.from, filed_before: range.to, limit: Math.min(limit, 20) }, ctx),
-    regulations: async () => searchRegulationsTool.execute({ query, limit: Math.min(limit, 20) }, ctx),
-    federal_register: async () => searchFederalRegisterTool.execute({ query, published_after: range.from, published_before: range.to, limit: Math.min(limit, 20) }, ctx),
-    statutes: async () => searchStatutesTool.execute({ query, limit: Math.min(limit, 20) }, ctx),
-    library: async () => searchLibraryTool.execute({ query, matter_id: settings.matterId ?? undefined, limit: Math.min(limit, 25) }, ctx),
-    ediscovery: async () => searchEdiscoveryTool.execute({ query, matter_id: settings.matterId ?? undefined, date_after: range.from, date_before: range.to, limit: Math.min(limit, 25) }, ctx),
-    web: null, // web results arrive through the agent's web_search citations
-  };
-
-  await Promise.all(
-    settings.sources.map(async (source) => {
-      const job = jobs[source];
-      if (!job) return;
-      const t0 = Date.now();
-      try {
-        const payload = await withTimeout(job(), 25_000, signal);
-        const { hits, total } = normalizeToolResult(source, payload, nctx);
-        outcome.hits[source] = hits;
-        outcome.totals[source] = total;
-        send({ type: "results", source, results: hits, total, durationMs: Date.now() - t0 });
-      } catch (e) {
-        const message = providerMessage(e);
-        outcome.errors.push({ source, message, durationMs: Date.now() - t0 });
-        send({ type: "source.error", source, message, durationMs: Date.now() - t0 });
-      }
-    }),
-  );
-  outcome.durationMs = Date.now() - started;
-  send({ type: "retrieval.done", durationMs: outcome.durationMs });
-  return outcome;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, signal?: AbortSignal): Promise<T> {
@@ -187,110 +136,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, signal?: AbortSignal): Promis
   });
 }
 
-// ---------------------------------------------------------------------------
-// AI synthesis
-// ---------------------------------------------------------------------------
-
-function renderHitsForPrompt(hits: Partial<Record<SearchSource, SearchHit[]>>, max = 8): string {
-  const lines: string[] = [];
-  let n = 0;
-  for (const source of ALL_SOURCES) {
-    const list = hits[source];
-    if (!list?.length) continue;
-    lines.push(`### ${source}`);
-    for (const h of list.slice(0, max)) {
-      n++;
-      const ref = h.opinionId ? ` opinion_id=${h.opinionId}` : h.cfr?.section ? ` cfr title=${h.cfr.title} section=${h.cfr.section}` : h.fr?.documentNumber ? ` fr_document=${h.fr.documentNumber}` : h.edoc ? ` bates=${h.edoc.bates}` : h.library ? ` library_id=${h.id.split(":")[1]}` : "";
-      lines.push(`[${n}] ${formatBluebook(h)}${h.courtId ? ` (${h.courtId}, ${h.authority})` : ""}${ref}${h.url ? ` ${h.url}` : ""}\n    ${(h.snippet ?? "").slice(0, 320)}`);
-    }
-  }
-  return lines.join("\n");
-}
-
-export interface SynthesisOptions {
-  query: string;
-  settings: SearchSettings;
-  matter: Matter | null;
-  /** Resolves when structured retrieval is done; the agent gets a short head start on whatever arrived. */
-  retrieval: Promise<RetrievalOutcome>;
-  partial: () => Partial<Record<SearchSource, SearchHit[]>>;
-  send: (e: AgentEvent) => void;
-  signal?: AbortSignal;
-  /** Continue the stored conversation instead of starting a new synthesis. */
-  previousResponseId?: string | null;
-}
-
 export type SynthesisStatus = SearchRun["aiStatus"];
-
-/** Run the research agent (or the fast answer) and stream its events. Returns the final text. */
-export async function runSynthesis(o: SynthesisOptions): Promise<{ text: string; status: SynthesisStatus }> {
-  const cfg = aiConfig();
-  if (!cfg.hasKey) {
-    o.send({ type: "error", message: "OPENAI_API_KEY is not configured. Add it to .env.local to enable AI synthesis; structured results still load.", code: "no_api_key" });
-    return { text: "", status: "no_api_key" };
-  }
-  const j = jurisdictionByKey(o.settings.jurisdiction);
-  const courts = resolveCourts(o.settings.jurisdiction, o.settings.courts);
-  const range = datePresetRange(o.settings.datePreset, { from: o.settings.dateFrom, to: o.settings.dateTo });
-  const matterLine = o.matter ? `Active matter: ${o.matter.name} (${o.matter.caption ?? o.matter.shortName}); client ${o.matter.client} (${o.matter.clientSide}); ${o.matter.court ?? ""}; stage: ${o.matter.stage ?? "n/a"}. Matter id: ${o.matter.id}. ${o.matter.description ?? ""}` : "No matter selected. Call get_matter_context if the question refers to a matter.";
-
-  try {
-    if (o.previousResponseId) {
-      // Follow-up question in the same conversation: no new retrieval, tools stay available (fast mode keeps no tools).
-      const { tools, builtinTools } = o.settings.fast ? { tools: [], builtinTools: [] } : researchToolset({ web: o.settings.sources.includes("web"), legal: true, internal: true, webContextSize: "medium" });
-      const instructions = [
-        `You are the ${FIRM_NAME} legal research agent answering a follow-up question in an ongoing research session. ${todayLine()}`,
-        matterLine,
-        `Jurisdiction: ${j.label}${courts ? ` (courts: ${courts})` : ""}.`,
-        RESEARCH_METHOD,
-        LEGAL_STYLE_RULES,
-        "Answer the follow-up directly, keep numbered citations consistent with the Sources list you already gave (add new numbers for new sources), and read any new authority before quoting it.",
-      ].join("\n\n");
-      const res = await runAgent({ instructions, input: o.query, tools, builtinTools, previousResponseId: o.previousResponseId, model: o.settings.fast ? cfg.fastModel : undefined, reasoningEffort: o.settings.fast ? "low" : undefined, maxSteps: o.settings.fast ? 1 : 10, verbosity: "low", signal: o.signal, metadata: { app: "leclaude", surface: "search-followup" }, onEvent: o.send });
-      return { text: res.text, status: "ok" };
-    }
-
-    if (o.settings.fast) {
-      // Fast answer: wait (briefly) for structured results, then one fast-model pass with no tools and no reading step.
-      const outcome = await Promise.race([o.retrieval, sleep(9_000).then(() => null)]);
-      const hits = outcome?.hits ?? o.partial();
-      const instructions = [
-        `You are the ${FIRM_NAME} research agent in FAST mode. ${todayLine()}`,
-        matterLine,
-        `Jurisdiction: ${j.label}${courts ? ` (courts: ${courts})` : ""}.${range.from ? ` Date range from ${range.from}.` : ""}`,
-        LEGAL_STYLE_RULES,
-        FAST_ANSWER_FORMAT,
-      ].join("\n\n");
-      const input = `Research question: ${o.query}\n\nStructured search results (use these as your sources; cite them by number):\n${renderHitsForPrompt(hits) || "(no structured results were returned)"}`;
-      const res = await runAgent({ instructions, input, model: cfg.fastModel, reasoningEffort: "low", verbosity: "low", maxSteps: 1, maxOutputTokens: 1800, signal: o.signal, metadata: { app: "leclaude", surface: "search-fast" }, onEvent: o.send });
-      return { text: res.text, status: "ok" };
-    }
-
-    // Full synthesis: short head start so the agent can go straight to reading the top structured hits.
-    await Promise.race([o.retrieval, sleep(2_500)]);
-    const partial = o.partial();
-    const { tools, builtinTools } = researchToolset({ web: o.settings.sources.includes("web"), legal: true, internal: true, webContextSize: "medium" });
-    const instructions = [
-      `You are the ${FIRM_NAME} legal research agent. ${todayLine()}`,
-      matterLine,
-      retrievalPlanLine(o.settings.sources, j.label, courts, range.from, range.to, o.matter?.name),
-      RESEARCH_METHOD,
-      LEGAL_STYLE_RULES,
-      SYNTHESIS_FORMAT,
-      Object.keys(partial).length ? `Preliminary structured results already retrieved for the user (read the most relevant ones first; ids are usable with the read tools):\n${renderHitsForPrompt(partial, 6)}` : "",
-    ].filter(Boolean).join("\n\n");
-    const input: ResponseInput = [{ role: "user", content: [{ type: "input_text", text: o.query }] } as ResponseInputItem];
-    const res = await runAgent({ instructions, input, tools, builtinTools, maxSteps: 14, verbosity: "medium", signal: o.signal, state: { matterId: o.settings.matterId }, metadata: { app: "leclaude", surface: "search" }, onEvent: o.send });
-    return { text: res.text, status: "ok" };
-  } catch (e) {
-    if (e instanceof AIConfigError) { o.send({ type: "error", message: e.message, code: "no_api_key" }); return { text: "", status: "no_api_key" }; }
-    if ((e as Error).name === "AbortError") return { text: "", status: "skipped" };
-    o.send({ type: "error", message: e instanceof Error ? e.message : String(e) });
-    return { text: "", status: "error" };
-  }
-}
-
-function sleep(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)); }
 
 // ---------------------------------------------------------------------------
 // Whole run
@@ -327,10 +173,10 @@ export function recordRun(input: { id: string; query: string; settings: SearchSe
   return run;
 }
 
-export interface ParsedRunRequest { query: string; settings: SearchSettings; runId: string; savedSearchId?: string; skipSynthesis: boolean; followUp: boolean; previousResponseId: string | null }
+export interface ParsedRunRequest { query: string; settings: SearchSettings; runId: string; threadId: string | null; savedSearchId?: string }
 
 export function parseRunRequest(body: unknown): ParsedRunRequest | { error: string } {
-  const b = (body ?? {}) as Partial<SearchRunRequest> & { savedSearchId?: string; query?: string; skipSynthesis?: boolean; followUp?: boolean };
+  const b = (body ?? {}) as Partial<SearchRunRequest> & { query?: string };
   const query = (typeof b.message === "string" ? b.message : typeof b.query === "string" ? b.query : "").trim();
   if (!query) return { error: "`message` (the research query) is required" };
   if (query.length > 4000) return { error: "Query is too long (max 4000 characters)" };
@@ -338,10 +184,8 @@ export function parseRunRequest(body: unknown): ParsedRunRequest | { error: stri
     query,
     settings: sanitizeSettings(b),
     runId: typeof b.runId === "string" && b.runId ? b.runId.replace(/[^\w.-]/g, "").slice(0, 40) || `run_${nanoid(10)}` : `run_${nanoid(10)}`,
+    threadId: typeof b.threadId === "string" && b.threadId ? b.threadId.replace(/[^\w.-]/g, "").slice(0, 40) : null,
     savedSearchId: typeof b.savedSearchId === "string" ? b.savedSearchId : undefined,
-    skipSynthesis: Boolean(b.skipSynthesis),
-    followUp: Boolean(b.followUp) && typeof b.previousResponseId === "string" && b.previousResponseId.length > 0,
-    previousResponseId: typeof b.previousResponseId === "string" ? b.previousResponseId : null,
   };
 }
 
@@ -357,7 +201,16 @@ interface FrText { title?: string; citation?: string; published?: string; url?: 
 interface UrlText { url: string; title?: string; contentType?: string; text: string }
 interface EdocText { id: string; matterId: string; bates: string; batesEnd?: string; date: string; custodianName: string; from?: string; to?: string[]; cc?: string[]; type: string; subject: string; text: string; coding?: unknown; aiSummary?: string }
 
+/** Full text for a read reference. External reads are cached for 24h (engine lanes, the reader sheet and re-runs share it). */
 export async function readSource(ref: ReadRef, opts: { title?: string; signal?: AbortSignal } = {}): Promise<ReadResult> {
+  const cached = getCached(ref);
+  if (cached) return { kind: ref.kind, title: opts.title ?? cached.title ?? ref.kind, cite: cached.cite, url: cached.url, text: cached.text, length: cached.length, meta: { cached: true, fetchedAt: cached.fetchedAt } };
+  const r = await readSourceUncached(ref, opts);
+  putCached(ref, { title: r.title, cite: r.cite, url: r.url, text: r.text });
+  return { ...r, meta: { ...(r.meta ?? {}), cached: false } };
+}
+
+async function readSourceUncached(ref: ReadRef, opts: { title?: string; signal?: AbortSignal } = {}): Promise<ReadResult> {
   const ctx = toolCtx(opts.signal);
   switch (ref.kind) {
     case "opinion": {

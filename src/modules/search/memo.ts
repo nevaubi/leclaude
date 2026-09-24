@@ -19,6 +19,8 @@ export interface MemoInput {
   jurisdictionLabel?: string;
   date?: string; // ISO
   synthesis?: string; // full AI synthesis; used to derive brief answer/analysis when not given
+  /** Pinned passages (verbatim quotations with an optional note and source cite). */
+  passages?: { text: string; note?: string; cite?: string }[];
 }
 
 function cell(s: string | undefined) {
@@ -92,8 +94,18 @@ export function buildMemoMarkdown(input: MemoInput): string {
   lines.push("## Authorities");
   lines.push("");
   if (input.sources.length) lines.push(authoritiesTable(input.sources));
-  else lines.push("_No authorities were added to the memo tray._");
+  else lines.push("_No authorities were pinned._");
   lines.push("");
+  const passages = (input.passages ?? []).filter((p) => p.text.trim());
+  if (passages.length) {
+    lines.push("## Key passages");
+    lines.push("");
+    for (const p of passages) {
+      lines.push(`> ${p.text.trim().replace(/\n+/g, " ")}${p.cite ? ` — ${p.cite}` : ""}`);
+      if (p.note?.trim()) lines.push(`> ${p.note.trim()}`);
+      lines.push("");
+    }
+  }
   lines.push("## Open issues and next steps");
   lines.push("");
   const issues = (input.openIssues ?? []).map((s) => s.trim()).filter(Boolean);

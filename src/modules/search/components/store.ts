@@ -1,28 +1,33 @@
 "use client";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { DEFAULT_SETTINGS, type MemoSource, type SearchHit, type SearchSettings, type SearchSource } from "../types";
+import { nanoid } from "nanoid";
+import { DEFAULT_SETTINGS, type SearchHit, type SearchSettings, type SearchSource } from "../types";
+import type { ResearchPin } from "../engine/types";
 
-export type MemoField = "memoQuestion" | "memoIssues" | "memoSynthesis";
+export type PanelTab = "live" | "sources" | "map" | "pins";
 
 interface SearchStoreState {
   settings: SearchSettings;
   setSettings: (patch: Partial<SearchSettings>) => void;
   replaceSettings: (settings: SearchSettings) => void;
   toggleSource: (s: SearchSource) => void;
-  memo: MemoSource[];
-  memoQuestion: string;
-  memoIssues: string;
-  memoSynthesis: string;
-  memoOpen: boolean;
-  addToMemo: (hit: SearchHit, note?: string) => "added" | "exists";
-  removeFromMemo: (id: string) => void;
-  setMemoNote: (id: string, note: string) => void;
-  setMemoField: (field: MemoField, value: string) => void;
-  clearMemo: () => void;
-  setMemoOpen: (v: boolean) => void;
+  /** Pins live client-side and are mirrored to the thread on the server. */
+  pins: ResearchPin[];
+  pinSource: (hit: SearchHit, sourceId: string, note?: string) => "added" | "exists";
+  pinPassage: (text: string, opts?: { sourceId?: string; hit?: SearchHit; note?: string }) => void;
+  unpin: (id: string) => void;
+  setPinNote: (id: string, note: string) => void;
+  replacePins: (pins: ResearchPin[]) => void;
+  clearPins: () => void;
   recentQueries: string[];
   pushRecentQuery: (q: string) => void;
+  panelTab: PanelTab;
+  setPanelTab: (t: PanelTab) => void;
+  panelOpen: boolean;
+  setPanelOpen: (v: boolean) => void;
+  railOpen: boolean;
+  setRailOpen: (v: boolean) => void;
   hydrated: boolean;
   setHydrated: (v: boolean) => void;
 }
@@ -39,33 +44,36 @@ export const useSearchStore = create<SearchStoreState>()(
           const sources = has ? s.settings.sources.filter((x) => x !== src) : [...s.settings.sources, src];
           return { settings: { ...s.settings, sources: sources.length ? sources : s.settings.sources } };
         }),
-      memo: [],
-      memoQuestion: "",
-      memoIssues: "",
-      memoSynthesis: "",
-      memoOpen: false,
-      addToMemo: (hit, note) => {
-        if (get().memo.some((m) => m.hit.id === hit.id)) return "exists";
-        set((s) => ({ memo: [...s.memo, { hit, note, addedAt: Date.now() }] }));
+      pins: [],
+      pinSource: (hit, sourceId, note) => {
+        if (get().pins.some((p) => p.kind === "source" && p.sourceId === sourceId)) return "exists";
+        set((s) => ({ pins: [...s.pins, { id: `pin_${nanoid(8)}`, kind: "source", sourceId, hit, note, addedAt: Date.now() }] }));
         return "added";
       },
-      removeFromMemo: (id) => set((s) => ({ memo: s.memo.filter((m) => m.hit.id !== id) })),
-      setMemoNote: (id, note) => set((s) => ({ memo: s.memo.map((m) => (m.hit.id === id ? { ...m, note } : m)) })),
-      setMemoField: (field, value) => set({ [field]: value } as Pick<SearchStoreState, MemoField>),
-      clearMemo: () => set({ memo: [], memoQuestion: "", memoIssues: "", memoSynthesis: "" }),
-      setMemoOpen: (v) => set({ memoOpen: v }),
+      pinPassage: (text, opts) => set((s) => ({ pins: [...s.pins, { id: `pin_${nanoid(8)}`, kind: "passage", text: text.trim().slice(0, 4000), sourceId: opts?.sourceId, hit: opts?.hit, note: opts?.note, addedAt: Date.now() }] })),
+      unpin: (id) => set((s) => ({ pins: s.pins.filter((p) => p.id !== id) })),
+      setPinNote: (id, note) => set((s) => ({ pins: s.pins.map((p) => (p.id === id ? { ...p, note } : p)) })),
+      replacePins: (pins) => set({ pins }),
+      clearPins: () => set({ pins: [] }),
       recentQueries: [],
       pushRecentQuery: (q) => set((s) => ({ recentQueries: [q, ...s.recentQueries.filter((x) => x !== q)].slice(0, 12) })),
+      panelTab: "live",
+      setPanelTab: (panelTab) => set({ panelTab }),
+      panelOpen: true,
+      setPanelOpen: (panelOpen) => set({ panelOpen }),
+      railOpen: true,
+      setRailOpen: (railOpen) => set({ railOpen }),
       hydrated: false,
       setHydrated: (v) => set({ hydrated: v }),
     }),
     {
       name: "leclaude:search",
+      version: 2,
       skipHydration: true,
-      partialize: (s) => ({ settings: s.settings, memo: s.memo, memoQuestion: s.memoQuestion, memoIssues: s.memoIssues, memoSynthesis: s.memoSynthesis, recentQueries: s.recentQueries }),
+      partialize: (s) => ({ settings: s.settings, pins: s.pins, recentQueries: s.recentQueries, panelOpen: s.panelOpen, railOpen: s.railOpen }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<SearchStoreState>;
-        return { ...current, ...p, settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) } };
+        return { ...current, ...p, pins: Array.isArray(p.pins) ? p.pins : [], settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) } };
       },
     },
   ),

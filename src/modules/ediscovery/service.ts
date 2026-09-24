@@ -7,6 +7,9 @@ import type { EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain
 import { batesInRange, compareBates, isEmptyQuery, makeSnippet, matchesQuery, parseQuery, type ParsedQuery, type Searchable } from "./query";
 import { indexTextFor, isProducible, productionLoadFileCsv, productionSummary, templatePrivilegeDescription, toPrivilegeLogRow } from "./privilege";
 import { CODING_RULES_KEY, DEFAULT_CODING_RULES } from "./rules";
+import { audit } from "@/lib/integrity/audit";
+import { contentHash } from "@/lib/integrity/hash";
+import { updateProvenance } from "@/lib/integrity/store";
 import {
   SCORE_BUCKETS,
   type BulkCodingRequest,
@@ -375,7 +378,15 @@ export function updateCoding(id: string, patch: CodingPatch, reviewerId: string 
   if (coding.issues) coding.issues = Array.from(new Set(coding.issues));
   coding.reviewerId = reviewerId;
   coding.reviewedAt = new Date().toISOString();
-  return db().edocs.put({ ...cur, coding });
+  const next = db().edocs.put({ ...cur, coding });
+  const changed = codingDiff(cur.coding, coding);
+  if (changed.length) audit("coding.change", { kind: "edoc", id: cur.id, label: cur.bates, matterId: cur.matterId }, { fields: changed, before: pick(cur.coding, changed), after: pick(coding, changed), aiScore: cur.aiScore, aiSuggested: cur.aiIssues }, { id: reviewerId, name: db().people.get(reviewerId)?.name ?? reviewerId });
+  // A human decision on an AI-scored document settles its prediction: mark the prediction reviewed so it leaves the queue.
+  if (cur.aiProvenance && cur.aiProvenance.review?.status === "pending" && (patch.responsive !== undefined || patch.privileged !== undefined)) {
+    db().edocs.update(cur.id, (x) => ({ ...x, aiProvenance: x.aiProvenance ? { ...x.aiProvenance, review: { status: "approved", by: db().people.get(reviewerId)?.name ?? reviewerId, at: coding.reviewedAt, note: "Reviewer coded the document" } } : x.aiProvenance }));
+    for (const k of ["edoc.prediction", "edoc.analysis"] as const) updateProvenance(k, cur.id, (p) => (p.review?.status === "pending" ? { ...p, review: { status: "approved", by: db().people.get(reviewerId)?.name ?? reviewerId, at: coding.reviewedAt, note: "Reviewer coded the document" } } : p));
+  }
+  return next;
 }
 
 export function bulkCode(req: BulkCodingRequest): { updated: number } {
@@ -383,6 +394,7 @@ export function bulkCode(req: BulkCodingRequest): { updated: number } {
   const ids = Array.from(new Set(req.ids));
   const docs = ids.map((id) => db().edocs.get(id)).filter(Boolean) as EDocument[];
   const now = new Date().toISOString();
+  const reviewerId = req.reviewerId ?? CURRENT_USER_ID;
   const next = docs.map((cur) => {
     const coding = { ...cur.coding, ...req.patch };
     let issues = coding.issues ?? [];
@@ -390,13 +402,72 @@ export function bulkCode(req: BulkCodingRequest): { updated: number } {
     if (req.removeIssues?.length) issues = issues.filter((i) => !req.removeIssues!.includes(i));
     coding.issues = issues;
     if (coding.privileged !== true) delete coding.privilegeBasis;
-    coding.reviewerId = req.reviewerId ?? CURRENT_USER_ID;
+    coding.reviewerId = reviewerId;
     coding.reviewedAt = now;
     updated++;
     return { ...cur, coding };
   });
   db().edocs.putMany(next);
+  if (next.length) audit("coding.change", { kind: "edoc", label: `bulk coding of ${next.length} documents`, matterId: next[0].matterId }, { ids: next.slice(0, 200).map((d) => d.id), bates: next.slice(0, 50).map((d) => d.bates), patch: req.patch, addIssues: req.addIssues, removeIssues: req.removeIssues }, { id: reviewerId, name: db().people.get(reviewerId)?.name ?? reviewerId });
   return { updated };
+}
+
+const CODING_FIELDS: (keyof EDocument["coding"])[] = ["responsive", "privileged", "privilegeBasis", "hot", "confidentiality", "issues", "notes"];
+
+function codingDiff(a: EDocument["coding"], b: EDocument["coding"]): string[] {
+  return CODING_FIELDS.filter((k) => JSON.stringify(a[k] ?? null) !== JSON.stringify(b[k] ?? null)).map(String);
+}
+
+function pick(o: EDocument["coding"], keys: string[]) {
+  const out: Record<string, unknown> = {};
+  for (const k of keys) out[k] = (o as Record<string, unknown>)[k];
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Document ingest (hash + duplicate linking on every creation path)
+// ---------------------------------------------------------------------------
+
+export type CreateDocumentInput = Omit<EDocument, "id" | "hash" | "coding" | "isDuplicateOf" | "custodianName"> & { id?: string; coding?: Partial<EDocument["coding"]>; custodianName?: string; hash?: string };
+
+/**
+ * Create an e-discovery document: computes the content hash, links it to an
+ * existing identical document in the matter (isDuplicateOf) and audits the
+ * creation. Never creates a second Bates number for the same id.
+ */
+export function createDocument(input: CreateDocumentInput, opts: { source?: string } = {}): { doc: EDocument; duplicateOf: EDocument | null; created: boolean } {
+  const d = db();
+  const id = input.id ?? `ed_${nanoid(10)}`;
+  const existing = d.edocs.get(id);
+  if (existing) return { doc: existing, duplicateOf: existing.isDuplicateOf ? d.edocs.get(existing.isDuplicateOf) : null, created: false };
+  const hash = input.hash ?? contentHash(input.text ?? "");
+  const primary = d.edocs.findOne((x) => x.matterId === input.matterId && (x.hash ?? contentHash(x.text)) === hash && !x.isDuplicateOf) ?? null;
+  const sameBates = d.edocs.findOne((x) => x.matterId === input.matterId && x.bates.toUpperCase() === input.bates.toUpperCase());
+  if (sameBates) throw Object.assign(new Error(`Bates ${input.bates} already exists in this matter (${sameBates.id})`), { status: 409, existingId: sameBates.id });
+  const custodianName = input.custodianName ?? d.people.get(input.custodianId)?.name ?? "Unknown custodian";
+  const doc: EDocument = { ...input, id, custodianName, hash, coding: { ...(input.coding ?? {}) }, isDuplicateOf: primary?.id, source: input.source ?? opts.source };
+  d.edocs.put(doc);
+  audit("create", { kind: "edoc", id, label: doc.bates, matterId: doc.matterId }, { source: opts.source ?? input.source, hash, duplicateOf: primary?.id, type: doc.type, custodian: doc.custodianName });
+  return { doc, duplicateOf: primary, created: true };
+}
+
+/** Backfill hashes and duplicate links for a matter (idempotent; used by scans and the index rebuild). */
+export function ensureHashes(matterId: string): { hashed: number; linked: number } {
+  const d = db();
+  const docs = matterDocs(matterId);
+  const byHash = new Map<string, EDocument>();
+  let hashed = 0, linked = 0;
+  const updates: EDocument[] = [];
+  for (const doc of [...docs].sort((a, b) => compareBates(a.bates, b.bates))) {
+    let next = doc;
+    if (!next.hash) { next = { ...next, hash: contentHash(next.text) }; hashed++; }
+    const primary = byHash.get(next.hash!);
+    if (!primary) byHash.set(next.hash!, next);
+    else if (!next.isDuplicateOf && primary.id !== next.id) { next = { ...next, isDuplicateOf: primary.id }; linked++; }
+    if (next !== doc) updates.push(next);
+  }
+  if (updates.length) d.edocs.putMany(updates);
+  return { hashed, linked };
 }
 
 // ---------------------------------------------------------------------------

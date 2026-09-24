@@ -1,6 +1,10 @@
 import "server-only";
 import type { Database } from "@/lib/db";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
+import { makeProvenance } from "@/lib/integrity/provenance";
+import { jurisdictionByKey } from "./jurisdictions";
+import { sourceFromHit, toProvenanceSources } from "./engine/sources";
+import type { ResearchMessage, ResearchSource, ResearchThread } from "./engine/types";
 import type { SavedSearch, SearchHit, SearchRun, SearchSettings } from "./types";
 
 const OWNER = PEOPLE.jordanWhitfield;
@@ -363,10 +367,64 @@ Fourth Circuit review is for abuse of discretion; the MDL court has already rule
   },
 ];
 
-/** search module seed: saved searches and cached example runs (idempotent, stable ids). */
-export function seedSearch(db: Database) {
-  db.collection<SavedSearch>("search_saved").putMany(savedSearches);
-  db.collection<SearchRun>("search_runs").putMany(runs);
+// ---- threads derived from the cached runs (one turn each) --------------------
+
+const norm = (s: string) => s.replace(/\s+/g, " ").replace(/\s*\.\s*/g, ".").trim().toLowerCase();
+
+/** Map "[n]" numbers in a seeded synthesis' Sources section onto the run's hits (by cite, then by title prefix). */
+export function citeMapFromSynthesis(synthesis: string | undefined, hits: SearchHit[]): Record<number, string> {
+  const out: Record<number, string> = {};
+  if (!synthesis) return out;
+  const tail = synthesis.split(/^## Sources\s*$/m)[1] ?? "";
+  for (const m of tail.matchAll(/^\[(\d{1,2})\]\s+(.+)$/gm)) {
+    const n = Number(m[1]);
+    const line = norm(m[2]);
+    const hit = hits.find((h) => (h.cite && line.includes(norm(h.cite))) || (h.edoc?.bates && line.includes(norm(h.edoc.bates)))) ?? hits.find((h) => line.includes(norm(h.title).slice(0, 24)));
+    if (hit && !Object.values(out).includes(hit.id)) out[n] = hit.id;
+  }
+  return out;
 }
 
-export const SEARCH_SEED_IDS = { savedSearches: savedSearches.map((s) => s.id), runs: runs.map((r) => r.id) };
+const SEED_LANE = "lane_seed";
+
+function threadFromRun(r: SearchRun, index: number): { thread: ResearchThread; run: SearchRun } {
+  const hits = r.topHits ?? [];
+  const citeMap = citeMapFromSynthesis(r.synthesis, hits);
+  const nOf = new Map(Object.entries(citeMap).map(([n, id]) => [id, Number(n)] as const));
+  const sources: ResearchSource[] = hits.map((h, i): ResearchSource => ({ ...sourceFromHit(h, SEED_LANE, new Date(r.createdAt).getTime() + i * 400), read: true, chars: 18_000 + i * 2_300, readMs: 900 + i * 210, cached: i % 2 === 0, excerpt: h.snippet, n: nOf.get(h.id) }));
+  const verifyMarks = (r.synthesis?.match(/\[VERIFY/g) ?? []).length;
+  const cited = Object.keys(citeMap).length;
+  const hasAnswer = Boolean(r.synthesis);
+  const verification = hasAnswer ? { status: (verifyMarks ? "partially-verified" : "verified") as "verified" | "partially-verified", supported: cited + 2, unsupported: verifyMarks, contradicted: 0, score: Number(((cited + 2) / (cited + 2 + verifyMarks)).toFixed(2)), checkedAt: r.createdAt } : undefined;
+  const stats = { sources: sources.length, read: sources.length, rounds: 1, agents: hasAnswer ? 4 : 2, durationMs: r.durationMs };
+  const provenance = hasAnswer ? { ...makeProvenance({ surface: "research", sources: toProvenanceSources(sources.filter((s) => s.n != null)), confidence: verification?.score }), generatedAt: r.createdAt, verification: verification ? { ...verification, method: "claims" as const } : undefined } : undefined;
+  const j = jurisdictionByKey(r.settings.jurisdiction).label.split(" (")[0];
+  const followUps = hasAnswer ? [`What is the strongest contrary authority in the ${j} on this question?`, r.matterId ? "How does the record in this matter (documents and depositions) bear on the analysis?" : "Which statutes or regulations change the analysis?", "What standard applies at the motion-to-dismiss versus summary-judgment stage?"] : [];
+  const answer: ResearchMessage = { id: `msg_seed_${index}_a`, role: "assistant", content: r.synthesis ?? "", createdAt: r.createdAt, runId: r.id, stats, verification: verification ? { ...verification, verdicts: [] } : undefined, provenance, banner: r.aiStatus === "no_api_key" ? "no-api-key" : null, followUps, citeMap, lanes: [{ id: SEED_LANE, name: "Controlling authority", kind: "controlling", status: "done", sources: sources.length, durationMs: r.durationMs, round: 1 }] };
+  const threadId = `thr_seed_${r.id.replace(/^run_seed_/, "")}`;
+  const thread: ResearchThread = {
+    id: threadId,
+    title: r.query.length > 72 ? r.query.slice(0, 71).trimEnd() + "…" : r.query,
+    matterId: r.matterId ?? null,
+    settings: r.settings,
+    ownerId: r.ownerId,
+    createdAt: r.createdAt,
+    updatedAt: r.createdAt,
+    messages: [{ id: `msg_seed_${index}_u`, role: "user", content: r.query, createdAt: r.createdAt }, answer],
+    sources,
+    pins: [],
+    runIds: [r.id],
+  };
+  const run: SearchRun = { ...r, threadId, mode: "deep", stats, verification, provenance, banner: r.aiStatus === "no_api_key" ? undefined : undefined, followUps, sources };
+  return { thread, run };
+}
+
+/** search module seed: saved searches, cached example runs and their threads (idempotent, stable ids). */
+export function seedSearch(db: Database) {
+  const derived = runs.map((r, i) => threadFromRun(r, i));
+  db.collection<SavedSearch>("search_saved").putMany(savedSearches);
+  db.collection<SearchRun>("search_runs").putMany(derived.map((d) => d.run));
+  db.collection<ResearchThread>("search_threads").putMany(derived.map((d) => d.thread));
+}
+
+export const SEARCH_SEED_IDS = { savedSearches: savedSearches.map((s) => s.id), runs: runs.map((r) => r.id), threads: runs.map((r) => `thr_seed_${r.id.replace(/^run_seed_/, "")}`) };

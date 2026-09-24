@@ -5,13 +5,13 @@
  */
 import type { Workflow, WorkflowEdge, WorkflowNode, WorkflowNodeType } from "@/lib/types/domain";
 import { autoLayout } from "./graph";
-import { defaultConfigFor } from "./registry";
+import { defaultConfigFor, type AnyNodeType } from "./registry";
 import { PEOPLE } from "@/lib/seed/ids";
 
 const P = PEOPLE;
 
-function N(id: string, type: WorkflowNodeType, label: string, config: Record<string, unknown> = {}): WorkflowNode {
-  return { id, type, label, position: { x: 0, y: 0 }, config: { ...defaultConfigFor(type), ...config } };
+function N(id: string, type: AnyNodeType, label: string, config: Record<string, unknown> = {}): WorkflowNode {
+  return { id, type: type as WorkflowNodeType, label, position: { x: 0, y: 0 }, config: { ...defaultConfigFor(type), ...config } };
 }
 function E(source: string, target: string, sourceHandle?: string, targetHandle?: string, label?: string): WorkflowEdge {
   return { id: `e_${source}__${target}${sourceHandle ? `__${sourceHandle}` : ""}`, source, target, sourceHandle, targetHandle, label };
@@ -136,16 +136,18 @@ const TEMPLATES: TemplateDef[] = [
           { name: "credibility_notes", type: "string[]", description: "Demeanor / credibility observations supported by the record" },
         ],
       }),
+      N("verify", "ai.verify", "Verify cites against transcript", { output: "{{steps.extract.output}}", sources: "{{inputs.transcript_text | truncate:90000}}", stepId: "extract", mode: "structured", modelTier: "fast" }),
       N("memo", "ai.draft", "Draft digest memo", {
         kind: "memo", tone: "neutral", audience: "team", modelTier: "primary", research: NO_RESEARCH,
-        brief: "Draft the deposition digest memo for the deposition of {{inputs.witness}} in {{matter.name}}.\n\nSections: Summary (5 bullets); Key admissions; Harmful testimony and how to contain it; Contradictions (table: Testimony | Conflicts with | Significance); Exhibits; Objections and instructions; Follow-up. Keep every page:line cite exactly as given.\n\nStructured findings:\n{{steps.extract.output | json}}",
+        brief: "Draft the deposition digest memo for the deposition of {{inputs.witness}} in {{matter.name}}.\n\nSections: Summary (5 bullets); Key admissions; Harmful testimony and how to contain it; Contradictions (table: Testimony | Conflicts with | Significance); Exhibits; Objections and instructions; Follow-up. Keep every page:line cite exactly as given; keep any [VERIFY] marks.\n\nStructured findings (verified: {{steps.verify.output.status}}):\n{{steps.verify.output.corrected | json}}",
         context: "Page:line digest:\n{{steps.digest.output.text}}",
       }),
+      N("review", "logic.review", "Trust review", { steps: "extract, verify, memo", approverId: P.elenaMarsh, title: "Deposition digest needs a look", message: "Some of the AI digest for {{inputs.witness}} did not verify against the transcript. Approve to save and circulate anyway, or reject to stop." }),
       N("save", "action.save_document", "Save digest", { kind: "word", title: "Deposition digest — {{inputs.witness}} — {{now | date:short}}", content: "{{steps.memo.output.text}}", matterId: "{{inputs.matter}}", tags: ["deposition", "digest"] }),
-      N("notify", "action.notify", "Notify case team", { recipientIds: [P.jordanWhitfield, P.priyaRaman, P.elenaMarsh], kind: "update", message: "Deposition digest for **{{inputs.witness}}** is ready on {{matter.shortName}}.\n\nTop admissions:\n{{steps.extract.output.key_admissions | slice:0,3 | bullets}}\n\n{{steps.save.output.href}}", matterId: "{{inputs.matter}}" }),
-      N("task", "action.create_task", "Attorney review", { title: "Review deposition digest: {{inputs.witness}}", description: "Check page:line cites against the certified transcript and confirm the contradictions list before it goes into the outline.\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "high", dueRule: "+3bd", matterId: "{{inputs.matter}}", tags: ["deposition"] }),
+      N("notify", "action.notify", "Notify case team", { recipientIds: [P.jordanWhitfield, P.priyaRaman, P.elenaMarsh], kind: "update", message: "Deposition digest for **{{inputs.witness}}** is ready on {{matter.shortName}} (verification: {{steps.verify.output.status}}).\n\nTop admissions:\n{{steps.extract.output.key_admissions | slice:0,3 | bullets}}\n\n{{steps.save.output.href}}", matterId: "{{inputs.matter}}" }),
+      N("task", "action.create_task", "Attorney review", { title: "Review deposition digest: {{inputs.witness}}", description: "Check page:line cites against the certified transcript and confirm the contradictions list before it goes into the outline. Unresolved cites: {{steps.verify.output.unresolvedCites | join:\", \" | default:\"none\"}}\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "high", dueRule: "+3bd", matterId: "{{inputs.matter}}", tags: ["deposition"] }),
     ],
-    edges: [E("start", "digest"), E("digest", "extract"), E("extract", "memo"), E("memo", "save"), E("save", "notify"), E("save", "task")],
+    edges: [E("start", "digest"), E("digest", "extract"), E("extract", "verify"), E("verify", "memo"), E("memo", "review"), E("review", "save", "approved"), E("save", "notify"), E("save", "task")],
   },
 
   // 3 ───────────────────────── Docket monitor ─────────────────────────
@@ -242,10 +244,13 @@ const TEMPLATES: TemplateDef[] = [
         output: "json", modelTier: "fast", research: NO_RESEARCH,
         jsonSchema: JSON.stringify({ type: "object", properties: { bates: { type: "string" }, date: { type: "string" }, doc_type: { type: "string" }, author: { type: "string" }, recipients: { type: "string" }, attorney: { type: "string" }, privilege_type: { type: "string", enum: ["Attorney-Client", "Work Product", "Attorney-Client; Work Product", "Common Interest"] }, description: { type: "string" }, basis: { type: "string" }, withheld: { type: "string", enum: ["Withheld in full", "Redacted"] } }, required: ["bates", "date", "doc_type", "author", "recipients", "attorney", "privilege_type", "description", "basis", "withheld"] }),
       }),
-      N("log", "action.save_document", "Save privilege log", { kind: "sheet", content: "", title: "Privilege log — {{inputs.custodian | default:\"all custodians\"}} — {{now | date:short}}", rows: "{{steps.entries.output.results | pluck:steps.describe}}", matterId: "{{inputs.matter}}", tags: ["privilege-log"] }),
-      N("qc", "action.create_task", "Paralegal QC", { title: "QC privilege log ({{steps.entries.output.count}} entries) — {{inputs.custodian | default:\"all custodians\"}}", description: "Check every description is privilege-safe and consistent with the CMO 26 Ex. B format; confirm attorney names and dates.\n\n{{steps.log.output.href}}", assigneeId: P.mariaLopez, priority: "high", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["privilege"] }),
+      N("check", "ai.verify", "Verify entry against document", { output: "{{steps.describe.output}}", sources: "Bates {{loop.item.bates}} · {{loop.item.date}} · {{loop.item.type}}\nFrom: {{loop.item.from}}\nTo: {{loop.item.to | join:\"; \"}}\nSubject: {{loop.item.subject}}\nCustodian: {{loop.item.custodian}}\n\n{{loop.item.passage}}", stepId: "describe", mode: "structured", modelTier: "fast" }),
+      N("dedupe", "data.dedupe", "Drop repeated entries", { items: "{{steps.entries.output.results | pluck:steps.describe}}", collection: "self", keyFields: "bates", matterId: "{{inputs.matter}}" }),
+      N("review", "logic.review", "Trust review", { steps: "describe, check", approverId: P.elenaMarsh, title: "Privilege log entries need a look", message: "Some AI-drafted privilege log entries for {{inputs.custodian | default:\"all custodians\"}} did not verify against the documents. Approve to save the log for paralegal QC, or reject to stop." }),
+      N("log", "action.save_document", "Save privilege log", { kind: "sheet", content: "", title: "Privilege log — {{inputs.custodian | default:\"all custodians\"}} — {{now | date:short}}", rows: "{{steps.dedupe.output.items}}", matterId: "{{inputs.matter}}", tags: ["privilege-log"] }),
+      N("qc", "action.create_task", "Paralegal QC", { title: "QC privilege log ({{steps.dedupe.output.kept}} entries) — {{inputs.custodian | default:\"all custodians\"}}", description: "Check every description is privilege-safe and consistent with the CMO 26 Ex. B format; confirm attorney names and dates. Entries dropped as duplicates: {{steps.dedupe.output.dropped}}.\n\n{{steps.log.output.href}}", assigneeId: P.mariaLopez, priority: "high", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["privilege"] }),
     ],
-    edges: [E("start", "search"), E("search", "entries"), E("entries", "describe", "each"), E("describe", "entries", undefined, "loop-back"), E("entries", "log", "done"), E("log", "qc")],
+    edges: [E("start", "search"), E("search", "entries"), E("entries", "describe", "each"), E("describe", "check"), E("check", "entries", undefined, "loop-back"), E("entries", "dedupe", "done"), E("dedupe", "review"), E("review", "log", "approved"), E("log", "qc")],
   },
 
   // 6 ───────────────────────── Chronology from documents ─────────────────────────
@@ -270,14 +275,17 @@ const TEMPLATES: TemplateDef[] = [
         output: "json", modelTier: "primary", research: NO_RESEARCH,
         jsonSchema: JSON.stringify({ type: "object", properties: { events: { type: "array", items: { type: "object", properties: { date: { type: "string" }, event: { type: "string" }, actors: { type: "string" }, source: { type: "string" }, significance: { type: "integer" }, category: { type: "string", enum: ["corporate", "scientific", "regulatory", "communication", "litigation", "product", "other"] } }, required: ["date", "event", "actors", "source", "significance", "category"] } }, gaps: { type: "array", items: { type: "string" } } }, required: ["events", "gaps"] }),
       }),
+      N("verify", "ai.verify", "Verify events against documents", { output: "{{steps.events.output.events}}", sources: "{{steps.search.output.results}}", stepId: "events", mode: "structured", modelTier: "fast" }),
+      N("dedupe", "data.dedupe", "Drop events already on the timeline", { items: "{{steps.verify.output.corrected}}", collection: "timeline", keyFields: "date,event", matterId: "{{inputs.matter}}" }),
       N("memo", "ai.draft", "Draft chronology memo", {
         kind: "chronology", tone: "neutral", audience: "team", modelTier: "primary", research: NO_RESEARCH,
-        brief: "Prepare the chronology memo for \"{{inputs.topic}}\" in {{matter.name}}. Sort by date. After the table add: Key inflection points (3–5 bullets), Gaps in the record, Documents to collect next.\n\nEvents:\n{{steps.events.output.events | table:date,event,actors,source,significance}}\n\nGaps noted during extraction:\n{{steps.events.output.gaps | bullets}}",
+        brief: "Prepare the chronology memo for \"{{inputs.topic}}\" in {{matter.name}}. Sort by date. After the table add: Key inflection points (3–5 bullets), Gaps in the record, Documents to collect next. Keep any [VERIFY] marks.\n\nEvents (verified: {{steps.verify.output.status}}; {{steps.dedupe.output.dropped}} already on the timeline):\n{{steps.dedupe.output.items | table:date,event,actors,source,significance}}\n\nGaps noted during extraction:\n{{steps.events.output.gaps | bullets}}",
       }),
+      N("review", "logic.review", "Trust review", { steps: "events, verify, memo", approverId: P.elenaMarsh, title: "Chronology needs a look", message: "Some extracted events for \"{{inputs.topic}}\" did not verify against the documents. Approve to save the memo and open the merge task, or reject to stop." }),
       N("save", "action.save_document", "Save chronology", { kind: "word", title: "Chronology — {{inputs.topic}} — {{now | date:short}}", content: "{{steps.memo.output.text}}", matterId: "{{inputs.matter}}", tags: ["chronology"] }),
-      N("task", "action.create_task", "Verify and merge into timeline", { title: "Chronology: verify {{steps.events.output.events | length}} events for \"{{inputs.topic}}\" and merge into the matter timeline", description: "Gaps flagged:\n{{steps.events.output.gaps | bullets}}\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "medium", dueRule: "+5bd", matterId: "{{inputs.matter}}", tags: ["chronology"] }),
+      N("task", "action.create_task", "Verify and merge into timeline", { title: "Chronology: verify {{steps.dedupe.output.kept}} events for \"{{inputs.topic}}\" and merge into the matter timeline", description: "Verification: {{steps.verify.output.status}} ({{steps.verify.output.unsupported}} unsupported). Unresolved cites: {{steps.verify.output.unresolvedCites | join:\", \" | default:\"none\"}}\n\nGaps flagged:\n{{steps.events.output.gaps | bullets}}\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "medium", dueRule: "+5bd", matterId: "{{inputs.matter}}", tags: ["chronology"] }),
     ],
-    edges: [E("start", "search"), E("search", "events"), E("events", "memo"), E("memo", "save"), E("save", "task")],
+    edges: [E("start", "search"), E("search", "events"), E("events", "verify"), E("verify", "dedupe"), E("dedupe", "memo"), E("memo", "review"), E("review", "save", "approved"), E("save", "task")],
   },
 
   // 7 ───────────────────────── Research memo ─────────────────────────
@@ -295,12 +303,15 @@ const TEMPLATES: TemplateDef[] = [
     nodes: [
       N("start", "trigger.manual", "Run with question"),
       N("research", "ai.research", "Research the question", { question: "{{inputs.question}}\n\nContext: {{matter.name}} — {{matter.description | truncate:600}}", jurisdiction: "{{inputs.jurisdiction | replace:Any,}}", depth: "deep", sources: { web: true, legal: true, internal: true }, instructions: "Verify every citation you rely on by reading the opinion. Distinguish binding from persuasive authority for this forum." }),
-      N("save", "action.save_document", "Save memo", { kind: "word", title: "Research memo — {{inputs.question | truncate:60}}", content: "{{steps.research.output.text}}", matterId: "{{inputs.matter}}", tags: ["research", "memo"] }),
-      N("approval", "logic.approval", "Partner review", { approverId: P.jordanWhitfield, title: "Approve research memo", message: "A research memo is ready for {{matter.shortName}}.\n\n**Question:** {{inputs.question}}\n\n**Bottom line (excerpt):**\n{{steps.research.output.text | truncate:1800}}\n\nFull memo: {{steps.save.output.href}}\n\nApprove to circulate, or reject with comments to send it back for revision.", timeoutHours: 48 }),
+      N("cites", "data.legal_search", "Resolve every citation", { source: "verify_citations", text: "{{steps.research.output.text}}" }),
+      N("verify", "ai.verify", "Verify memo against authorities", { output: "{{steps.research.output.text}}", sources: "Citation check:\n{{steps.cites.output.text}}\n\nAuthorities the agent read:\n{{steps.research.output.citations | json}}", stepId: "research", mode: "claims", maxClaims: 30, modelTier: "fast" }),
+      N("review", "logic.review", "Trust review", { steps: "research, verify", approverId: P.elenaMarsh, title: "Research memo needs a look before saving", message: "The memo has unresolved citations or claims the sources do not support ({{steps.cites.output.unresolvedCount}} unresolved cite(s)). Approve to save it for partner review anyway, or reject to stop." }),
+      N("save", "action.save_document", "Save memo", { kind: "word", title: "Research memo — {{inputs.question | truncate:60}}", content: "{{steps.verify.output.corrected}}", matterId: "{{inputs.matter}}", tags: ["research", "memo"] }),
+      N("approval", "logic.approval", "Partner review", { approverId: P.jordanWhitfield, title: "Approve research memo", message: "A research memo is ready for {{matter.shortName}}.\n\n**Question:** {{inputs.question}}\n\n**Verification:** {{steps.verify.output.status}} — {{steps.verify.output.supported}} supported, {{steps.verify.output.unsupported}} unsupported, {{steps.verify.output.contradicted}} contradicted; {{steps.cites.output.unresolvedCount}} unresolved citation(s).\n\n**Bottom line (excerpt):**\n{{steps.research.output.text | truncate:1800}}\n\nFull memo: {{steps.save.output.href}}\n\nApprove to circulate, or reject with comments to send it back for revision.", timeoutHours: 48 }),
       N("task_circulate", "action.create_task", "Circulate memo", { title: "Circulate approved research memo: {{inputs.question | truncate:70}}", description: "Approved by {{steps.approval.output.decidedByName}}{{steps.approval.output.comment | default:\"\"}}.\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "medium", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["research"] }),
       N("task_revise", "action.create_task", "Revise memo", { title: "Revise research memo per partner comments: {{inputs.question | truncate:60}}", description: "Comments from {{steps.approval.output.decidedByName}}:\n{{steps.approval.output.comment}}\n\n{{steps.save.output.href}}", assigneeId: P.elenaMarsh, priority: "high", dueRule: "+2bd", matterId: "{{inputs.matter}}", tags: ["research", "revision"] }),
     ],
-    edges: [E("start", "research"), E("research", "save"), E("save", "approval"), E("approval", "task_circulate", "approved"), E("approval", "task_revise", "rejected")],
+    edges: [E("start", "research"), E("research", "cites"), E("cites", "verify"), E("verify", "review"), E("review", "save", "approved"), E("save", "approval"), E("approval", "task_circulate", "approved"), E("approval", "task_revise", "rejected")],
   },
 
   // 8 ───────────────────────── Client status report ─────────────────────────
