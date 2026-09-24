@@ -2574,7 +2574,7 @@ For every substantive task:
 
 These are the concrete conventions of the LeClaude repository. They implement the constitution above; where they conflict, the constitution wins.
 
-Stack: Next.js 15 App Router, React 19, TypeScript strict, Tailwind v4, SQLite via `node:sqlite` for development storage, model providers behind `src/lib/ai` (OpenAI Responses API today; Anthropic Messages API and Amazon Bedrock providers are added by the runtime workstream with a centralized router and capability registry).
+Stack: Next.js 15 App Router, React 19, TypeScript strict, Tailwind v4, SQLite via `node:sqlite` for development storage, model providers behind `src/lib/ai` (provider-neutral runtime: Amazon Bedrock, Anthropic Messages API, OpenAI Responses API and an OpenRouter router role, selected by the centralized router and the coded capability registry; see `docs/architecture/model-runtime.md`).
 
 ## Layout
 - `src/app/**` routes and API handlers only (thin; delegate to `src/modules/**`).
