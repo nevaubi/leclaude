@@ -4,6 +4,12 @@
  */
 import type { Conflict, Deposition, DepositionQA, Relationship, TimelineEvent } from "@/lib/types/domain";
 
+/** Prop contract shared by the five analysis tabs (fixed by review-page.tsx). */
+export interface AnalysisTabProps {
+  matterId: string;
+  onOpenDocument?: (docId: string) => void;
+}
+
 export type QAFlag = NonNullable<DepositionQA["flags"]>[number];
 export const QA_FLAGS: { id: QAFlag; label: string; hint: string }[] = [
   { id: "admission", label: "Admission", hint: "Concession useful to our side or damaging to the witness" },

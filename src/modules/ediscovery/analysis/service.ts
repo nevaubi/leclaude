@@ -167,18 +167,19 @@ export async function crossAnalysis(matterId: string, opts: { topic: string; wit
     }
     return out;
   };
-  const testimony = topic ? toExcerpt(searchTranscripts(focus, topic, { limit: 60 })) : toExcerpt(focus.flatMap((dep) => dep.transcript.map((qa, index) => ({ depositionId: dep.id, witnessName: dep.witnessName, index, page: qa.page, line: qa.line, field: "answer" as const, snippet: qa.answer, score: (qa.flags?.length ?? 0) + 1 }))).sort((a, b) => b.score - a.score));
-  const otherTestimony = topic ? toExcerpt(searchTranscripts(others, topic, { limit: 40 })).slice(0, Math.ceil(k / 2)) : [];
+  const searchLoose = (deps: Deposition[], limit: number) => { const strict = searchTranscripts(deps, topic, { limit }); return strict.length >= 3 ? strict : [...strict, ...searchTranscripts(deps, topic, { limit, mode: "any" }).filter((h) => !strict.some((s) => s.depositionId === h.depositionId && s.index === h.index))]; };
+  const testimony = topic ? toExcerpt(searchLoose(focus, 60)) : toExcerpt(focus.flatMap((dep) => dep.transcript.map((qa, index) => ({ depositionId: dep.id, witnessName: dep.witnessName, index, page: qa.page, line: qa.line, field: "answer" as const, snippet: qa.answer, score: (qa.flags?.length ?? 0) + 1 }))).sort((a, b) => b.score - a.score));
+  const otherTestimony = topic ? toExcerpt(searchLoose(others, 40)).slice(0, Math.ceil(k / 2)) : [];
 
   let documents: CrossExcerpt[] = [];
   if (topic) {
     const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, topic, { k, perDoc: 1, filter: (meta) => meta.matterId === matterId });
     const terms = topic.split(/\s+/).filter((t) => t.length > 2);
-    documents = hits.map((h) => {
+    for (const h of hits) {
       const doc = d.edocs.get(h.docId);
-      if (!doc) return null;
-      return { kind: "document" as const, id: doc.id, label: doc.subject, cite: doc.bates, date: doc.date, text: docExcerpt(h.text || doc.text, terms), score: Math.round(h.score * 100) / 100 };
-    }).filter((x): x is CrossExcerpt => !!x);
+      if (!doc) continue;
+      documents.push({ kind: "document", id: doc.id, label: doc.subject, cite: doc.bates, date: doc.date, text: docExcerpt(h.text || doc.text, terms), score: Math.round(h.score * 100) / 100 });
+    }
   }
   const witnessIds = new Set(focus.map((x) => x.id));
   const conflicts = d.conflicts.find((c) => c.matterId === matterId && (!focus.length || c.sides.some((s) => s.sourceKind === "deposition" && witnessIds.has(s.sourceId))) && (!topic || `${c.title} ${c.analysis} ${c.sides.map((s) => s.excerpt).join(" ")}`.toLowerCase().includes(topic.toLowerCase().split(/\s+/)[0])));
@@ -287,8 +288,8 @@ export function personDetail(matterId: string, personId: string): PersonDetail |
   const cc = docs.filter((x) => (x.cc ?? []).some((n) => resolvePersonName(n, people)?.id === personId)).length;
   const last = person.name.split(" ").pop()!.toLowerCase();
   const mentioned = docs.filter((x) => x.text.toLowerCase().includes(last) && !authored.includes(x) && !received.includes(x)).length;
-  const deps = d.depositions.find((x) => x.matterId === matterId).map((dep) => ({ id: dep.id, date: dep.date, witnessName: dep.witnessName, pages: dep.pages, status: dep.status, mentions: dep.witnessId === personId ? dep.transcript.length : dep.transcript.filter((qa) => `${qa.question} ${qa.answer}`.toLowerCase().includes(last) || `${qa.question} ${qa.answer}`.includes(person.name.split(" ")[0])).length })).filter((x) => x.mentions > 0 || d.depositions.get(x.id)?.witnessId === personId);
-  const timeline = d.timeline.find((e) => e.matterId === matterId && e.personIds?.includes(personId)).sort((a, b) => a.date.localeCompare(b.date)).map((e) => ({ id: e.id, date: e.date, title: e.title, category: e.category, significance: e.significance }));
+  const deps = d.depositions.find((x) => x.matterId === matterId).map((dep) => ({ id: dep.id, date: dep.date, witnessName: dep.witnessName, pages: dep.pages, status: dep.status, mentions: dep.witnessId === personId ? dep.transcript.length : dep.transcript.filter((qa) => `${qa.question} ${qa.answer}`.toLowerCase().includes(last) || `${qa.question} ${qa.answer}`.includes(person.name.split(" ")[0])).length })).filter((x) => x.mentions > 0 || d.depositions.get(x.id)?.witnessId === personId || false);
+  const timeline = d.timeline.find((e) => e.matterId === matterId && !!e.personIds?.includes(personId)).sort((a, b) => a.date.localeCompare(b.date)).map((e) => ({ id: e.id, date: e.date, title: e.title, category: e.category, significance: e.significance }));
   const relationships = d.relationships.find((r) => r.matterId === matterId && (r.fromId === personId || r.toId === personId)).map((r) => {
     const otherId = r.fromId === personId ? r.toId : r.fromId;
     return { id: r.id, otherId, otherName: d.people.get(otherId)?.name ?? otherId, kind: r.kind, direction: (r.fromId === personId ? "out" : "in") as "out" | "in", weight: r.weight, label: r.label, evidence: r.evidence ?? [] };

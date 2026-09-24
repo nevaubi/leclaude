@@ -56,15 +56,17 @@ function snippetAround(text: string, terms: string[], radius = 110) {
 
 /**
  * Full-text search across transcripts. Phrase queries ("...") require the
- * exact phrase; otherwise every token must appear in the field (AND) and
- * results are scored by term frequency, with answers ranked above questions.
+ * exact phrase; otherwise every token must appear in the field (AND) unless
+ * mode is "any", and results are scored by matched terms and term frequency,
+ * with answers ranked above questions.
  */
-export function searchTranscripts(depositions: Pick<Deposition, "id" | "witnessName" | "transcript">[], query: string, opts: { limit?: number; flags?: QAFlag[] } = {}): TranscriptHit[] {
+export function searchTranscripts(depositions: Pick<Deposition, "id" | "witnessName" | "transcript">[], query: string, opts: { limit?: number; flags?: QAFlag[]; mode?: "all" | "any" } = {}): TranscriptHit[] {
   const q = query.trim();
   if (!q) return [];
   const phrase = q.match(/^"(.+)"$/)?.[1]?.toLowerCase();
   const terms = phrase ? [phrase] : tokens(q);
   if (!terms.length) return [];
+  const any = opts.mode === "any";
   const hits: TranscriptHit[] = [];
   for (const dep of depositions) {
     dep.transcript.forEach((qa, index) => {
@@ -73,10 +75,11 @@ export function searchTranscripts(depositions: Pick<Deposition, "id" | "witnessN
       for (const [field, text] of fields) {
         if (!text) continue;
         const lower = text.toLowerCase();
-        if (!terms.every((t) => lower.includes(t))) continue;
+        const matched = terms.filter((t) => lower.includes(t)).length;
+        if (any ? matched === 0 : matched < terms.length) continue;
         let score = 0;
         for (const t of terms) { let i = -1; while ((i = lower.indexOf(t, i + 1)) >= 0) score += 1; }
-        score = score / Math.sqrt(1 + text.length / 400) + (field === "answer" ? 0.5 : 0) + (qa.flags?.length ? 0.25 : 0);
+        score = score / Math.sqrt(1 + text.length / 400) + matched * 2 + (field === "answer" ? 0.5 : 0) + (qa.flags?.length ? 0.25 : 0);
         hits.push({ depositionId: dep.id, witnessName: dep.witnessName, index, page: qa.page, line: qa.line, field, snippet: snippetAround(text, terms), score: Math.round(score * 100) / 100 });
       }
     });
