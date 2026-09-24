@@ -4,10 +4,11 @@ import { generateDailyBrief } from "@/modules/home/brief";
 import { computeFallbackBrief } from "@/modules/home/brief-fallback";
 import { buildBriefContext, cacheBrief, getCachedBrief, getOrComputeBrief } from "@/modules/home/service";
 import { dateKey } from "@/modules/home/time";
+import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const url = new URL(req.url);
   const date = url.searchParams.get("date");
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date) && date !== dateKey(new Date())) {
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
 }
 
 /** Regenerate today's brief with the fast model. Falls back to the computed brief (503 + code) without a key. */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const now = new Date();
   let mode: "ai" | "computed" = "ai";
   try { const b = (await req.json()) as { mode?: string }; if (b?.mode === "computed") mode = "computed"; } catch { /* empty body is fine */ }
@@ -39,3 +40,6 @@ export async function POST(req: Request) {
     return jsonError(e instanceof Error ? e.message : "Brief generation failed", 502, { code: "ai_error", brief });
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "brief" }) });
+export const POST = withAuth(handlePOST, { action: "run", resource: () => ({ kind: "brief" }) });

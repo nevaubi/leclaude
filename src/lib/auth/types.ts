@@ -49,7 +49,10 @@ export type ResourceKind =
   | "settings"
   | "blob"
   | "task"
-  | "event";
+  | "event"
+  | "brief"
+  | "news"
+  | "update";
 
 export type Sensitivity = "normal" | "privileged" | "restricted";
 
@@ -78,5 +81,6 @@ export interface PolicyDecision {
 }
 
 export const AUTH_HEADER_USER = "x-leclaude-user";
-export const AUTH_MODES = ["dev", "jwt"] as const;
+/** dev: the demo persona; header: a trusted reverse proxy asserts the user; jwt: a signed bearer token is verified. */
+export const AUTH_MODES = ["dev", "header", "jwt"] as const;
 export type AuthMode = (typeof AUTH_MODES)[number];

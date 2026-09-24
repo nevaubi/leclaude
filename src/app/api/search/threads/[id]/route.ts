@@ -1,12 +1,14 @@
 import { jsonError } from "@/lib/ai/sse";
 import { deleteThread, getThread, renameThread, setThreadPins } from "@/modules/search/engine/threads";
 import type { ResearchPin } from "@/modules/search/engine/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+async function handleGET(_req: Request, { params }: Params) {
   const { id } = await params;
   const thread = getThread(id);
   if (!thread) return jsonError("Not found", 404);
@@ -14,7 +16,7 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 /** PUT {pins?: ResearchPin[], title?: string} — pins and title are the only client-editable fields. */
-export async function PUT(req: Request, { params }: Params) {
+async function handlePUT(req: Request, { params }: Params) {
   const { id } = await params;
   const body = (await req.json().catch(() => null)) as { pins?: ResearchPin[]; title?: string } | null;
   if (!body) return jsonError("Invalid body");
@@ -28,7 +30,11 @@ export async function PUT(req: Request, { params }: Params) {
   return Response.json({ thread });
 }
 
-export async function DELETE(_req: Request, { params }: Params) {
+async function handleDELETE(_req: Request, { params }: Params) {
   const { id } = await params;
   return Response.json({ ok: deleteThread(id) });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.research(id) });
+export const PUT = withAuth(handlePUT, { action: "write", resource: (_req, { id }) => refs.research(id) });
+export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.research(id) });

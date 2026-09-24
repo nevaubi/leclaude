@@ -3,11 +3,13 @@ import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { jobCounts, listJobs } from "@/modules/intel/jobs";
 import { intelSources } from "@/modules/intel/store";
 import type { IntelJobKind, IntelJobStatus } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET ?status=queued,running&kind=&sourceId=&escalated=1&since=&limit=&offset= → { items, total, counts }. */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -24,3 +26,5 @@ export async function GET(req: NextRequest) {
     counts: jobCounts(),
   });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });

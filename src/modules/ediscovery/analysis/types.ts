@@ -3,6 +3,7 @@
  * cross-analysis, chronology, people graph, conflicts). No server imports.
  */
 import type { Conflict, Deposition, DepositionQA, Relationship, TimelineEvent } from "@/lib/types/domain";
+import type { Provenance } from "@/lib/integrity/types";
 
 /** Prop contract shared by the five analysis tabs (fixed by review-page.tsx). */
 export interface AnalysisTabProps {
@@ -123,6 +124,8 @@ export interface FactMatrix {
   topics: string[];
   sources: { id: string; kind: "document" | "deposition"; label: string; cite: string }[];
   cells: { topic: string; sourceId: string; position: string; cite: string; stance: "supports" | "contradicts" | "neutral" | "silent" }[];
+  /** Generation record: verification status and the cites that did not resolve against the record. */
+  provenance?: Provenance;
 }
 
 export type TimelineCategory = TimelineEvent["category"];
@@ -162,9 +165,23 @@ export interface GraphNode {
   authored: number;
   received: number;
   depositions: number;
+  /** Q/A pairs across the matter's transcripts in which this person testified or is named. */
+  testimony?: number;
   cluster: string; // organization key
   color: string; // token name
   degree: number;
+}
+
+/** One piece of evidence behind an edge; `date`, `kind`, `cite` and `depositionId` are resolved server-side from the Bates / page:line. */
+export interface GraphEvidence {
+  bates?: string;
+  docId?: string;
+  excerpt?: string;
+  kind?: "document" | "deposition";
+  date?: string;
+  /** Witness page:line when the evidence is testimony ("Voss 43:02"). */
+  cite?: string;
+  depositionId?: string;
 }
 
 export interface GraphEdge {
@@ -174,13 +191,26 @@ export interface GraphEdge {
   kind: Relationship["kind"];
   weight: number;
   label?: string;
-  evidence: { bates?: string; docId?: string; excerpt?: string }[];
+  evidence: GraphEvidence[];
+  /** Earliest / latest dated evidence, when any evidence carries a date. */
+  firstDate?: string;
+  lastDate?: string;
+}
+
+export interface GraphOrg {
+  id: string;
+  label: string;
+  memberIds: string[];
+  docCount: number;
+  testimony: number;
 }
 
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
   clusters: { id: string; label: string; color: string; size: number }[];
+  /** Organizations in the matter with their members (derived from Person.organization; not invented edges). */
+  orgs?: GraphOrg[];
 }
 
 export interface PersonDetail {
@@ -201,6 +231,9 @@ export interface KnowledgeMap {
   createdAt: string;
   entries: { personId?: string; personName: string; knew: string; firstKnownDate: string; confidence: "high" | "medium" | "low"; cites: { cite: string; sourceKind: "document" | "deposition"; sourceId?: string }[] }[];
   narrative: string;
+  provenance?: Provenance;
+  /** An earlier map on the same topic this one repeats. */
+  duplicateOf?: string;
 }
 
 export interface ConflictNote {

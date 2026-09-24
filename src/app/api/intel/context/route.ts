@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { currentUser } from "@/lib/current-user";
 import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { buildMatterContext, buildUserContext } from "@/modules/intel/context/user-context";
+import { withAuth } from "@/lib/auth/route";
+import { queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -12,7 +14,7 @@ export const runtime = "nodejs";
  * The user context carries the ranked insights, docket/regulatory activity on active matters and preparation
  * material for upcoming events that Home renders; the matter context feeds matter headers and the agents.
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -30,3 +32,5 @@ export async function GET(req: NextRequest) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });

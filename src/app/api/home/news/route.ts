@@ -1,10 +1,12 @@
 import { listNews, refreshNewsFromFederalRegister } from "@/modules/home/service";
 import type { NewsItem, PracticeArea } from "@/lib/types/domain";
 import { param } from "@/modules/home/api-utils";
+import { withAuth } from "@/lib/auth/route";
+import { queryParam } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const url = new URL(req.url);
   let refresh: Awaited<ReturnType<typeof refreshNewsFromFederalRegister>> | undefined;
   if (url.searchParams.get("refresh") === "1") {
@@ -20,3 +22,5 @@ export async function GET(req: Request) {
   });
   return Response.json({ items, refresh });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "news", matterId: queryParam(req, "matter") }) });

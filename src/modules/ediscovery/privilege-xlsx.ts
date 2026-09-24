@@ -1,48 +1,13 @@
 /**
- * Privilege-log spreadsheet export (xlsx package) and the description templates
- * reviewers pick from when drafting entries by hand. Pure; no server-only imports.
+ * Privilege-log spreadsheet export (xlsx package). Server/test-side only; the
+ * description templates and status workflow live in privilege-templates.ts so
+ * the client can use them without pulling the spreadsheet library.
  */
 import * as XLSX from "xlsx";
 import type { PrivilegeLogRow } from "./types";
+import { statusExportLabel } from "./privilege-templates";
 
-export interface DescriptionTemplate {
-  id: string;
-  basis: string;
-  label: string;
-  /** Placeholders: {type} {author} {recipients} {topic} {date}. */
-  template: string;
-}
-
-export const DESCRIPTION_TEMPLATES: DescriptionTemplate[] = [
-  { id: "ac-advice", basis: "Attorney-client", label: "Counsel providing legal advice", template: "{type} from {author} to {recipients} providing legal advice regarding {topic}." },
-  { id: "ac-request", basis: "Attorney-client", label: "Client requesting legal advice", template: "{type} from {author} to {recipients} requesting legal advice from counsel regarding {topic} and providing information to counsel for that purpose." },
-  { id: "ac-reflect", basis: "Attorney-client", label: "Reflecting counsel's advice", template: "{type} from {author} to {recipients} reflecting and transmitting legal advice of counsel regarding {topic}, prepared for the purpose of obtaining or implementing that advice." },
-  { id: "wp-anticipation", basis: "Work product", label: "Prepared in anticipation of litigation", template: "{type} prepared by or at the direction of {author} in anticipation of litigation, analysing {topic} and reflecting the mental impressions and legal theories of counsel." },
-  { id: "wp-draft", basis: "Work product", label: "Draft prepared for counsel", template: "Draft {type} prepared by {author} at the request of counsel in anticipation of litigation concerning {topic}; not distributed outside the legal department." },
-  { id: "ci-exchange", basis: "Common interest", label: "Common-interest exchange", template: "{type} from {author} to {recipients} exchanged between parties sharing a common legal interest pursuant to a common-interest agreement, conveying legal advice regarding {topic}." },
-  { id: "jd-exchange", basis: "Joint defense", label: "Joint-defense communication", template: "{type} from {author} to {recipients}, members of a joint defense group, conveying counsel's legal analysis regarding {topic}." },
-];
-
-export function fillTemplate(t: DescriptionTemplate, values: { type: string; author: string; recipients: string; topic: string; date?: string }): string {
-  return t.template
-    .replace(/\{type\}/g, values.type)
-    .replace(/\{author\}/g, values.author)
-    .replace(/\{recipients\}/g, values.recipients || "counsel")
-    .replace(/\{topic\}/g, values.topic || "legal matters")
-    .replace(/\{date\}/g, values.date ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export const PRIVILEGE_STATUSES: { id: PrivilegeLogRow["status"]; label: string; hint: string }[] = [
-  { id: "draft", label: "Draft", hint: "Generated or first-pass description" },
-  { id: "review", label: "In review", hint: "Second-level check of basis and description" },
-  { id: "final", label: "Final", hint: "Approved for service" },
-];
-
-export function statusExportLabel(status: PrivilegeLogRow["status"]): string {
-  return status === "final" ? "Withheld" : status === "review" ? "In review" : "Draft";
-}
+export { DESCRIPTION_TEMPLATES, PRIVILEGE_STATUSES, fillTemplate, statusExportLabel, templatesForBasis, nextPrivilegeStatuses, type DescriptionTemplate } from "./privilege-templates";
 
 /** Rows as an .xlsx workbook (Privilege log sheet + Legend sheet). */
 export function privilegeLogWorkbook(rows: PrivilegeLogRow[], meta: { matterName: string; caption?: string; generatedAt?: string }): XLSX.WorkBook {

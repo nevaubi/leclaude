@@ -4,12 +4,13 @@ import { kickRunner } from "@/modules/intel/background";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { runSourceNow } from "@/modules/intel/jobs";
 import { getSource } from "@/modules/intel/service";
+import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** POST { wait?: boolean, maxDocs?: number } → { job }. With wait, the run executes inline and the finished job is returned. */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   intelBootstrap();
   const { id } = await params;
   if (!getSource(id)) return jsonError("Source not found", 404);
@@ -22,3 +23,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "run", resource: (_req, { id }) => ({ kind: "intel", id }) });

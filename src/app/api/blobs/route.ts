@@ -3,6 +3,8 @@ import { blobs, db } from "@/lib/db";
 import { jsonError } from "@/lib/ai/sse";
 import { audit } from "@/lib/integrity/audit";
 import { sha256 } from "@/lib/integrity/hash";
+import { withAuth } from "@/lib/auth/route";
+import { queryParam } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ const HASH_KEY = (hash: string, matterId?: string) => `blob:sha256:${matterId ??
  * given (form field or ?matterId=) and the same bytes were already uploaded for that matter, the response is
  * 409 { duplicate: true, id, url, message } unless allowDuplicate=1; without a matter the existing blob is returned with 200.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const ct = req.headers.get("content-type") ?? "";
   let bytes: Uint8Array; let mime: string; let name: string | undefined; let matterId: string | undefined; let allowDuplicate = false;
   if (ct.includes("multipart/form-data")) {
@@ -48,3 +50,5 @@ export async function POST(req: NextRequest) {
   audit("import", { kind: "blob", id: rec.id, label: rec.name ?? rec.id, matterId }, { sha256: hash, bytes: rec.size, mime: rec.mime });
   return Response.json({ id: rec.id, url: `/api/blobs/${rec.id}`, size: rec.size, mime: rec.mime, name: rec.name, sha256: hash, duplicate: false });
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: (req) => ({ kind: "blob", matterId: queryParam(req, "matterId") }) });

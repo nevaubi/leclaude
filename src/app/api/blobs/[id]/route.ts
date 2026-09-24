@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
 import { blobs } from "@/lib/db";
 import { parseRange } from "@/lib/http-range";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const b = blobs.get(id);
   if (!b) return new Response("Not found", { status: 404 });
@@ -23,7 +25,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return new Response(b.bytes as unknown as BodyInit, { headers: { ...base, "Content-Length": String(b.size) } });
 }
 
-export async function HEAD(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+async function handleHEAD(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const res = await GET(req, ctx);
   return new Response(null, { status: res.status, headers: res.headers });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.blob(id) });
+export const HEAD = withAuth(handleHEAD, { action: "read", resource: (_req, { id }) => refs.blob(id) });

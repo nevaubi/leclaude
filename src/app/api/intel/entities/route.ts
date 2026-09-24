@@ -6,6 +6,8 @@ import { listEntities, rebuildEntities, type ListEntitiesOptions } from "@/modul
 import { buildRelations } from "@/modules/intel/analysis/graph";
 import { ENTITY_TYPES } from "@/modules/intel/analysis/pure";
 import type { IntelEntityType } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -13,7 +15,7 @@ export const runtime = "nodejs";
  * GET ?type=judge,attorney&q=&sort=documents|name|mentions|updated|lastSeen&direction=&limit=&offset=&watched=1&flagged=1&userId=
  * → { items, total, counts, limit, offset }
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -34,7 +36,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST { action: "rebuild", docIds?: string[] } → re-resolve entities (and relations) for the corpus or a subset. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelAnalysisBootstrap();
   const body = (await req.json().catch(() => ({}))) as { action?: string; docIds?: string[] };
   if (body.action !== "rebuild") return jsonError('Provide { action: "rebuild" }', 422);
@@ -46,3 +48,6 @@ export async function POST(req: NextRequest) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
+export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.intel() });

@@ -4,12 +4,14 @@ import { bootstrap, errorResponse, parseBody } from "@/modules/workflows/api-uti
 import { validateWorkflow } from "@/modules/workflows/graph";
 import { workflowUpsertSchema } from "@/modules/workflows/schema";
 import { deleteWorkflow, getWorkflow, listRuns, updateWorkflow } from "@/modules/workflows/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Ctx) {
+async function handleGET(_req: Request, { params }: Ctx) {
   bootstrap();
   const { id } = await params;
   const workflow = getWorkflow(id);
@@ -20,7 +22,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 }
 
 /** PUT: full save from the builder (validation issues are returned, drafts may be saved with errors; activating requires a valid graph). */
-export async function PUT(req: Request, { params }: Ctx) {
+async function handlePUT(req: Request, { params }: Ctx) {
   bootstrap();
   const { id } = await params;
   const body = await parseBody(req, workflowUpsertSchema.partial());
@@ -42,7 +44,7 @@ export async function PUT(req: Request, { params }: Ctx) {
 const patchSchema = z.object({ status: z.enum(["draft", "active", "archived"]).optional(), name: z.string().min(1).max(140).optional(), description: z.string().max(2000).optional(), tags: z.array(z.string()).optional(), category: workflowUpsertSchema.shape.category.optional() });
 
 /** PATCH: metadata / status only. */
-export async function PATCH(req: Request, { params }: Ctx) {
+async function handlePATCH(req: Request, { params }: Ctx) {
   bootstrap();
   const { id } = await params;
   const body = await parseBody(req, patchSchema);
@@ -57,7 +59,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   return Response.json(res);
 }
 
-export async function DELETE(_req: Request, { params }: Ctx) {
+async function handleDELETE(_req: Request, { params }: Ctx) {
   bootstrap();
   const { id } = await params;
   const cur = getWorkflow(id);
@@ -66,3 +68,8 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   deleteWorkflow(id);
   return Response.json({ ok: true });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.workflow(id) });
+export const PUT = withAuth(handlePUT, { action: "write", resource: (_req, { id }) => refs.workflow(id) });
+export const PATCH = withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => refs.workflow(id) });
+export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.workflow(id) });

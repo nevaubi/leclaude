@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { AIConfigError } from "@/lib/ai/config";
 import { db } from "@/lib/db";
 import { autoTagItem, compareClause, NoApiKeyError, summarizeItem } from "@/modules/library/service";
+import { withAuth } from "@/lib/auth/route";
+import { bodyString, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -13,7 +15,7 @@ interface Body { action: "summarize" | "autotag" | "compare"; id?: string; offic
  * Library AI actions. Every action returns a 503 with code "no_api_key" when
  * OPENAI_API_KEY is missing (autotag returns { skipped: true } instead so uploads never fail).
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body?.action) return jsonError("`action` is required");
   let id = body.id;
@@ -32,3 +34,5 @@ export async function POST(req: NextRequest) {
     return jsonError(err.message ?? String(e), err.status && err.status >= 400 && err.status < 600 ? err.status : 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => refs.library(await bodyString(req, "id")) });

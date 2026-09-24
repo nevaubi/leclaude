@@ -5,11 +5,13 @@ import { buildRelations, relationsOf } from "@/modules/intel/analysis/graph";
 import { RELATION_TYPES } from "@/modules/intel/analysis/pure";
 import { intelEntities, intelRelations } from "@/modules/intel/store";
 import type { IntelRelationType } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET ?entityId=&types=presides,cites&minWeight=&limit= → { relations, total } (entity names resolved on each row). */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -24,9 +26,12 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST { action: "rebuild", docIds?, reset? } → rebuild the relation graph. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelAnalysisBootstrap();
   const body = (await req.json().catch(() => ({}))) as { action?: string; docIds?: string[]; reset?: boolean };
   if (body.action !== "rebuild") return jsonError('Provide { action: "rebuild" }', 422);
   return Response.json(buildRelations({ docIds: Array.isArray(body.docIds) ? body.docIds : undefined, reset: body.reset === true }));
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
+export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.intel() });

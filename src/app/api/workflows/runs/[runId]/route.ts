@@ -2,12 +2,14 @@ import { jsonError } from "@/lib/ai/sse";
 import { bootstrap } from "@/modules/workflows/api-utils";
 import { isRunActive } from "@/modules/workflows/engine";
 import { deleteRun, getRun, getWorkflow } from "@/modules/workflows/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ runId: string }> };
 
-export async function GET(_req: Request, { params }: Ctx) {
+async function handleGET(_req: Request, { params }: Ctx) {
   bootstrap();
   const { runId } = await params;
   const run = getRun(runId);
@@ -16,7 +18,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   return Response.json({ run, workflow: workflow ? { id: workflow.id, name: workflow.name, category: workflow.category, isTemplate: workflow.isTemplate, status: workflow.status } : null, active: isRunActive(runId) });
 }
 
-export async function DELETE(_req: Request, { params }: Ctx) {
+async function handleDELETE(_req: Request, { params }: Ctx) {
   bootstrap();
   const { runId } = await params;
   const run = getRun(runId);
@@ -25,3 +27,6 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   deleteRun(runId);
   return Response.json({ ok: true });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { runId }) => refs.workflowRun(runId) });
+export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { runId }) => refs.workflowRun(runId) });

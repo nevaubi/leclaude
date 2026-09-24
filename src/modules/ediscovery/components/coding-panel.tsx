@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Check, CircleCheck, CircleX, Flame, Loader2, Plus, Save, ShieldAlert } from "lucide-react";
+import { CircleCheck, CircleX, Flame, Loader2, Plus, Save, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -8,23 +8,24 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tip } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import type { CodingDecision } from "@/lib/types/domain";
 import { CONFIDENTIALITY_LEVELS, PRIVILEGE_BASES } from "../types";
 import { useReviewStore } from "./store";
 import { useReview } from "./review-page";
-import { IssueChip, Kbd, issueColorClasses } from "./shared";
+import { IssueChip, Kbd } from "./shared";
+import { IssuePicker } from "./issue-picker";
 
 /**
  * Coding panel. The primary decisions (Responsive / Not / Privileged / Hot / Save & next)
  * sit in one sticky row at the top so the reviewer never scrolls to decide; the
  * detail fields (basis, confidentiality, issue codes, notes, reviewer) follow.
+ * In QC mode the save is compared with the first-pass call and recorded on the batch.
  */
 export function CodingPanel({ draft, onChange, onSave, saving, dirty, reviewedBy, reviewedAt, className, width = 272 }: { draft: CodingDecision; onChange: (c: CodingDecision) => void; onSave: () => void; saving: boolean; dirty: boolean; reviewedBy?: string; reviewedAt?: string; className?: string; width?: number }) {
   const { issueCodes, reviewers, currentUserId } = useReview();
   const autoAdvance = useReviewStore((s) => s.autoAdvance);
   const setAutoAdvance = useReviewStore((s) => s.setAutoAdvance);
+  const qcMode = useReviewStore((s) => s.qcMode);
   const set = (patch: Partial<CodingDecision>) => onChange({ ...draft, ...patch });
   const issues = draft.issues ?? [];
   const [issueOpen, setIssueOpen] = React.useState(false);
@@ -32,8 +33,8 @@ export function CodingPanel({ draft, onChange, onSave, saving, dirty, reviewedBy
 
   return (
     <aside className={cn("flex shrink-0 flex-col border-l bg-card/50", className)} style={{ width }} aria-label="Coding panel">
-      {/* Primary actions: one sticky row */}
       <div className="sticky-actions shrink-0 border-b px-2 py-2">
+        {qcMode && <div className="mb-1.5 rounded border border-info/30 bg-info/8 px-2 py-1 text-[10.5px] text-info">QC call — saved against the first-pass coding of this batch.</div>}
         <div className="grid grid-cols-4 gap-1" role="group" aria-label="Primary coding">
           <Tip label="Responsive" shortcut="R"><Action active={draft.responsive === true} onClick={() => set({ responsive: draft.responsive === true ? null : true })} tone="success" icon={CircleCheck} label="Resp." /></Tip>
           <Tip label="Not responsive" shortcut="N"><Action active={draft.responsive === false} onClick={() => set({ responsive: draft.responsive === false ? null : false })} tone="muted" icon={CircleX} label="Not" /></Tip>
@@ -63,33 +64,12 @@ export function CodingPanel({ draft, onChange, onSave, saving, dirty, reviewedBy
           </Select>
         </Field>
 
-        <Field label="Issue codes">
+        <Field label="Issue codes" shortcut="1–9">
           <div className="flex flex-wrap gap-1">
             {issues.map((c) => <IssueChip key={c} code={c} codes={issueCodes} onRemove={() => set({ issues: issues.filter((x) => x !== c) })} />)}
-            <Popover open={issueOpen} onOpenChange={setIssueOpen}>
-              <PopoverTrigger asChild><Button variant="outline" size="xs" className="h-[22px] gap-1 px-1.5 text-[11px]"><Plus className="size-3" /> Add</Button></PopoverTrigger>
-              <PopoverContent align="start" className="w-72 p-0">
-                <Command>
-                  <CommandInput placeholder="Search issue codes…" className="h-9 text-xs" />
-                  <CommandList>
-                    <CommandEmpty>No codes.</CommandEmpty>
-                    <CommandGroup>
-                      {issueCodes.map((c) => {
-                        const on = issues.includes(c.code);
-                        return (
-                          <CommandItem key={c.id} value={`${c.code} ${c.label}`} onSelect={() => set({ issues: on ? issues.filter((x) => x !== c.code) : [...issues, c.code] })} className="text-xs">
-                            <span className={cn("size-1.5 rounded-full", issueColorClasses(c.color).dot)} />
-                            <span className="font-mono">{c.code}</span>
-                            <span className="min-w-0 flex-1 truncate text-muted-foreground">{c.label}</span>
-                            {on && <Check className="size-3.5" />}
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            <IssuePicker codes={issueCodes} value={issues} onChange={(next) => set({ issues: next })} open={issueOpen} onOpenChange={setIssueOpen} showKeys>
+              <Button variant="outline" size="xs" className="h-[22px] gap-1 px-1.5 text-[11px]"><Plus className="size-3" /> Add</Button>
+            </IssuePicker>
           </div>
         </Field>
 

@@ -6,6 +6,8 @@ import { listInsights, runAnalysis } from "@/modules/intel/analysis/insights";
 import { INSIGHT_KIND_LABEL, INSIGHT_STATUS_LABEL } from "@/modules/intel/analysis/pure";
 import { enqueueJob } from "@/modules/intel/jobs";
 import type { IntelInsight, IntelInsightKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,7 +17,7 @@ export const maxDuration = 60;
  * → { insights, items, total, ranked }. Ranked (recency × relevance × confidence × watches) whenever
  * a userId or matterId is given unless rank=0.
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
  * POST { action: "run", full?, matterIds?, kinds? } → run the deterministic analysis pass inline and return its result.
  * POST { action: "verify", ids } → queue model verification for the given insights.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelAnalysisBootstrap();
   const body = (await req.json().catch(() => ({}))) as { action?: string; full?: boolean; matterIds?: string[]; kinds?: IntelInsightKind[]; ids?: string[] };
   try {
@@ -47,3 +49,6 @@ export async function POST(req: NextRequest) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
+export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.intel() });

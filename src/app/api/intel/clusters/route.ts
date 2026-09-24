@@ -3,11 +3,13 @@ import { jsonError } from "@/lib/ai/sse";
 import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { clusterScope } from "@/modules/intel/analysis/clusters";
 import type { IntelDocumentKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET ?matterId=&kinds=&entityId=&court=&jurisdiction=&q=&k=&maxChunks=&method=embeddings|tfidf → ClusterResult. */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -29,3 +31,5 @@ export async function GET(req: NextRequest) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });

@@ -396,7 +396,7 @@ describe("conflicts", () => {
     expect(() => addConflictNote("nope", "x")).toThrow(/Unknown conflict/);
     expect(db().conflicts.delete(c.id)).toBe(true);
     const ov = overview(AFFF);
-    expect(ov.depositions).toBe(6);
+    expect(ov.depositions).toBe(7); // Voss, Hale, Pryce, Brooks, the imported Liu transcript + 2 scheduled
     expect(ov.transcribed).toBe(5); // Voss, Hale, Pryce, Brooks + the imported Liu transcript
     expect(ov.conflicts.open).toBeGreaterThanOrEqual(8);
     expect(ov.aiConfigured).toBe(false);

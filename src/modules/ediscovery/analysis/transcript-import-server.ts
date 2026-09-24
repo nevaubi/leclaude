@@ -7,6 +7,7 @@ import type { Deposition, Person } from "@/lib/types/domain";
 import type { ParsedTranscript, TranscriptImportRecord } from "./types";
 import { parseTranscript, type ParseOptions } from "./transcript-import";
 import { resolvePersonName } from "./graph";
+import { matterPeople } from "./service";
 
 const IMPORTS = "ediscovery_transcript_imports";
 const imports = () => db().collection<TranscriptImportRecord>(IMPORTS);
@@ -61,7 +62,8 @@ export function importTranscript(input: ImportTranscriptInput): { deposition: De
   if (!parsed.transcript.length) throw Object.assign(new Error("No Q/A pairs could be parsed from the transcript"), { status: 422 });
   const witnessName = (input.witnessName ?? parsed.meta.witnessName ?? "").trim();
   if (!witnessName) throw Object.assign(new Error("`witnessName` is required (the header did not name the witness)"), { status: 400 });
-  const people = d.people.all();
+  // Witness resolution is scoped to this matter's people: a same-named person on another matter is never bound.
+  const people = matterPeople(input.matterId);
   let person: Person | null = input.witnessId ? d.people.get(input.witnessId) : resolvePersonName(witnessName, people) ?? null;
   if (!person) {
     person = { id: `p_${nanoid(8)}`, name: witnessName, title: input.witnessTitle, role: "witness" };

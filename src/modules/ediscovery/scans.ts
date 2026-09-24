@@ -5,8 +5,71 @@ import { contentHash } from "@/lib/integrity/hash";
 import { extractRecordCites } from "@/lib/ai/verify";
 import { listProvenance } from "@/lib/integrity/store";
 import type { Database } from "@/lib/db";
+import type { EDocument } from "@/lib/types/domain";
+import { detectNearDuplicates } from "./near-dup";
+import { refreshNearDuplicates } from "./review-service";
 
 type Finding = Omit<ScanFinding, "id" | "scanId">;
+
+/** Near-duplicate pairs (MinHash/shingling) that are not recorded on either document yet; exact duplicates are excluded. */
+export function unlinkedNearDuplicatePairs(docs: EDocument[], threshold = 0.5): { a: EDocument; b: EDocument; score: number }[] {
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  const res = detectNearDuplicates(docs.map((d) => ({ id: d.id, text: d.text })), { threshold });
+  const out: { a: EDocument; b: EDocument; score: number }[] = [];
+  for (const p of res.pairs) {
+    const a = byId.get(p.a), b = byId.get(p.b);
+    if (!a || !b) continue;
+    if (a.isDuplicateOf === b.id || b.isDuplicateOf === a.id || (a.hash && a.hash === b.hash)) continue;
+    if (a.nearDuplicateIds?.includes(b.id) || b.nearDuplicateIds?.includes(a.id)) continue;
+    out.push({ a, b, score: p.score });
+  }
+  return out;
+}
+
+/** Linked near-duplicates whose responsiveness or privilege calls disagree (a reviewer must reconcile; never auto-coded). */
+export function inconsistentNearDuplicates(docs: EDocument[]): { a: EDocument; b: EDocument; fields: string[] }[] {
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  const seen = new Set<string>();
+  const out: { a: EDocument; b: EDocument; fields: string[] }[] = [];
+  for (const a of docs) {
+    for (const id of a.nearDuplicateIds ?? []) {
+      const b = byId.get(id);
+      if (!b) continue;
+      const key = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const fields: string[] = [];
+      if (a.coding.responsive != null && b.coding.responsive != null && a.coding.responsive !== b.coding.responsive) fields.push("responsive");
+      if (a.coding.privileged != null && b.coding.privileged != null && a.coding.privileged !== b.coding.privileged) fields.push("privileged");
+      if (fields.length) out.push({ a, b, fields });
+    }
+  }
+  return out;
+}
+
+registerScan({
+  id: "ediscovery-near-duplicates",
+  name: "E-discovery near-duplicates",
+  description: "Near-duplicate pairs (MinHash over word shingles) that are not yet linked on the documents, and linked near-duplicates whose responsiveness or privilege calls disagree.",
+  run: (d) => {
+    const findings: Finding[] = [];
+    let checked = 0;
+    const byMatter = new Map<string, EDocument[]>();
+    for (const doc of d.edocs.all()) byMatter.set(doc.matterId, [...(byMatter.get(doc.matterId) ?? []), doc]);
+    for (const [matterId, docs] of byMatter) {
+      checked += docs.length;
+      const matter = d.matters.get(matterId);
+      const unlinked = unlinkedNearDuplicatePairs(docs);
+      if (unlinked.length) findings.push({ severity: "low", title: `${unlinked.length} near-duplicate pair${unlinked.length === 1 ? "" : "s"} in ${matter?.shortName ?? matterId} ${unlinked.length === 1 ? "is" : "are"} not linked`, detail: unlinked.slice(0, 8).map((p) => `${p.a.bates} ~ ${p.b.bates} (${Math.round(p.score * 100)}%)`).join(", ") + (unlinked.length > 8 ? ", …" : ""), target: { kind: "matter", id: matterId, href: `/ediscovery?matter=${matterId}` }, fixable: true });
+      for (const p of inconsistentNearDuplicates(docs)) findings.push({ severity: "medium", title: `${p.a.bates} and near-duplicate ${p.b.bates} are coded differently (${p.fields.join(", ")})`, detail: "Near-duplicates usually get the same call; open both and reconcile. Nothing is changed automatically.", target: { kind: "edoc", id: p.a.id, href: docHref(p.a.matterId, p.a.id) } });
+    }
+    return { checked, findings };
+  },
+  fix: (_d, f) => {
+    if (f.target?.kind !== "matter" || !/not linked/.test(f.title)) return false;
+    return refreshNearDuplicates(f.target.id).updated > 0;
+  },
+});
 
 const docHref = (matterId: string, id: string) => `/ediscovery?matter=${matterId}&doc=${id}`;
 

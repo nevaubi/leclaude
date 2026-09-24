@@ -4,6 +4,8 @@ import { startRun } from "@/modules/workflows/engine";
 import { runStartSchema } from "@/modules/workflows/schema";
 import { getWorkflow, workflowForTemplate } from "@/modules/workflows/service";
 import { WORKFLOW_CURRENT_USER } from "@/modules/workflows/types";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ export const runtime = "nodejs";
  * caller's own copy of the template, so run history never attaches to the
  * shared template; the response carries the workflow that actually ran.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   bootstrap();
   const { id } = await params;
   let workflow = getWorkflow(id);
@@ -30,3 +32,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return Response.json({ run: { id: run.id, status: run.status, workflowId: run.workflowId, startedAt: run.startedAt }, workflow: { id: workflow.id, name: workflow.name } }, { status: 202 });
   } catch (e) { return errorResponse(e); }
 }
+
+export const POST = withAuth(handlePOST, { action: "run", resource: async (req, { id }) => ({ ...refs.workflow(id), matterId: await bodyMatterId(req) }) });

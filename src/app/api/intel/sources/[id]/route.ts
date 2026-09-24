@@ -4,13 +4,14 @@ import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { listJobs } from "@/modules/intel/jobs";
 import { deleteSource, getSource, IntelServiceError, sourceSummary, updateSource, type UpdateSourceInput } from "@/modules/intel/service";
 import { listDocuments } from "@/modules/intel/store";
+import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /** GET → { source, jobs (latest 10), documents: { total, byKind } }. */
-export async function GET(_req: NextRequest, { params }: Ctx) {
+async function handleGET(_req: NextRequest, { params }: Ctx) {
   intelBootstrap();
   const { id } = await params;
   const source = getSource(id);
@@ -22,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 /** PATCH { name?, description?, config?, schedule?, scope?, enabled? } → { source }. */
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+async function handlePATCH(req: NextRequest, { params }: Ctx) {
   intelBootstrap();
   const { id } = await params;
   let body: UpdateSourceInput;
@@ -36,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 }
 
 /** DELETE ?keepDocuments=1 → { deleted, documentsRemoved }. System sources cannot be deleted (409). */
-export async function DELETE(req: NextRequest, { params }: Ctx) {
+async function handleDELETE(req: NextRequest, { params }: Ctx) {
   intelBootstrap();
   const { id } = await params;
   const keep = new URL(req.url).searchParams.get("keepDocuments");
@@ -47,3 +48,7 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const PATCH = withAuth(handlePATCH, { action: "admin", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const DELETE = withAuth(handleDELETE, { action: "admin", resource: (_req, { id }) => ({ kind: "intel", id }) });

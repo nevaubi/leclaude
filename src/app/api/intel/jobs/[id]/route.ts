@@ -4,13 +4,14 @@ import { kickRunner } from "@/modules/intel/background";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { cancelJob, getJob, retryJob } from "@/modules/intel/jobs";
 import { intelSources } from "@/modules/intel/store";
+import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /** GET → { job, source? }. */
-export async function GET(_req: NextRequest, { params }: Ctx) {
+async function handleGET(_req: NextRequest, { params }: Ctx) {
   intelBootstrap();
   const { id } = await params;
   const job = getJob(id);
@@ -20,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 /** POST { action: "retry" | "cancel", note? } → { job }. */
-export async function POST(req: NextRequest, { params }: Ctx) {
+async function handlePOST(req: NextRequest, { params }: Ctx) {
   intelBootstrap();
   const { id } = await params;
   const job = getJob(id);
@@ -38,3 +39,6 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
   return jsonError("action must be retry or cancel", 422);
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const POST = withAuth(handlePOST, { action: "run", resource: (_req, { id }) => ({ kind: "intel", id }) });

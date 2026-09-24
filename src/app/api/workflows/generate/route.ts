@@ -1,12 +1,14 @@
 import { bootstrap, errorResponse, parseBody } from "@/modules/workflows/api-utils";
 import { generateWorkflowDraft } from "@/modules/workflows/generate";
 import { generateRequestSchema } from "@/modules/workflows/schema";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /** POST /api/workflows/generate { description, category?, matterId? } → validated draft (nodes/edges/inputs) for the builder. */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   bootstrap();
   const body = await parseBody(req, generateRequestSchema);
   if (!body.ok) return body.res;
@@ -15,3 +17,5 @@ export async function POST(req: Request) {
     return Response.json({ draft });
   } catch (e) { return errorResponse(e); }
 }
+
+export const POST = withAuth(handlePOST, { action: "run", resource: async (req) => ({ kind: "workflow", matterId: await bodyMatterId(req) }) });

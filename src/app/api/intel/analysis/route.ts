@@ -7,12 +7,14 @@ import { analysisStatus, runAnalysis } from "@/modules/intel/analysis/insights";
 import { scheduleAnalysisIfStale } from "@/modules/intel/analysis/jobs";
 import { kickRunner } from "@/modules/intel/background";
 import type { IntelInsightKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** GET → AnalysisStatus (last run, counts, pending documents). */
-export async function GET() {
+async function handleGET() {
   intelAnalysisBootstrap();
   return Response.json(analysisStatus());
 }
@@ -22,7 +24,7 @@ export async function GET() {
  * Runs the requested pass inline (deterministic, seconds at demo scale) and returns its result;
  * `queue: true` enqueues an analysis.run job for the background runner instead.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelAnalysisBootstrap();
   const body = (await req.json().catch(() => ({}))) as { run?: string; full?: boolean; matterIds?: string[]; kinds?: IntelInsightKind[]; queue?: boolean };
   try {
@@ -40,3 +42,6 @@ export async function POST(req: NextRequest) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
+export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.intel() });

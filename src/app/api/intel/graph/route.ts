@@ -3,11 +3,13 @@ import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { graphExport } from "@/modules/intel/analysis/graph";
 import { ENTITY_TYPES, RELATION_TYPES } from "@/modules/intel/analysis/pure";
 import type { IntelEntityType, IntelRelationType } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET ?entityId=&depth=1&types=&entityTypes=&minWeight=&limit=80 → { nodes, links, center, depth, truncated } for d3-force. */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -22,3 +24,5 @@ export async function GET(req: NextRequest) {
     limit: Math.max(5, Math.min(Number(p("limit") ?? 80) || 80, 300)),
   }));
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });

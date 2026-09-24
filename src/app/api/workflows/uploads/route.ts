@@ -2,6 +2,7 @@ import { blobs } from "@/lib/db";
 import { jsonError } from "@/lib/ai/sse";
 import { audit } from "@/lib/integrity/audit";
 import { bootstrap } from "@/modules/workflows/api-utils";
+import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -16,7 +17,7 @@ const MAX_FILES = 25;
  * file, or `{ files: [...] }` when several were sent. Text is extracted
  * separately through POST /api/workflows/extract-text { blobId }.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   bootstrap();
   const ct = req.headers.get("content-type") ?? "";
   if (!ct.includes("multipart/form-data")) return jsonError("Send the file as multipart/form-data with a `file` field", 415);
@@ -39,3 +40,5 @@ export async function POST(req: Request) {
   }
   return Response.json(out.length === 1 ? { ...out[0], files: out } : { files: out }, { status: 201 });
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: () => ({ kind: "blob" }) });

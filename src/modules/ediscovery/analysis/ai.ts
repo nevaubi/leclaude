@@ -17,7 +17,7 @@ import type { Conflict, Deposition, EDocument, TimelineEvent } from "@/lib/types
 import type { FactMatrix, KnowledgeMap } from "./types";
 import { formatPageLine } from "./types";
 import { transcriptText } from "./transcript";
-import { createConflict, crossAnalysis, exhibitDocuments, getDeposition, listEvents, listKnowledgeMaps, mergeEvents, saveFactMatrix, saveKnowledgeMap, setDigest } from "./service";
+import { createConflict, crossAnalysis, exhibitDocuments, getDeposition, listEvents, listKnowledgeMaps, matterPeople, mergeEvents, saveFactMatrix, saveKnowledgeMap, setDigest } from "./service";
 import { resolvePersonName } from "./graph";
 import { getStory, storySources, updateStory } from "./service-stories";
 import { storyFactsText } from "./stories";
@@ -145,7 +145,7 @@ export async function prepareOutline(matterId: string, opts: { witnessId?: strin
   requireKey();
   const d = db();
   const witnessName = opts.witnessName.trim();
-  const people = d.people.all();
+  const people = matterPeople(matterId);
   const person = opts.witnessId ? d.people.get(opts.witnessId) : resolvePersonName(witnessName, people);
   const deps = d.depositions.find((x) => x.matterId === matterId && x.transcript.length > 0);
   const last = witnessName.split(" ").pop()!.toLowerCase();
@@ -221,7 +221,28 @@ const CONTRADICTIONS_SCHEMA = { type: "object", properties: { contradictions: { 
 
 interface RawContradiction { title: string; kind: Conflict["kind"]; severity: Conflict["severity"]; testimonyCite: string; testimonyExcerpt: string; sourceKind: "document" | "deposition"; sourceCite: string; sourceExcerpt: string; analysis: string; confidence: number }
 
-export interface ContradictionsResult { created: Conflict[]; considered: number; skipped: { title: string; duplicateOf: string }[]; dropped: string[] }
+export interface ContradictionsResult {
+  created: Conflict[];
+  considered: number;
+  skipped: { title: string; duplicateOf: string }[];
+  dropped: string[];
+  /** Contradictions whose cited source could not be resolved in this matter's record; never mapped to another document or witness. */
+  unresolved: { title: string; cite: string; reason: string }[];
+}
+
+/** Resolve a Bates cite to a document of this matter, or nothing. Never falls back to another document. */
+function resolveBatesInMatter(matterId: string, cite: string): EDocument | null {
+  const upper = cite.toUpperCase();
+  return db().edocs.findOne((x) => x.matterId === matterId && (upper.includes(x.bates.toUpperCase()) || (!!x.batesEnd && upper.includes(x.batesEnd.toUpperCase())))) ?? null;
+}
+
+/** Resolve a "Witness 24:05" cite to a transcribed deposition of this matter by the witness's last name, or nothing. */
+function resolveWitnessInMatter(matterId: string, cite: string): Deposition | null {
+  const last = cite.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z'-]/g, "");
+  if (!last) return null;
+  const hits = db().depositions.find((x) => x.matterId === matterId && x.transcript.length > 0 && x.witnessName.toLowerCase().split(/\s+/).pop() === last);
+  return hits.length === 1 ? hits[0] : hits.sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+}
 
 export async function findContradictions(matterId: string, opts: { depositionId: string; topic: string; indexes?: number[]; signal?: AbortSignal } & VerifyOpt): Promise<ContradictionsResult> {
   requireKey();
@@ -247,12 +268,17 @@ Compare the witness's testimony against the documents and other testimony. Repor
   const dropped = raw.contradictions.filter((c) => !checked.output.some((k) => k.title === c.title)).map((c) => c.title);
   const created: Conflict[] = [];
   const skipped: ContradictionsResult["skipped"] = [];
+  const unresolved: ContradictionsResult["unresolved"] = [];
   const known = matterBates(matterId);
   for (const c of checked.output) {
-    let sourceId = "";
-    if (c.sourceKind === "document") sourceId = d.edocs.findOne((x) => c.sourceCite.toUpperCase().includes(x.bates.toUpperCase()))?.id ?? docs[0]?.id ?? "";
-    else { const last = c.sourceCite.split(" ")[0].toLowerCase(); sourceId = d.depositions.findOne((x) => x.matterId === matterId && x.witnessName.toLowerCase().includes(last))?.id ?? dep.id; }
-    if (!sourceId) continue;
+    // Evidence contract: an unresolved Bates or witness is excluded, never mapped to "the first document" or "this deposition".
+    const sourceId = c.sourceKind === "document" ? resolveBatesInMatter(matterId, c.sourceCite)?.id ?? "" : resolveWitnessInMatter(matterId, c.sourceCite)?.id ?? "";
+    if (!sourceId) {
+      const reason = c.sourceKind === "document" ? "Bates number not in this matter's review set" : "witness not deposed in this matter";
+      unresolved.push({ title: c.title, cite: c.sourceCite, reason });
+      audit("ai.verify", { kind: "conflict", label: c.title, matterId }, { method: "citations", decision: "excluded", cite: c.sourceCite, reason });
+      continue;
+    }
     const sides: Conflict["sides"] = [
       { label: `${dep.witnessName} testimony`, sourceKind: "deposition", sourceId: dep.id, cite: c.testimonyCite, excerpt: c.testimonyExcerpt },
       { label: c.sourceKind === "document" ? (d.edocs.get(sourceId)?.subject ?? "Document") : `${d.depositions.get(sourceId)?.witnessName ?? "Witness"} testimony`, sourceKind: c.sourceKind, sourceId, cite: c.sourceCite, excerpt: c.sourceExcerpt },
@@ -270,7 +296,7 @@ Compare the witness's testimony against the documents and other testimony. Repor
     audit("create", { kind: "conflict", id: conflict.id, label: conflict.title, matterId }, { by: "ai", confidence: provenance.confidence, review: provenance.review?.status });
     created.push(conflict);
   }
-  return { created, considered: indexes.length + docs.length + cross.otherTestimony.length, skipped, dropped };
+  return { created, considered: indexes.length + docs.length + cross.otherTestimony.length, skipped, dropped, unresolved };
 }
 
 // ---------------------------------------------------------------------------
@@ -362,19 +388,29 @@ const EVENTS_SCHEMA = { type: "object", properties: { events: { type: "array", i
 
 interface RawEvent { date: string; precision: "day" | "month" | "year"; title: string; description: string; category: TimelineEvent["category"]; significance: number; bates: string; excerpt: string; people: string[]; confidence: number }
 
-export interface ExtractResult { added: TimelineEvent[]; merged: number; extracted: number; dropped: number; duplicates: { title: string; date: string; duplicateOf: string }[]; needsReview: number }
+export interface ExtractResult {
+  added: TimelineEvent[];
+  merged: number;
+  extracted: number;
+  dropped: number;
+  duplicates: { title: string; date: string; duplicateOf: string }[];
+  needsReview: number;
+  /** Events whose cited Bates number is not in this matter's review set; excluded rather than attached to another document. */
+  unresolved: { title: string; date: string; bates: string }[];
+}
 
 export async function extractTimelineEvents(matterId: string, opts: { docIds: string[]; signal?: AbortSignal; onProgress?: (done: number, total: number) => void } & VerifyOpt): Promise<ExtractResult> {
   requireKey();
   const d = db();
   const docs = opts.docIds.map((id) => d.edocs.get(id)).filter((x): x is EDocument => !!x && x.matterId === matterId);
   if (!docs.length) throw Object.assign(new Error("No documents to extract from"), { status: 400 });
-  const people = d.people.all();
+  const people = matterPeople(matterId);
   const instructions = `You are a litigation analyst at ${FIRM_NAME} building a chronology in ${matterLine(matterId)}
 ${todayLine()}
 Extract dated events from the documents: things that happened (a study delivered, a decision made, a letter sent, a result received, a meeting held), not the document itself. Use the document date for events the document itself records unless the text gives a different date. One event per distinct fact; skip trivial scheduling. Cite the Bates number of the document that supports each event.`;
   const all: TimelineEvent[] = [];
   const duplicates: ExtractResult["duplicates"] = [];
+  const unresolved: ExtractResult["unresolved"] = [];
   let extracted = 0, dropped = 0, needsReview = 0;
   const batchSize = 6;
   const known = matterBates(matterId);
@@ -390,7 +426,9 @@ Extract dated events from the documents: things that happened (a study delivered
     const existingEvents = [...d.timeline.find((e) => e.matterId === matterId), ...all];
     for (const e of checked.output) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) { dropped++; continue; }
-      const src = d.edocs.findOne((x) => x.matterId === matterId && x.bates.toUpperCase() === e.bates.toUpperCase()) ?? batch[0];
+      // Evidence contract: an event whose Bates does not resolve in this matter is excluded, never attached to another document.
+      const src = resolveBatesInMatter(matterId, e.bates);
+      if (!src) { dropped++; unresolved.push({ title: e.title, date: e.date, bates: e.bates }); audit("ai.verify", { kind: "timeline.event", label: e.title, matterId }, { method: "citations", decision: "excluded", bates: e.bates, reason: "Bates number not in this matter's review set" }); continue; }
       const cite = crossCheckCitations(e.bates, { bates: known });
       const sources: TimelineEvent["sources"] = [{ kind: "document", id: src.id, bates: src.bates, excerpt: e.excerpt }];
       // Cross-context: same date + near-identical title (or same Bates) already on the chronology → merge, do not twin.
@@ -416,7 +454,7 @@ Extract dated events from the documents: things that happened (a study delivered
     attachProvenance({ kind: "timeline.event", recordId: ev.id, matterId, title: `${ev.date} — ${ev.title}`, href: `${tabHref(matterId, "timeline")}&event=${ev.id}`, provenance: ev.provenance! });
     audit("create", { kind: "timeline.event", id: ev.id, label: ev.title, matterId }, { by: "ai", date: ev.date, bates: ev.sources[0]?.bates, confidence: ev.provenance?.confidence, review: ev.provenance?.review?.status });
   }
-  return { added: res.added, merged: res.merged + duplicates.length, extracted, dropped, duplicates, needsReview };
+  return { added: res.added, merged: res.merged + duplicates.length, extracted, dropped, duplicates, needsReview, unresolved };
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +494,7 @@ export async function knowledgeMap(matterId: string, opts: { topic: string; sign
   const docs = cross.documents.map((x) => d.edocs.get(x.id)).filter((x): x is EDocument => !!x);
   const testimony = [...cross.testimony, ...cross.otherTestimony].map((t) => `${t.cite} (${t.date})\n${t.text}`).join("\n\n");
   const events = listEvents(matterId, { q: opts.topic.split(/\s+/)[0] }).slice(0, 25);
-  const people = d.people.all();
+  const people = matterPeople(matterId);
   const instructions = `You are a litigation analyst at ${FIRM_NAME} in ${matterLine(matterId)}
 ${todayLine()}
 Produce a "who knew what, when" map for the topic. For each person with evidence, state precisely what they knew, the earliest date the record shows it, and the cites. Distinguish direct knowledge (author or recipient) from inference. Do not invent people or dates.`;

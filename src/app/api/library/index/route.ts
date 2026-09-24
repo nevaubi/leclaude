@@ -2,16 +2,18 @@ import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { aiConfig, AIConfigError } from "@/lib/ai/config";
 import { indexStatus, rebuildIndex } from "@/modules/library/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-export async function GET() {
+async function handleGET() {
   return Response.json({ status: indexStatus(), aiConfigured: aiConfig().hasKey });
 }
 
 /** Rebuild the library (and office) search index; embeds when an OpenAI key is configured, keyword-only otherwise. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { embed?: boolean; includeOffice?: boolean };
   try {
     const r = await rebuildIndex({ embed: body.embed, includeOffice: body.includeOffice });
@@ -21,3 +23,6 @@ export async function POST(req: NextRequest) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.library() });
+export const POST = withAuth(handlePOST, { action: "admin", resource: () => refs.library() });

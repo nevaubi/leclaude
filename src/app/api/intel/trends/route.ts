@@ -5,6 +5,8 @@ import { buildTrends, trendOptions } from "@/modules/intel/analysis/trends";
 import { TREND_GROUP_LABEL, type TrendGroupBy, type TrendQuery } from "@/modules/intel/analysis/types";
 import type { MotionType } from "@/modules/intel/analysis/pure";
 import type { IntelDocumentKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -12,7 +14,7 @@ export const runtime = "nodejs";
  * GET ?groupBy=court&kinds=opinion,docket_entry&jurisdiction=&court=&judgeId=&entityId=&matterId=&motion=&from=YYYY-MM&to=YYYY-MM&top=8&compare=a,b
  * → TrendResult. `?options=1` returns the filter options (courts, jurisdictions, judges, kinds, matters, states).
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -35,3 +37,5 @@ export async function GET(req: NextRequest) {
   };
   return Response.json(buildTrends(q));
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });

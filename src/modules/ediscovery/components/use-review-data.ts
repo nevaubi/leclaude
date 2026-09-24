@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import type { EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain";
-import type { AIAnalysis, DocRow, MatterStats, SavedViewCounts, SearchRequest, SearchResponse, SimilarDoc, PrivilegeLogRow, ProductionSummary, ReviewBatchSummary, SavedSearchRecord, ReviewLayout, Redaction, ProductionSummary2, DocHistoryEntry, DisagreementReport } from "../types";
+import type { AIAnalysis, BulkCodingRequest, BulkPreview, DocRow, MatterStats, SavedViewCounts, SearchRequest, SearchResponse, SimilarDoc, PrivilegeLogRow, ProductionSummary, ReviewBatchSummary, SavedSearchRecord, ReviewLayout, Redaction, ProductionSummary2, DocHistoryEntry, DisagreementReport, SearchTermReport } from "../types";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string) { super(message); this.name = "ApiError"; }
@@ -187,6 +187,23 @@ export function useProductions(matterId: string) {
 
 export function useDocHistory(docId: string | null, enabled: boolean) {
   return useFetch<{ history: DocHistoryEntry[]; batches: { id: string; name: string; qc: boolean }[]; redactions: Redaction[] }>(docId && enabled ? `history:${docId}` : null, () => api(`/api/ediscovery/docs/${encodeURIComponent(docId!)}/history`));
+}
+
+export interface ProductionRow { docId: string; bates: string; begin: string; end: string; pages: number; subject: string; custodianName: string; type: string; date: string; redactions: number; privileged: boolean; responsive: boolean | null; confidentiality?: string }
+
+export function useProductionDetail(id: string | null) {
+  return useFetch<{ production: ProductionSummary2; rows: ProductionRow[] }>(id ? `production:${id}` : null, () => api(`/api/ediscovery/productions/${encodeURIComponent(id!)}`));
+}
+
+export function useTermReports(matterId: string) {
+  return useFetch<{ reports: (SearchTermReport & { id: string })[] }>(`termreports:${matterId}`, () => api(`/api/ediscovery/search-terms?matter=${encodeURIComponent(matterId)}`));
+}
+
+/** Bulk coding: `dryRun` returns the confirmation preview, otherwise the change is applied. */
+export async function bulkCodeRequest(body: BulkCodingRequest & { dryRun: true }): Promise<{ preview: BulkPreview }>;
+export async function bulkCodeRequest(body: BulkCodingRequest): Promise<{ updated: number }>;
+export async function bulkCodeRequest(body: BulkCodingRequest): Promise<unknown> {
+  return api("/api/ediscovery/docs/bulk", { method: "POST", json: body });
 }
 
 /** Browser download of a fetched file (blob URL). */

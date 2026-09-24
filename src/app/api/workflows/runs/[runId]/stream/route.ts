@@ -3,6 +3,8 @@ import { bootstrap } from "@/modules/workflows/api-utils";
 import { subscribeRunEvents } from "@/modules/workflows/events";
 import { getRun } from "@/modules/workflows/service";
 import type { RunEvent } from "@/modules/workflows/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -13,7 +15,7 @@ const RESTING = new Set(["succeeded", "failed", "cancelled", "waiting_approval"]
  * live step/run events until the run reaches a resting state (finished or
  * waiting for approval). Reconnect after approving to follow the remainder.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ runId: string }> }) {
+async function handleGET(_req: Request, { params }: { params: Promise<{ runId: string }> }) {
   bootstrap();
   const { runId } = await params;
   const run = getRun(runId);
@@ -46,3 +48,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
     });
   });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { runId }) => refs.workflowRun(runId) });

@@ -4,13 +4,14 @@ import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { deleteWatch, updateWatch } from "@/modules/intel/analysis/watches";
 import { intelWatches } from "@/modules/intel/store";
 import type { IntelWatch } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /** GET → { watch } */
-export async function GET(_req: NextRequest, { params }: Ctx) {
+async function handleGET(_req: NextRequest, { params }: Ctx) {
   intelAnalysisBootstrap();
   const { id } = await params;
   const watch = intelWatches().get(id);
@@ -18,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 /** PATCH { label?, channels?, matterId? } → { watch } */
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+async function handlePATCH(req: NextRequest, { params }: Ctx) {
   intelAnalysisBootstrap();
   const { id } = await params;
   if (!intelWatches().has(id)) return jsonError("Watch not found", 404);
@@ -27,9 +28,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 }
 
 /** DELETE → { deleted } */
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
+async function handleDELETE(_req: NextRequest, { params }: Ctx) {
   intelAnalysisBootstrap();
   const { id } = await params;
   if (!intelWatches().has(id)) return jsonError("Watch not found", 404);
   return Response.json({ deleted: deleteWatch(id) });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const PATCH = withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => ({ kind: "intel", id }) });

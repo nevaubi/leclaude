@@ -5,13 +5,15 @@ import { aiConfig } from "@/lib/ai/config";
 import { hybridSearch } from "@/lib/ai/vector-store";
 import { VECTOR_COLLECTIONS } from "@/lib/ai/toolkit/internal";
 import type { Conflict, Deposition, DepositionQA, EDocument, Person, Relationship, TimelineEvent } from "@/lib/types/domain";
-import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, CrossExcerpt, Designation, DepositionSummary, FactMatrix, GraphData, KnowledgeMap, ObjectionRuling, ObjectionRulingRecord, PersonDetail, QAFlag, TimelineEventInput, TimelineFilters, TranscriptHit } from "./types";
+import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse, CrossExcerpt, Designation, DepositionSummary, FactMatrix, GraphData, GraphEvidence, GraphOrg, KnowledgeMap, ObjectionRuling, ObjectionRulingRecord, PersonDetail, QAFlag, TimelineEventInput, TimelineFilters, TranscriptHit } from "./types";
 import { formatPageLine } from "./types";
 import { normalizeRange, searchTranscripts, summarizeObjections } from "./transcript";
 import { dedupeEvents, filterEvents, sortEvents } from "./chronology";
 import { buildGraph, resolvePersonName } from "./graph";
+import { CURRENT_USER, currentUser } from "@/lib/current-user";
 
-export const CURRENT_USER_ID = "p_jwhitfield";
+/** Kept for existing importers; prefer `currentUser().id` at call time (honours LECLAUDE_USER_ID). */
+export const CURRENT_USER_ID = CURRENT_USER.id;
 const DESIGNATIONS = "ediscovery_designations";
 const CONFLICT_NOTES = "ediscovery_conflict_notes";
 const FACT_MATRICES = "ediscovery_fact_matrices";
@@ -120,8 +122,8 @@ export function setObjectionRuling(depositionId: string, index: number, ruling: 
   if (!qa) throw Object.assign(new Error(`Q/A index ${index} out of range`), { status: 400 });
   if (!qa.objection) throw Object.assign(new Error(`No objection on the record at ${formatPageLine(qa.page, qa.line)}`), { status: 400 });
   const id = `${depositionId}:${index}`;
-  if (ruling === "pending" && !opts.note) { rulings().delete(id); return { id, matterId: dep.matterId, depositionId, index, ruling, updatedAt: now(), updatedBy: opts.userId ?? CURRENT_USER_ID }; }
-  const rec: ObjectionRulingRecord = { id, matterId: dep.matterId, depositionId, index, ruling, note: opts.note?.trim() || undefined, updatedAt: now(), updatedBy: opts.userId ?? CURRENT_USER_ID };
+  if (ruling === "pending" && !opts.note) { rulings().delete(id); return { id, matterId: dep.matterId, depositionId, index, ruling, updatedAt: now(), updatedBy: opts.userId ?? currentUser().id }; }
+  const rec: ObjectionRulingRecord = { id, matterId: dep.matterId, depositionId, index, ruling, note: opts.note?.trim() || undefined, updatedAt: now(), updatedBy: opts.userId ?? currentUser().id };
   rulings().put(rec);
   return rec;
 }
@@ -143,7 +145,7 @@ export function listDesignations(depositionId: string): Designation[] {
 
 export function createDesignation(input: Omit<Designation, "id" | "createdAt" | "createdBy"> & { id?: string }): Designation {
   const r = normalizeRange(input);
-  const d: Designation = { ...input, ...r, id: input.id ?? `dsg_${nanoid(10)}`, createdAt: now(), createdBy: CURRENT_USER_ID };
+  const d: Designation = { ...input, ...r, id: input.id ?? `dsg_${nanoid(10)}`, createdAt: now(), createdBy: currentUser().id };
   designations().put(d);
   return d;
 }
@@ -258,7 +260,7 @@ export function mergeEvents(matterId: string, incoming: TimelineEvent[]) {
 /** Deterministic extraction from document metadata (no AI): one event per document. */
 export function eventsFromDocuments(matterId: string, docIds: string[]): TimelineEvent[] {
   const d = db();
-  const people = d.people.all();
+  const people = matterPeople(matterId);
   const out: TimelineEvent[] = [];
   for (const id of docIds) {
     const doc = d.edocs.get(id);
@@ -274,7 +276,8 @@ export function eventsFromDocuments(matterId: string, docIds: string[]): Timelin
 // People & graph
 // ---------------------------------------------------------------------------
 
-function matterPeople(matterId: string): Person[] {
+/** People who appear in this matter (relationships, depositions, custodians, team, email headers). Name resolution is scoped to this set so two matters never bind to each other's people. */
+export function matterPeople(matterId: string): Person[] {
   const d = db();
   const rels = d.relationships.find((r) => r.matterId === matterId);
   const ids = new Set<string>();
@@ -294,17 +297,61 @@ export function graph(matterId: string): GraphData {
   const d = db();
   const people = matterPeople(matterId);
   const rels = d.relationships.find((r) => r.matterId === matterId);
-  const docs = d.edocs.find((x) => x.matterId === matterId).map((x) => ({ id: x.id, from: x.from, to: x.to, cc: x.cc, custodianId: x.custodianId }));
+  const edocs = d.edocs.find((x) => x.matterId === matterId);
+  const docs = edocs.map((x) => ({ id: x.id, from: x.from, to: x.to, cc: x.cc, custodianId: x.custodianId }));
+  const deps = d.depositions.find((x) => x.matterId === matterId);
   const depCounts = new Map<string, number>();
-  for (const dep of d.depositions.find((x) => x.matterId === matterId)) depCounts.set(dep.witnessId, (depCounts.get(dep.witnessId) ?? 0) + 1);
-  return buildGraph(people, rels, docs, depCounts);
+  for (const dep of deps) depCounts.set(dep.witnessId, (depCounts.get(dep.witnessId) ?? 0) + 1);
+  const g = buildGraph(people, rels, docs, depCounts);
+  // Testimony counts: own Q/A pairs plus Q/A pairs in other transcripts that name the person.
+  const qaText = deps.filter((x) => x.transcript.length).map((x) => ({ dep: x, rows: x.transcript.map((qa) => `${qa.question} ${qa.answer}`.toLowerCase()) }));
+  for (const n of g.nodes) {
+    const last = n.label.split(/\s+/).pop()!.toLowerCase();
+    const first = n.label.split(/\s+/)[0];
+    let count = 0;
+    for (const { dep, rows } of qaText) {
+      if (dep.witnessId === n.id) { count += rows.length; continue; }
+      if (last.length < 3) continue;
+      for (const r of rows) if (r.includes(last) || (first.length > 2 && r.includes(first.toLowerCase()))) count++;
+    }
+    n.testimony = count;
+  }
+  // Evidence dates: Bates → document date; "Witness 24:05" excerpts → the deposition (matter-scoped; unresolved stays undated).
+  const byBates = new Map(edocs.flatMap((x) => [[x.bates.toUpperCase(), x] as const, ...(x.batesEnd ? [[x.batesEnd.toUpperCase(), x] as const] : [])]));
+  const byId = new Map(edocs.map((x) => [x.id, x]));
+  const depByLast = new Map<string, Deposition[]>();
+  for (const dep of deps) { const k = dep.witnessName.split(/\s+/).pop()!.toLowerCase(); depByLast.set(k, [...(depByLast.get(k) ?? []), dep]); }
+  for (const e of g.edges) {
+    e.evidence = e.evidence.map((ev): GraphEvidence => {
+      const doc = (ev.docId ? byId.get(ev.docId) : undefined) ?? (ev.bates ? byBates.get(ev.bates.toUpperCase()) : undefined);
+      if (doc) return { ...ev, docId: doc.id, bates: ev.bates ?? doc.bates, kind: "document", date: doc.date };
+      const m = ev.excerpt?.match(/^([A-Z][A-Za-z'-]+)(?:\s+Vol\.\s*[IVX\d]+,?)?\s*(\d{1,4}):(\d{1,2})/);
+      const last = (m?.[1] ?? ev.excerpt?.match(/^([A-Z][A-Za-z'-]+)\s+Vol\./)?.[1])?.toLowerCase();
+      const cands = last ? (depByLast.get(last) ?? []) : [];
+      const dep = cands.length === 1 ? cands[0] : cands.find((x) => x.transcript.length > 0) ?? cands[0];
+      if (!dep) return ev;
+      return { ...ev, kind: "deposition", depositionId: dep.id, date: dep.date, cite: m ? `${dep.witnessName.split(/\s+/).pop()} ${formatPageLine(Number(m[2]), Number(m[3]))}` : undefined };
+    });
+    const dates = e.evidence.map((ev) => ev.date).filter((x): x is string => !!x).sort();
+    if (dates.length) { e.firstDate = dates[0]; e.lastDate = dates[dates.length - 1]; }
+  }
+  // Organizations: people grouped by Person.organization (no invented edges; the UI focuses the graph on a member set).
+  const orgs = new Map<string, GraphOrg>();
+  for (const n of g.nodes) {
+    const key = n.organization ?? "Unaffiliated";
+    const o = orgs.get(key) ?? { id: `org:${key}`, label: key, memberIds: [], docCount: 0, testimony: 0 };
+    o.memberIds.push(n.id); o.docCount += n.docCount; o.testimony += n.testimony ?? 0;
+    orgs.set(key, o);
+  }
+  g.orgs = Array.from(orgs.values()).sort((a, b) => b.memberIds.length - a.memberIds.length || a.label.localeCompare(b.label));
+  return g;
 }
 
 export function personDetail(matterId: string, personId: string): PersonDetail | null {
   const d = db();
   const person = d.people.get(personId);
   if (!person) return null;
-  const people = d.people.all();
+  const people = matterPeople(matterId);
   const docs = d.edocs.find((x) => x.matterId === matterId);
   const lite = (x: EDocument) => ({ id: x.id, bates: x.bates, date: x.date, subject: x.subject, type: x.type });
   const authored = docs.filter((x) => (x.from ? resolvePersonName(x.from, people)?.id === personId : x.custodianId === personId)).sort((a, b) => a.date.localeCompare(b.date));
@@ -388,7 +435,7 @@ export function deleteConflict(id: string) {
   return db().conflicts.delete(id);
 }
 
-export function addConflictNote(conflictId: string, body: string, authorId = CURRENT_USER_ID): ConflictNote {
+export function addConflictNote(conflictId: string, body: string, authorId = currentUser().id): ConflictNote {
   if (!db().conflicts.get(conflictId)) throw Object.assign(new Error("Unknown conflict"), { status: 404 });
   const n: ConflictNote = { id: `cfn_${nanoid(10)}`, conflictId, body: body.trim(), authorId, authorName: db().people.get(authorId)?.name ?? authorId, createdAt: now() };
   conflictNotes().put(n);

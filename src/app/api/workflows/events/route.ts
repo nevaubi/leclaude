@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { errorResponse, parseBody } from "@/modules/workflows/api-utils";
 import { dispatchInboundEvent } from "@/modules/workflows/inbound";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -15,7 +17,7 @@ const eventSchema = z.object({
  * Other modules (library uploads, docket alerts, an inbound mail hook) post here;
  * every active workflow whose trigger matches starts a run with the payload.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const body = await parseBody(req, eventSchema);
   if (!body.ok) return body.res;
   try {
@@ -23,3 +25,5 @@ export async function POST(req: Request) {
     return Response.json({ started }, { status: started.length ? 202 : 200 });
   } catch (e) { return errorResponse(e); }
 }
+
+export const POST = withAuth(handlePOST, { action: "run", resource: async (req) => ({ kind: "workflow", matterId: await bodyMatterId(req) }) });

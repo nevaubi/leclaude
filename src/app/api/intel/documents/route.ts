@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { listDocuments, type ListDocumentsOptions } from "@/modules/intel/store";
 import type { IntelDocumentKind, IntelFlagKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -10,7 +12,7 @@ export const runtime = "nodejs";
  *     &dateFrom=&dateTo=&entityId=&seeded=0&minConfidence=&sort=date&direction=desc&limit=50&offset=0
  * → { items (rows without text), total, limit, offset }.
  */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -38,3 +40,5 @@ export async function GET(req: NextRequest) {
   };
   return Response.json(listDocuments(opts));
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });

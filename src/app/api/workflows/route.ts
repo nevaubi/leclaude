@@ -3,11 +3,13 @@ import { jsonError } from "@/lib/ai/sse";
 import { boolParam, bootstrap, errorResponse, param, parseBody } from "@/modules/workflows/api-utils";
 import { workflowUpsertSchema } from "@/modules/workflows/schema";
 import { cloneWorkflow, createWorkflow, listWorkflows } from "@/modules/workflows/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET /api/workflows?template=1|0&system=1|0&mine=1&category=&q=&status=&tag= */
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   bootstrap();
   const url = new URL(req.url);
   const workflows = listWorkflows({ template: boolParam(url, "template"), system: boolParam(url, "system"), mine: boolParam(url, "mine"), category: param(url, "category"), q: param(url, "q"), status: param(url, "status"), tag: param(url, "tag"), limit: Number(param(url, "limit") ?? 500) });
@@ -20,7 +22,7 @@ const createSchema = z.union([
 ]);
 
 /** POST /api/workflows — create from a body, or clone a template with { fromTemplateId }. */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   bootstrap();
   const body = await parseBody(req, createSchema);
   if (!body.ok) return body.res;
@@ -34,3 +36,6 @@ export async function POST(req: Request) {
     return Response.json({ workflow, issues }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.workflow() });
+export const POST = withAuth(handlePOST, { action: "write", resource: () => refs.workflow() });

@@ -1,10 +1,12 @@
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { askAboutSource, type AskSourceBody } from "@/modules/search/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** POST /api/search/ask — "Ask about this source" mini chat (useAgent-compatible body + {source, text}). */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: AskSourceBody;
   try { body = (await req.json()) as AskSourceBody; } catch { return jsonError("Invalid JSON body"); }
   if (!body?.message?.trim()) return jsonError("`message` is required");
@@ -13,3 +15,5 @@ export async function POST(req: Request) {
     await askAboutSource(body, send, signal);
   });
 }
+
+export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.research() });

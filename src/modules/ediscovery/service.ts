@@ -15,6 +15,7 @@ import { updateProvenance } from "@/lib/integrity/store";
 import {
   SCORE_BUCKETS,
   type BulkCodingRequest,
+  type BulkPreview,
   type CodingPatch,
   type CodingStatus,
   type DocRow,
@@ -229,10 +230,11 @@ function facetMatch(d: EDocument, key: FacetKey, values: string[]): boolean {
     case "issues": return values.some((v) => (d.coding.issues ?? []).includes(v));
     case "scores": return values.includes(scoreBucket(d));
     case "years": return values.includes(d.date.slice(0, 4));
+    case "months": return values.includes(d.date.slice(0, 7));
   }
 }
 
-const FACET_KEYS: FacetKey[] = ["custodians", "types", "statuses", "issues", "scores", "years"];
+const FACET_KEYS: FacetKey[] = ["custodians", "types", "statuses", "issues", "scores", "years", "months"];
 
 export function applyFilters(docs: EDocument[], filters: SearchFilters | undefined, except?: FacetKey): EDocument[] {
   if (!filters) return docs;
@@ -253,7 +255,7 @@ export function computeFacets(base: EDocument[], filters: SearchFilters | undefi
   const i = count(applyFilters(base, filters, "issues"), (d) => d.coding.issues ?? []);
   const sc = count(applyFilters(base, filters, "scores"), (d) => [scoreBucket(d)]);
   const y = count(applyFilters(base, filters, "years"), (d) => [d.date.slice(0, 4)]);
-  const mo = count(applyFilters(base, filters, "years"), (d) => [d.date.slice(0, 7)]);
+  const mo = count(applyFilters(base, filters, "months"), (d) => [d.date.slice(0, 7)]);
   const codes = new Map(db().issueCodes.find((x) => x.matterId === matterId).map((x) => [x.code, x]));
   const statusLabel: Record<CodingStatus, string> = { responsive: "Responsive", non_responsive: "Non-responsive", needs_review: "Needs review", privileged: "Privileged", hot: "Hot" };
   const sortDesc = (a: { count: number; label: string }, b: { count: number; label: string }) => b.count - a.count || a.label.localeCompare(b.label);
@@ -520,9 +522,65 @@ export function updateCoding(id: string, patch: CodingPatch, reviewerId: string 
   return next;
 }
 
+/** Parents and attachments of the given documents (same matter), so a family can be coded together. */
+export function expandFamilies(ids: string[]): { ids: string[]; added: number } {
+  const set = new Set(ids);
+  const before = set.size;
+  for (const id of ids) {
+    const d = db().edocs.get(id);
+    if (!d) continue;
+    const root = d.family?.parentId ? db().edocs.get(d.family.parentId) : d;
+    if (root && root.matterId === d.matterId) {
+      set.add(root.id);
+      for (const a of root.family?.attachmentIds ?? []) { const att = db().edocs.get(a); if (att && att.matterId === d.matterId) set.add(a); }
+    }
+  }
+  return { ids: Array.from(set), added: set.size - before };
+}
+
+const FIELD_LABELS: Record<string, string> = { responsive: "Responsive", privileged: "Privileged", privilegeBasis: "Privilege basis", hot: "Hot", confidentiality: "Confidentiality", notes: "Notes", reviewerId: "Reviewer" };
+
+function fmtCodingValue(v: unknown): string {
+  if (v == null) return "cleared";
+  if (typeof v === "boolean") return v ? "yes" : "no";
+  return String(v);
+}
+
+/** The effect of a bulk coding request without applying it: per-field change counts, families pulled in and overwrites. */
+export function bulkPreview(req: BulkCodingRequest): BulkPreview {
+  const base = Array.from(new Set(req.ids));
+  const expanded = req.includeFamilies ? expandFamilies(base) : { ids: base, added: 0 };
+  const docs = expanded.ids.map((id) => db().edocs.get(id)).filter((d): d is EDocument => !!d);
+  const fields: BulkPreview["fields"] = [];
+  const touched = new Set<string>();
+  for (const [field, value] of Object.entries(req.patch ?? {})) {
+    if (value === undefined) continue;
+    const changed = docs.filter((d) => JSON.stringify((d.coding as Record<string, unknown>)[field] ?? null) !== JSON.stringify(value ?? null));
+    changed.forEach((d) => touched.add(d.id));
+    fields.push({ field, label: FIELD_LABELS[field] ?? field, to: fmtCodingValue(value), changed: changed.length });
+  }
+  if (req.addIssues?.length) {
+    const changed = docs.filter((d) => req.addIssues!.some((i) => !(d.coding.issues ?? []).includes(i)));
+    changed.forEach((d) => touched.add(d.id));
+    fields.push({ field: "issues", label: "Add issue codes", to: req.addIssues.join(", "), changed: changed.length });
+  }
+  if (req.removeIssues?.length) {
+    const changed = docs.filter((d) => req.removeIssues!.some((i) => (d.coding.issues ?? []).includes(i)));
+    changed.forEach((d) => touched.add(d.id));
+    fields.push({ field: "issues", label: "Remove issue codes", to: req.removeIssues.join(", "), changed: changed.length });
+  }
+  if (req.reviewerId) {
+    const changed = docs.filter((d) => d.coding.reviewerId !== req.reviewerId);
+    changed.forEach((d) => touched.add(d.id));
+    fields.push({ field: "reviewerId", label: "Reviewer", to: db().people.get(req.reviewerId)?.name ?? req.reviewerId, changed: changed.length });
+  }
+  const overwrites = req.patch?.responsive === undefined ? 0 : docs.filter((d) => d.coding.responsive != null && d.coding.responsive !== req.patch.responsive).length;
+  return { ids: docs.map((d) => d.id), total: docs.length, addedFamily: expanded.added, unchanged: docs.length - touched.size, fields, overwrites };
+}
+
 export function bulkCode(req: BulkCodingRequest): { updated: number } {
   let updated = 0;
-  const ids = Array.from(new Set(req.ids));
+  const ids = req.includeFamilies ? expandFamilies(Array.from(new Set(req.ids))).ids : Array.from(new Set(req.ids));
   const docs = ids.map((id) => db().edocs.get(id)).filter(Boolean) as EDocument[];
   const now = new Date().toISOString();
   const reviewerId = req.reviewerId ?? CURRENT_USER_ID;

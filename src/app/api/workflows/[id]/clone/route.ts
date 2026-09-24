@@ -2,6 +2,8 @@ import { z } from "zod";
 import { jsonError } from "@/lib/ai/sse";
 import { bootstrap, parseBody } from "@/modules/workflows/api-utils";
 import { cloneWorkflow, workflowForTemplate } from "@/modules/workflows/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -10,7 +12,7 @@ export const runtime = "nodejs";
  * `reuse: true` (the gallery's Start action) returns the caller's existing, non-archived copy of a
  * template when there is one and otherwise creates an active copy; the response says which.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   bootstrap();
   const { id } = await params;
   const body = await parseBody(req, z.object({ name: z.string().max(140).optional(), status: z.enum(["draft", "active"]).optional(), reuse: z.boolean().optional() }).default({}));
@@ -24,3 +26,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!workflow) return jsonError("Workflow not found", 404);
   return Response.json({ workflow }, { status: 201 });
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: (_req, { id }) => refs.workflow(id) });

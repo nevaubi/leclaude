@@ -1,24 +1,34 @@
 import "server-only";
-import { getOpenAI } from "./openai";
-import { aiConfig } from "./config";
+import { AIConfigError } from "./config";
+import { getRegistry } from "./providers/registry";
+import { InferenceError, type EmbedOptions } from "./providers/types";
+import { routeModel } from "./router";
 
-const BATCH = 96;
-
-export async function embedTexts(texts: string[], opts: { model?: string; signal?: AbortSignal } = {}): Promise<Float32Array[]> {
-  if (!texts.length) return [];
-  const client = getOpenAI();
-  const model = opts.model ?? aiConfig().embeddingModel;
-  const out: Float32Array[] = [];
-  for (let i = 0; i < texts.length; i += BATCH) {
-    const slice = texts.slice(i, i + BATCH).map((t) => t.slice(0, 24_000));
-    const res = await client.embeddings.create({ model, input: slice, encoding_format: "float" }, { signal: opts.signal });
-    for (const d of res.data) out.push(Float32Array.from(d.embedding));
-  }
-  return out;
+export interface EmbedTextsOptions {
+  model?: string;
+  signal?: AbortSignal;
+  /** Asymmetric embedding models (Cohere) distinguish indexed documents from search queries. */
+  inputType?: EmbedOptions["inputType"];
 }
 
-export async function embedText(text: string, opts: { model?: string; signal?: AbortSignal } = {}) {
-  return (await embedTexts([text], opts))[0];
+/** Embed texts with the configured embedding provider (OpenAI or Bedrock Titan/Cohere). Batched by the provider. */
+export async function embedTexts(texts: string[], opts: EmbedTextsOptions = {}): Promise<Float32Array[]> {
+  if (!texts.length) return [];
+  const reg = getRegistry();
+  let decision;
+  try {
+    decision = routeModel({ taskType: "embed", role: "embedding", privacy: "internal", explicitModel: opts.model }, { available: reg.models, preferred: reg.preferred, allowExternalForMatterData: reg.allowExternalForMatterData });
+  } catch (e) {
+    if (e instanceof InferenceError && (e.code === "not_configured" || e.code === "capability_unavailable")) throw new AIConfigError(`Embeddings are not configured (${e.message})`);
+    throw e;
+  }
+  const provider = reg.providers.get(decision.provider);
+  if (!provider?.embed) throw new AIConfigError(`Provider ${decision.provider} cannot embed text.`);
+  return provider.embed(texts, { model: decision.model, signal: opts.signal, inputType: opts.inputType ?? "document" });
+}
+
+export async function embedText(text: string, opts: EmbedTextsOptions = {}) {
+  return (await embedTexts([text], { inputType: "query", ...opts }))[0];
 }
 
 export function cosine(a: Float32Array, b: Float32Array): number {

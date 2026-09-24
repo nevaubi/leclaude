@@ -3,11 +3,13 @@ import { loopState } from "@/modules/intel/background";
 import { intelHealth } from "@/modules/intel/health";
 import { lastSweepReport } from "@/modules/intel/steward";
 import { intelStats } from "@/modules/intel/store";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET → { health: IntelHealth, sweep, loop, stats } */
-export async function GET() {
+async function handleGET() {
   intelBootstrap();
   const loop = loopState();
   return Response.json({
@@ -18,3 +20,5 @@ export async function GET() {
     time: new Date().toISOString(),
   });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });

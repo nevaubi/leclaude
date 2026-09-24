@@ -4,11 +4,13 @@ import { db } from "@/lib/db";
 import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { buildChronology, exportChronologyToTimeline } from "@/modules/intel/analysis/chronology";
 import type { IntelDocumentKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId, queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET ?matterId=|mdlId=|productId=|entityId=&from=&to=&kinds=&ediscovery=0&limit= → ChronologyResult. */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -25,7 +27,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST { matterId, minConfidence? } → export gate-passing entries to the e-discovery timeline (createdBy "ai", with provenance). */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelAnalysisBootstrap();
   const body = (await req.json().catch(() => ({}))) as { matterId?: string; minConfidence?: number };
   if (!body.matterId) return jsonError("matterId is required", 422);
@@ -33,3 +35,6 @@ export async function POST(req: NextRequest) {
   const minConfidence = typeof body.minConfidence === "number" ? Math.max(0, Math.min(1, body.minConfidence)) : undefined;
   return Response.json(exportChronologyToTimeline(body.matterId, { minConfidence }));
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
+export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "timeline", matterId: await bodyMatterId(req) }) });

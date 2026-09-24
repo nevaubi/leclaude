@@ -54,6 +54,15 @@ const sanitize = (s: string) => s.replace(/[^\x20-\x7E\n]/g, (c) => (c === "\t" 
  * rectangles drawn as black boxes with their label.
  */
 export async function renderProductionPdf(doc: EDocument, bates: { begin: string; pages: number }, redactions: Redaction[], stampText: string): Promise<Uint8Array> {
+  return (await renderProductionPdfWithMap(doc, bates, redactions, stampText)).bytes;
+}
+
+/**
+ * Same render, plus the logical page each PDF sheet belongs to (a long logical
+ * page continues on extra sheets), which the viewer's Image tab uses to attach
+ * page redactions to the sheet they will be burned on.
+ */
+export async function renderProductionPdfWithMap(doc: EDocument, bates: { begin: string; pages: number }, redactions: Redaction[], stampText: string): Promise<{ bytes: Uint8Array; pageMap: number[] }> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(bates.begin);
   pdf.setSubject(doc.subject);
@@ -64,6 +73,7 @@ export async function renderProductionPdf(doc: EDocument, bates: { begin: string
   const logical = splitPages(text, bates.pages);
   const start = parseBates(bates.begin);
   const width = PAGE_W - MARGIN * 2;
+  const pageMap: number[] = [];
   for (let p = 0; p < Math.max(1, logical.length); p++) {
     const pageBates = start ? formatBates(start.prefix, start.number + Math.min(p, bates.pages - 1), start.width) : bates.begin;
     const lines = sanitize(logical[p] ?? "").split("\n").flatMap((l) => wrap(l, mono, FONT_SIZE, width));
@@ -71,6 +81,7 @@ export async function renderProductionPdf(doc: EDocument, bates: { begin: string
     const chunks: string[][] = [];
     for (let i = 0; i < Math.max(1, lines.length); i += perPage) chunks.push(lines.slice(i, i + perPage));
     chunks.forEach((chunk, ci) => {
+      pageMap.push(p + 1);
       const page = pdf.addPage([PAGE_W, PAGE_H]);
       let y = PAGE_H - MARGIN;
       for (const line of chunk) { page.drawText(line, { x: MARGIN, y: y - FONT_SIZE, size: FONT_SIZE, font: mono, color: rgb(0.1, 0.1, 0.1) }); y -= LEADING; }
@@ -90,7 +101,7 @@ export async function renderProductionPdf(doc: EDocument, bates: { begin: string
       if (stampText) page.drawText(sanitize(stampText), { x: MARGIN, y: MARGIN / 2, size: 7, font: bold, color: rgb(0.25, 0.25, 0.25) });
     });
   }
-  return pdf.save();
+  return { bytes: await pdf.save(), pageMap };
 }
 
 export function productionLoadFiles(id: string): { dat: string; opt: string; production: ProductionSet } {

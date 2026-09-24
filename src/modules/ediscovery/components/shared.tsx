@@ -4,9 +4,11 @@ import Link from "next/link";
 import { Mail, FileText, FileBarChart2, Presentation, Table2, FileSignature, ScrollText, MessageSquare, StickyNote, Image as ImageIcon, FileAudio2, File, KeyRound, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Tip } from "@/components/ui/tooltip";
 import type { CodingDecision, DocType, IssueCode } from "@/lib/types/domain";
 import { TrustBadge } from "@/components/ai/trust-badge";
 import { provenanceOf } from "./provenance-of";
+import { suggestionCall } from "./review-helpers";
 
 export const TYPE_ICONS: Record<DocType, LucideIcon> = {
   Email: Mail, Memo: FileText, Report: FileBarChart2, Presentation: Presentation, Spreadsheet: Table2, Letter: FileSignature, Contract: ScrollText, Chat: MessageSquare, Note: StickyNote, Image: ImageIcon, Transcript: FileAudio2, Other: File,
@@ -55,19 +57,34 @@ export function decisionSummary(coding: CodingDecision): string {
   return parts.join(" · ");
 }
 
+const SLOT = "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[3px] px-1 text-[10.5px] font-semibold leading-none tabular";
+
 /**
  * Compact decision cell for grid rows: three fixed slots — R / NR / ? (responsiveness),
  * P (privileged), H (hot). Muted letters, tone only for the decision states so the
- * column reads at a glance without badge stacking.
+ * column reads at a glance without badge stacking. With `onChange` each slot is a
+ * button: responsiveness cycles ? → R → NR → ?, privileged and hot toggle (inline coding).
  */
-export function DecisionCell({ coding, className }: { coding: CodingDecision; className?: string }) {
-  const slot = "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[3px] px-1 text-[10.5px] font-semibold leading-none tabular";
+export function DecisionCell({ coding, className, onChange }: { coding: CodingDecision; className?: string; onChange?: (patch: Partial<CodingDecision>) => void }) {
   const resp = coding.responsive === true ? { t: "R", cls: "bg-success/12 text-success", label: "Responsive" } : coding.responsive === false ? { t: "NR", cls: "bg-muted text-muted-foreground", label: "Non-responsive" } : { t: "?", cls: "bg-warning/18 text-warning-foreground dark:text-warning", label: "Needs review" };
+  const cycle = () => onChange?.({ responsive: coding.responsive == null ? true : coding.responsive ? false : null });
+  const priv = () => onChange?.(coding.privileged ? { privileged: false, privilegeBasis: undefined } : { privileged: true, privilegeBasis: coding.privilegeBasis ?? "attorney-client" });
+  const hot = () => onChange?.({ hot: !coding.hot });
+  if (!onChange) {
+    return (
+      <span className={cn("inline-flex items-center gap-0.5 whitespace-nowrap", className)} title={decisionSummary(coding)} aria-label={decisionSummary(coding)}>
+        <span className={cn(SLOT, resp.cls)}>{resp.t}</span>
+        <span className={cn(SLOT, coding.privileged === true ? "bg-info/12 text-info" : "text-muted-foreground/35")}>P</span>
+        <span className={cn(SLOT, coding.hot ? "bg-destructive/12 text-destructive" : "text-muted-foreground/35")}>H</span>
+      </span>
+    );
+  }
+  const btn = "cursor-pointer hover:ring-1 hover:ring-inset hover:ring-ring/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
   return (
-    <span className={cn("inline-flex items-center gap-0.5 whitespace-nowrap", className)} title={decisionSummary(coding)} aria-label={decisionSummary(coding)}>
-      <span className={cn(slot, resp.cls)}>{resp.t}</span>
-      <span className={cn(slot, coding.privileged === true ? "bg-info/12 text-info" : "text-muted-foreground/35")}>P</span>
-      <span className={cn(slot, coding.hot ? "bg-destructive/12 text-destructive" : "text-muted-foreground/35")}>H</span>
+    <span className={cn("inline-flex items-center gap-0.5 whitespace-nowrap", className)} role="group" aria-label={decisionSummary(coding)}>
+      <Tip label={`${resp.label} · click to cycle (R / N keys)`}><button type="button" data-row-action onClick={(e) => { e.stopPropagation(); cycle(); }} className={cn(SLOT, btn, resp.cls)} aria-label={`Responsiveness: ${resp.label}`}>{resp.t}</button></Tip>
+      <Tip label={coding.privileged ? "Privileged · click to clear (P)" : "Mark privileged (P)"}><button type="button" data-row-action onClick={(e) => { e.stopPropagation(); priv(); }} className={cn(SLOT, btn, coding.privileged === true ? "bg-info/12 text-info" : "text-muted-foreground/35")} aria-pressed={coding.privileged === true} aria-label="Privileged">P</button></Tip>
+      <Tip label={coding.hot ? "Hot · click to clear (H)" : "Mark hot (H)"}><button type="button" data-row-action onClick={(e) => { e.stopPropagation(); hot(); }} className={cn(SLOT, btn, coding.hot ? "bg-destructive/12 text-destructive" : "text-muted-foreground/35")} aria-pressed={!!coding.hot} aria-label="Hot">H</button></Tip>
     </span>
   );
 }
@@ -76,6 +93,35 @@ export function DecisionCell({ coding, className }: { coding: CodingDecision; cl
 export function CodingBadges({ coding, compact }: { coding: CodingDecision; compact?: boolean }) {
   if (compact) return <DecisionCell coding={coding} />;
   return <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px]"><DecisionCell coding={coding} /><span className="text-muted-foreground">{decisionSummary(coding)}</span></span>;
+}
+
+/**
+ * "Suggested" cell: the call the AI score implies (R / NR / ?) with the score, quiet unless it
+ * disagrees with the reviewer's call. Hover shows the rationale, confidence and trust state.
+ */
+export function SuggestedCell({ score, coding, rationale, confidence, record }: { score?: number | null; coding: CodingDecision; rationale?: string; confidence?: number; record?: unknown }) {
+  const call = suggestionCall(score);
+  if (!call || score == null) return <span className="text-[11px] text-muted-foreground/60">—</span>;
+  const agrees = coding.responsive == null || call === "?" ? null : (call === "R") === coding.responsive;
+  const provenance = provenanceOf(record);
+  const tip = (
+    <div className="max-w-[320px] space-y-1 text-[11px]">
+      <div className="font-medium">Suggested {call === "R" ? "responsive" : call === "NR" ? "non-responsive" : "uncertain"} · score {score}{confidence != null && ` · confidence ${Math.round(confidence * 100)}%`}</div>
+      {rationale ? <div className="leading-snug opacity-90">{rationale}</div> : <div className="opacity-70">No rationale recorded for this score.</div>}
+      {agrees === false && <div className="opacity-90">Differs from the reviewer&apos;s call.</div>}
+      {provenance?.review?.status === "pending" && <div className="opacity-90">Below the confidence gate — awaiting review.</div>}
+      <div className="opacity-70">Suggestions never code a document; apply from the viewer.</div>
+    </div>
+  );
+  return (
+    <Tip label={tip}>
+      <span className={cn("inline-flex items-center gap-1 whitespace-nowrap tabular text-[11.5px] cursor-help", agrees === false ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")}>
+        <span className="font-semibold">{call}</span>
+        <span>{score}</span>
+        {provenance && <TrustBadge provenance={provenance} compact className="h-4 px-0.5" />}
+      </span>
+    </Tip>
+  );
 }
 
 export function NoKeyCallout({ feature = "AI features", compact }: { feature?: string; compact?: boolean }) {
@@ -97,6 +143,12 @@ export function formatShortDate(iso: string) {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit", timeZone: "UTC" });
 }
 
+export function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="px-1 py-0.5 text-[10px]">{children}</kbd>;
 }
@@ -108,6 +160,12 @@ export function SectionLabel({ children, className, action }: { children: React.
       {action}
     </div>
   );
+}
+
+/** Small status chip for batch / production / privilege-entry states (token tones only). */
+export function StateChip({ tone = "muted", children, className }: { tone?: "muted" | "primary" | "success" | "warning" | "destructive" | "info"; children: React.ReactNode; className?: string }) {
+  const tones = { muted: "border-border text-muted-foreground", primary: "border-primary/30 bg-primary/8 text-primary", success: "border-success/30 bg-success/10 text-success", warning: "border-warning/40 bg-warning/12 text-warning-foreground dark:text-warning", destructive: "border-destructive/30 bg-destructive/8 text-destructive", info: "border-info/30 bg-info/10 text-info" } as const;
+  return <span className={cn("inline-flex h-[18px] items-center rounded-[var(--radius-chip)] border px-1.5 text-[10.5px] font-medium leading-none whitespace-nowrap", tones[tone], className)}>{children}</span>;
 }
 
 /**

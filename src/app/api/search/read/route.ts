@@ -1,10 +1,12 @@
 import { jsonError } from "@/lib/ai/sse";
 import { parseReadRef, providerMessage, readSource } from "@/modules/search/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** POST /api/search/read {kind, id|url|title+section, title?} → full text for the reader drawer. */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const ref = parseReadRef(body);
   if (!ref) return jsonError("Invalid read reference: expected {kind: opinion|cfr|fr|url|statute|library|edoc, id|url|title+section}");
@@ -19,3 +21,5 @@ export async function POST(req: Request) {
     return jsonError(msg, /^No /.test(msg) ? 404 : 502, { code: "read_failed" });
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "read", resource: () => refs.research() });

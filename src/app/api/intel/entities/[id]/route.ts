@@ -6,13 +6,14 @@ import { entityDocuments } from "@/modules/intel/analysis/entities";
 import { entityProfile, profileSummary } from "@/modules/intel/analysis/profiles";
 import { toggleEntityWatch } from "@/modules/intel/analysis/watches";
 import { intelEntities } from "@/modules/intel/store";
+import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /** GET ?userId=&compact=1 → the entity profile (attributes, activity, tendencies, related, recent, timeline, watch). */
-export async function GET(req: NextRequest, { params }: Ctx) {
+async function handleGET(req: NextRequest, { params }: Ctx) {
   intelAnalysisBootstrap();
   const { id } = await params;
   const url = new URL(req.url);
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 }
 
 /** POST { action: "watch", userId?, matterId? } → { watched, watch? } (toggles the watch for the user). */
-export async function POST(req: NextRequest, { params }: Ctx) {
+async function handlePOST(req: NextRequest, { params }: Ctx) {
   intelAnalysisBootstrap();
   const { id } = await params;
   if (!intelEntities().has(id)) return jsonError("Entity not found", 404);
@@ -40,3 +41,6 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return jsonError((e as Error).message, 422);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const POST = withAuth(handlePOST, { action: "write", resource: (_req, { id }) => ({ kind: "intel", id }) });

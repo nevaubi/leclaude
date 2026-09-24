@@ -4,6 +4,8 @@ import { intelConfig } from "@/modules/intel/config";
 import { intelHealth } from "@/modules/intel/health";
 import { runDue } from "@/modules/intel/jobs";
 import { ensureIntelSeeded } from "@/modules/intel/seed";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 /** Vercel Hobby functions stop at 60s; the tick works for up to ~50s and returns. */
@@ -33,6 +35,9 @@ async function tick(req: NextRequest) {
   return Response.json({ ...result, health: intelHealth() });
 }
 
-export async function POST(req: NextRequest) { return tick(req); }
+async function handlePOST(req: NextRequest) { return tick(req); }
 /** Vercel cron jobs use GET. */
-export async function GET(req: NextRequest) { return tick(req); }
+async function handleGET(req: NextRequest) { return tick(req); }
+
+export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.intel() });
+export const GET = withAuth(handleGET, { action: "run", resource: () => refs.intel() });

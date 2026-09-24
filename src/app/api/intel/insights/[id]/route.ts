@@ -5,6 +5,8 @@ import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { dismissInsight, getInsight, publishInsight, verifyInsight } from "@/modules/intel/analysis/insights";
 import { docLite } from "@/modules/intel/analysis/profiles";
 import { intelChunks, intelDocuments } from "@/modules/intel/store";
+import { withAuth } from "@/lib/auth/route";
+import { bodyString } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,7 +14,7 @@ export const maxDuration = 60;
 type Ctx = { params: Promise<{ id: string }> };
 
 /** GET → { insight, evidence: [{ ...ref, doc, chunkText }] } with the cited records resolved. */
-export async function GET(_req: NextRequest, { params }: Ctx) {
+async function handleGET(_req: NextRequest, { params }: Ctx) {
   intelAnalysisBootstrap();
   const { id } = await params;
   const insight = getInsight(id);
@@ -22,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 /** POST { action: "publish"|"dismiss"|"verify", force?, note? } → { insight } (verify needs OPENAI_API_KEY → 503 otherwise). */
-export async function POST(req: NextRequest, { params }: Ctx) {
+async function handlePOST(req: NextRequest, { params }: Ctx) {
   intelAnalysisBootstrap();
   const { id } = await params;
   if (!getInsight(id)) return jsonError("Insight not found", 404);
@@ -49,3 +51,6 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const POST = withAuth(handlePOST, { action: async (req) => { const action = await bodyString(req, "action"); return action === "publish" ? "approve" : action === "verify" ? "run" : "write"; }, resource: (_req, { id }) => ({ kind: "intel", id }) });

@@ -95,8 +95,5 @@ export const AFFF_STORY: Story = {
       { kind: "intel", docId: "idoc_seed_afff_entry_transfer", title: "Dkt. 1: Transfer Order creating MDL No. 2873", url: "https://www.jpml.uscourts.gov/pending-mdls-0" },
       { kind: "intel", docId: "idoc_seed_op_afff_jpml", title: "In re Aqueous Film-Forming Foams Prods. Liab. Litig. (J.P.M.L. 2018)" },
     ], { origin: "intel", confidence: 0.92, verified: false }),
-    fact("2024-04-26", "EPA published the PFAS National Primary Drinking Water Regulation, setting enforceable MCLs of 4.0 ppt for PFOA and PFOS.", [
-      { kind: "intel", docId: "idoc_seed_fr_pfas_npdwr", title: "89 FR 32532 — PFAS National Primary Drinking Water Regulation", url: "https://www.federalregister.gov/documents/2024/04/26/2024-07773/pfas-national-primary-drinking-water-regulation" },
-    ], { origin: "intel", confidence: 0.85, verified: false }),
   ],
 };

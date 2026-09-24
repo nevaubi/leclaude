@@ -4,11 +4,13 @@ import { adapterInfos } from "@/modules/intel/adapters";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { providerStatuses } from "@/modules/intel/config";
 import { createSource, IntelServiceError, listSources, sourceSummary, type CreateSourceInput } from "@/modules/intel/service";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET ?enabled=&adapter= → { sources (with counts and last job), adapters (with configured flags) }. */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelBootstrap();
   const url = new URL(req.url);
   const enabledParam = url.searchParams.get("enabled");
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST { adapter, name, description?, config?, schedule?, scope?, enabled? } → 201 { source }. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelBootstrap();
   let body: CreateSourceInput;
   try { body = (await req.json()) as CreateSourceInput; } catch { return jsonError("Invalid JSON body"); }
@@ -31,3 +33,6 @@ export async function POST(req: NextRequest) {
     return jsonError((e as Error).message, 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
+export const POST = withAuth(handlePOST, { action: "admin", resource: () => refs.intel() });

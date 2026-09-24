@@ -4,10 +4,12 @@ import { taskCreateSchema } from "@/modules/home/schemas";
 import { CURRENT_USER_ID } from "@/modules/home/types";
 import type { Task } from "@/lib/types/domain";
 import { param, parseBody } from "@/modules/home/api-utils";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId, queryParam } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const url = new URL(req.url);
   const tasks = listTasks({
     matterId: param(url, "matter"),
@@ -19,7 +21,7 @@ export async function GET(req: Request) {
   return Response.json({ tasks });
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const body = await parseBody(req, taskCreateSchema);
   if (!body.ok) return body.res;
   try {
@@ -29,3 +31,6 @@ export async function POST(req: Request) {
     return jsonError(e instanceof Error ? e.message : "Could not create task", 500);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "task", matterId: queryParam(req, "matter") }) });
+export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "task", matterId: await bodyMatterId(req) }) });

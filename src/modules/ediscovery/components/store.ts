@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 import type { GroupBy, SavedView, SearchFilters, SortKey } from "../types";
 
 export type Density = "compact" | "comfortable";
-export type ViewerTab = "text" | "metadata" | "family" | "similar" | "ai" | "history";
+export type ViewerTab = "text" | "image" | "metadata" | "family" | "similar" | "suggested" | "history";
 
 export interface ColumnDef { id: string; label: string; width: number; min: number; sort?: SortKey; align?: "left" | "right"; defaultHidden?: boolean; locked?: boolean }
 
@@ -32,6 +32,8 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: "redactions", label: "Redactions", width: 72, min: 56, align: "right", defaultHidden: true },
 ];
 
+export const DEFAULT_HIDDEN = DEFAULT_COLUMNS.filter((c) => c.defaultHidden).map((c) => c.id);
+
 interface ReviewState {
   // query
   q: string;
@@ -44,6 +46,7 @@ interface ReviewState {
   setSemantic: (v: boolean) => void;
   setView: (v: SavedView) => void;
   toggleFilter: (key: keyof SearchFilters, value: string) => void;
+  setFilters: (filters: SearchFilters) => void;
   clearFilters: () => void;
   setSort: (sort: SortKey) => void;
   setSortState: (sort: SortKey | undefined, dir: "asc" | "desc" | undefined) => void;
@@ -70,6 +73,12 @@ interface ReviewState {
   setViewerTab: (t: ViewerTab) => void;
   codingPanelOpen: boolean;
   setCodingPanelOpen: (v: boolean) => void;
+  /** Redaction mode in the viewer: text selection and page drags create redactions. */
+  redactMode: boolean;
+  setRedactMode: (v: boolean) => void;
+  /** Character offset the Text tab should scroll to and flash (verified quote click). */
+  jumpTo: { start: number; end: number; nonce: number } | null;
+  setJumpTo: (start: number, end: number) => void;
   // preferences (persisted)
   density: Density;
   setDensity: (d: Density) => void;
@@ -81,10 +90,14 @@ interface ReviewState {
   /** Id of the saved layout currently applied (null = ad hoc). */
   layoutId: string | null;
   setLayoutId: (id: string | null) => void;
+  applyLayout: (layout: { id: string; hiddenColumns: string[]; columnWidths: Record<string, number>; density: Density }) => void;
+  resetLayout: () => void;
   autoAdvance: boolean;
   setAutoAdvance: (v: boolean) => void;
   railCollapsed: boolean;
   setRailCollapsed: (v: boolean) => void;
+  chartsOpen: boolean;
+  setChartsOpen: (v: boolean) => void;
   /** Incremented to ask the review list to refetch (facets, AI scores) without changing the query. */
   listTick: number;
   bumpList: () => void;
@@ -111,6 +124,7 @@ export const useReviewStore = create<ReviewState>()(
           if (!next.length) delete (filters as Record<string, unknown>)[key];
           return { filters, selected: [] };
         }),
+      setFilters: (filters) => set({ filters, selected: [] }),
       clearFilters: () => set({ filters: {}, selected: [] }),
       setSort: (sort) =>
         set((s) => {
@@ -122,7 +136,7 @@ export const useReviewStore = create<ReviewState>()(
       setGroupBy: (groupBy) => set({ groupBy }),
       batchId: null,
       qcMode: false,
-      setBatch: (batchId, qc = false) => set({ batchId, qcMode: batchId ? qc : false, selected: [], view: "all", filters: {} }),
+      setBatch: (batchId, qc = false) => set({ batchId, qcMode: batchId ? qc : false, selected: [], view: "all", filters: {}, q: "" }),
       selected: [],
       setSelected: (selected) => set({ selected }),
       toggleSelected: (id) => set((s) => ({ selected: s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id] })),
@@ -131,30 +145,38 @@ export const useReviewStore = create<ReviewState>()(
       lastClickedId: null,
       setLastClickedId: (lastClickedId) => set({ lastClickedId }),
       openDocId: null,
-      setOpenDocId: (openDocId) => set({ openDocId, activeId: openDocId ?? get().activeId }),
+      setOpenDocId: (openDocId) => set({ openDocId, activeId: openDocId ?? get().activeId, jumpTo: null }),
       fullscreen: false,
       setFullscreen: (fullscreen) => set({ fullscreen }),
       viewerTab: "text",
       setViewerTab: (viewerTab) => set({ viewerTab }),
       codingPanelOpen: true,
       setCodingPanelOpen: (codingPanelOpen) => set({ codingPanelOpen }),
+      redactMode: false,
+      setRedactMode: (redactMode) => set({ redactMode }),
+      jumpTo: null,
+      setJumpTo: (start, end) => set((s) => ({ jumpTo: { start, end, nonce: (s.jumpTo?.nonce ?? 0) + 1 }, viewerTab: "text" })),
       density: "compact",
-      setDensity: (density) => set({ density }),
+      setDensity: (density) => set({ density, layoutId: null }),
       columnWidths: {},
-      setColumnWidth: (id, w) => set((s) => ({ columnWidths: { ...s.columnWidths, [id]: w } })),
+      setColumnWidth: (id, w) => set((s) => ({ columnWidths: { ...s.columnWidths, [id]: w }, layoutId: null })),
       setColumnWidths: (columnWidths) => set({ columnWidths, layoutId: null }),
-      hiddenColumns: DEFAULT_COLUMNS.filter((c) => c.defaultHidden).map((c) => c.id),
+      hiddenColumns: DEFAULT_HIDDEN,
       setHiddenColumns: (hiddenColumns) => set({ hiddenColumns, layoutId: null }),
       layoutId: null,
       setLayoutId: (layoutId) => set({ layoutId }),
+      applyLayout: (l) => set({ layoutId: l.id, hiddenColumns: [...l.hiddenColumns], columnWidths: { ...l.columnWidths }, density: l.density }),
+      resetLayout: () => set({ layoutId: null, hiddenColumns: DEFAULT_HIDDEN, columnWidths: {}, density: "compact" }),
       autoAdvance: true,
       setAutoAdvance: (autoAdvance) => set({ autoAdvance }),
       railCollapsed: false,
       setRailCollapsed: (railCollapsed) => set({ railCollapsed }),
+      chartsOpen: true,
+      setChartsOpen: (chartsOpen) => set({ chartsOpen }),
       listTick: 0,
       bumpList: () => set((s) => ({ listTick: s.listTick + 1 })),
-      reset: () => set({ q: "", semantic: false, view: "all", filters: {}, sort: undefined, dir: undefined, selected: [], activeId: null, openDocId: null, batchId: null, qcMode: false, groupBy: "none" }),
+      reset: () => set({ q: "", semantic: false, view: "all", filters: {}, sort: undefined, dir: undefined, selected: [], activeId: null, openDocId: null, batchId: null, qcMode: false, groupBy: "none", redactMode: false, jumpTo: null }),
     }),
-    { name: "leclaude:ediscovery:review", version: 2, partialize: (s) => ({ density: s.density, columnWidths: s.columnWidths, hiddenColumns: s.hiddenColumns, layoutId: s.layoutId, autoAdvance: s.autoAdvance, codingPanelOpen: s.codingPanelOpen, railCollapsed: s.railCollapsed }) },
+    { name: "leclaude:ediscovery:review", version: 3, partialize: (s) => ({ density: s.density, columnWidths: s.columnWidths, hiddenColumns: s.hiddenColumns, layoutId: s.layoutId, autoAdvance: s.autoAdvance, codingPanelOpen: s.codingPanelOpen, railCollapsed: s.railCollapsed, chartsOpen: s.chartsOpen }) },
   ),
 );

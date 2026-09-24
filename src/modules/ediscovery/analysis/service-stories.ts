@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/integrity/audit";
 import { currentUser } from "@/lib/current-user";
-import type { Story, StoryCiteReport, StoryFact, StorySummary } from "./types";
+import type { Story, StoryCiteReport, StoryEvidence, StoryFact, StorySummary } from "./types";
 import { factsFromIntel, factsFromTestimony, factsFromTimeline, mergeFacts, renumberFacts, storyCsv, storyMarkdown, summarizeStory, verifyStoryCites, type CiteEvidenceSet } from "./stories";
 import { listEvents } from "./service";
 import { buildChronology } from "@/modules/intel/analysis/chronology";
@@ -41,15 +41,30 @@ export function deleteStory(id: string) {
   return ok;
 }
 
+/**
+ * Fill in what the record can state exactly: the witness name for testimony
+ * cites and the document id for a Bates number that exists in this matter.
+ * Nothing is substituted — an unknown Bates or deposition is left as typed and
+ * surfaces as unresolved when the story is verified.
+ */
+export function normalizeEvidence(matterId: string, evidence: StoryEvidence[]): StoryEvidence[] {
+  const d = db();
+  return evidence.map((e) => {
+    if (e.kind === "testimony") { const dep = d.depositions.get(e.depositionId); return dep && dep.matterId === matterId && !e.witness ? { ...e, witness: dep.witnessName } : e; }
+    if (e.kind === "document") { const bates = e.bates.trim().toUpperCase(); const doc = e.docId ? d.edocs.get(e.docId) : d.edocs.findOne((x) => x.matterId === matterId && (x.bates.toUpperCase() === bates || x.batesEnd?.toUpperCase() === bates)); return doc && doc.matterId === matterId ? { ...e, bates, docId: doc.id } : { ...e, bates, docId: undefined }; }
+    return e;
+  });
+}
+
 /** Add, replace or remove one fact. `fact.id` absent → new fact; `remove` → delete. */
 export function upsertFact(storyId: string, fact: Partial<StoryFact> & { id?: string }, opts: { remove?: boolean } = {}): Story | null {
   return stories().update(storyId, (s) => {
     let facts = s.facts;
     if (opts.remove && fact.id) facts = facts.filter((f) => f.id !== fact.id);
-    else if (fact.id && facts.some((f) => f.id === fact.id)) facts = facts.map((f) => (f.id === fact.id ? { ...f, ...fact, id: f.id } as StoryFact : f));
+    else if (fact.id && facts.some((f) => f.id === fact.id)) facts = facts.map((f) => (f.id === fact.id ? { ...f, ...fact, id: f.id, evidence: normalizeEvidence(s.matterId, fact.evidence ?? f.evidence), verified: fact.evidence ? false : (fact.verified ?? f.verified) } as StoryFact : f));
     else {
       if (!fact.text?.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(fact.date ?? "")) throw Object.assign(new Error("A fact needs `text` and an ISO `date`"), { status: 400 });
-      facts = [...facts, { id: fact.id ?? `sf_${nanoid(8)}`, order: facts.length + 1, date: fact.date!, dateEnd: fact.dateEnd, precision: fact.precision ?? "day", text: fact.text.trim(), evidence: fact.evidence ?? [], confidence: typeof fact.confidence === "number" ? Math.max(0, Math.min(1, fact.confidence)) : 0.8, disputed: !!fact.disputed, origin: fact.origin ?? "user", originId: fact.originId, personIds: fact.personIds, tags: fact.tags, verified: !!fact.verified }];
+      facts = [...facts, { id: fact.id ?? `sf_${nanoid(8)}`, order: facts.length + 1, date: fact.date!, dateEnd: fact.dateEnd, precision: fact.precision ?? "day", text: fact.text.trim(), evidence: normalizeEvidence(s.matterId, fact.evidence ?? []), confidence: typeof fact.confidence === "number" ? Math.max(0, Math.min(1, fact.confidence)) : 0.8, disputed: !!fact.disputed, origin: fact.origin ?? "user", originId: fact.originId, personIds: fact.personIds, tags: fact.tags, verified: !!fact.verified }];
     }
     return { ...s, facts: renumberFacts(facts), updatedAt: now() };
   });
@@ -59,7 +74,7 @@ export function upsertFact(storyId: string, fact: Partial<StoryFact> & { id?: st
 export function addFacts(storyId: string, incoming: StoryFact[]): { story: Story; added: number; merged: number } | null {
   const s = stories().get(storyId);
   if (!s) return null;
-  const res = mergeFacts(s.facts, incoming);
+  const res = mergeFacts(s.facts, incoming.map((f) => ({ ...f, evidence: normalizeEvidence(s.matterId, f.evidence) })));
   const next = { ...s, facts: res.facts, updatedAt: now() };
   stories().put(next);
   audit("update", { kind: "story", id: s.id, label: s.title, matterId: s.matterId }, { added: res.added.length, merged: res.merged.length, origin: incoming[0]?.origin });

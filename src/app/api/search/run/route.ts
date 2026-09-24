@@ -1,6 +1,8 @@
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { parseRunRequest } from "@/modules/search/service";
 import { runResearch } from "@/modules/search/engine/run";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -11,7 +13,7 @@ export const runtime = "nodejs";
  * correction / citecheck / round.done / followups / answer.final / run.done
  * (see src/modules/search/engine/types.ts). Aborts everything on disconnect.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: unknown;
   try { body = await req.json(); } catch { return jsonError("Invalid JSON body"); }
   const parsed = parseRunRequest(body);
@@ -21,3 +23,5 @@ export async function POST(req: Request) {
     await runResearch({ question: query, settings, runId, threadId, savedSearchId }, send, signal);
   });
 }
+
+export const POST = withAuth(handlePOST, { action: "run", resource: async (req) => refs.research(undefined, await bodyMatterId(req)) });

@@ -5,15 +5,17 @@
 import type { CodingDecision, DocType, EDocument, IssueCode, PrivilegeLogEntry, ProductionSet, Redaction, ReviewBatch, ReviewLayout, SavedSearchRecord, SearchTermReport } from "@/lib/types/domain";
 import type { BatchProgress, DisagreementReport } from "./batch-pure";
 
-export type ReviewTab = "review" | "depositions" | "cross" | "timeline" | "people" | "conflicts" | "codes";
+export type ReviewTab = "review" | "batches" | "depositions" | "cross" | "timeline" | "people" | "conflicts" | "productions" | "codes";
 
 export const REVIEW_TABS: { id: ReviewTab; label: string }[] = [
   { id: "review", label: "Review" },
+  { id: "batches", label: "Batches" },
   { id: "depositions", label: "Depositions" },
   { id: "cross", label: "Cross-analysis" },
   { id: "timeline", label: "Timeline" },
   { id: "people", label: "People & graph" },
   { id: "conflicts", label: "Conflicts" },
+  { id: "productions", label: "Productions" },
   { id: "codes", label: "Codes & privilege" },
 ];
 
@@ -52,6 +54,8 @@ export interface SearchFilters {
   issues?: string[]; // issue codes ("TOX-01")
   scores?: ScoreBucket[];
   years?: string[]; // "2001"
+  /** "2001-03" — set by the date histogram when it is showing months. */
+  months?: string[];
 }
 
 export interface SearchRequest {
@@ -231,6 +235,34 @@ export interface BulkCodingRequest {
   addIssues?: string[];
   removeIssues?: string[];
   reviewerId?: string;
+  /** Also code the parents and attachments of the listed documents (families travel together). */
+  includeFamilies?: boolean;
+  /** Compute the effect without writing anything (the confirmation summary). */
+  dryRun?: boolean;
+}
+
+/** What a bulk coding request would change, shown to the reviewer before it is applied. */
+export interface BulkPreview {
+  /** Final id list (selection plus family members when requested). */
+  ids: string[];
+  total: number;
+  /** Family members that were added to the selection. */
+  addedFamily: number;
+  /** Documents already carrying every requested value (nothing changes for them). */
+  unchanged: number;
+  fields: { field: string; label: string; to: string; changed: number }[];
+  /** Coded documents whose responsiveness call would be overwritten with a different one. */
+  overwrites: number;
+}
+
+/** A verbatim excerpt the model offered in support of its suggestion, checked against the document text. */
+export interface AnalysisQuote {
+  text: string;
+  /** True when the excerpt was found verbatim (whitespace/quote-insensitive) in the document. */
+  verified: boolean;
+  /** Character offset in `doc.text` when verified. */
+  start?: number;
+  end?: number;
 }
 
 export interface AIAnalysis {
@@ -247,6 +279,8 @@ export interface AIAnalysis {
     issues: string[]; // issue codes
     rationale: string;
   };
+  /** Supporting excerpts, each verified against the text (absent for analyses made before quotes were collected). */
+  quotes?: AnalysisQuote[];
   privilegeRisk?: string;
   generatedAt: string;
   model: string;

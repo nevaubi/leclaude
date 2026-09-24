@@ -13,6 +13,7 @@ import type { EDocument, IssueCode } from "@/lib/types/domain";
 import type { AIAnalysis, PredictProgressEvent } from "./types";
 import { getCodingRules, listIssueCodes, matterDocs, upsertPrivilegeEntry, privilegedDocsWithoutEntry, generatePrivilegeLogTemplate } from "./service";
 import { templatePrivilegeDescription } from "./privilege";
+import { quoteConfidenceCap, verifyQuotes } from "./quotes";
 
 const ANALYSIS_KEY = (docId: string) => `ediscovery:analysis:${docId}`;
 const MAX_TEXT = 24_000;
@@ -70,9 +71,10 @@ const ANALYSIS_SCHEMA = {
       required: ["responsive", "responsiveConfidence", "privileged", "privilegedConfidence", "privilegeBasis", "hot", "issues", "rationale"],
     },
     privilegeRisk: { type: "string", description: "One sentence on privilege risk (waiver, crime-fraud, dual-purpose) or 'None identified'." },
+    supportingQuotes: { type: "array", items: { type: "string" }, description: "Up to 4 verbatim excerpts (8–30 words each, copied exactly from the document text) that support the suggested coding. Never paraphrase." },
     confidence: { type: "number", description: "0..1 calibrated confidence that the summary and coding suggestion are correct given the protocol and the text. Below 0.6 means a reviewer must look." },
   },
-  required: ["summary", "keyIssues", "entities", "suggestedCoding", "privilegeRisk", "confidence"],
+  required: ["summary", "keyIssues", "entities", "suggestedCoding", "privilegeRisk", "supportingQuotes", "confidence"],
 };
 
 const ANALYSIS_CHECK_SCHEMA = {
@@ -84,7 +86,7 @@ const ANALYSIS_CHECK_SCHEMA = {
   required: ["summary", "keyIssues"],
 };
 
-type RawAnalysis = Omit<AIAnalysis, "generatedAt" | "model" | "suggestedCoding"> & { suggestedCoding: Omit<AIAnalysis["suggestedCoding"], "privilegeBasis"> & { privilegeBasis: string }; confidence: number };
+type RawAnalysis = Omit<AIAnalysis, "generatedAt" | "model" | "suggestedCoding" | "quotes"> & { suggestedCoding: Omit<AIAnalysis["suggestedCoding"], "privilegeBasis"> & { privilegeBasis: string }; supportingQuotes?: string[]; confidence: number };
 
 export function cachedAnalysis(docId: string): AIAnalysisRecord | null {
   const a = db().kv.get<AIAnalysisRecord>(ANALYSIS_KEY(docId));
@@ -121,8 +123,13 @@ ${issueRubric(codes)}`;
   const valid = new Set(codes.map((c) => c.code));
   const model = aiConfig().fastModel;
   const generatedAt = new Date().toISOString();
+  // Supporting excerpts are checked verbatim against the text: an excerpt that is not there is a fabrication signal.
+  const quotes = verifyQuotes(d.text, raw.supportingQuotes ?? []);
+  const { supportingQuotes: _sq, ...rawRest } = raw;
+  void _sq;
   let analysis: AIAnalysisRecord = {
-    ...raw,
+    ...rawRest,
+    quotes,
     suggestedCoding: {
       ...raw.suggestedCoding,
       privilegeBasis: raw.suggestedCoding.privilegeBasis === "none" ? undefined : (raw.suggestedCoding.privilegeBasis as AIAnalysis["suggestedCoding"]["privilegeBasis"]),
@@ -138,7 +145,8 @@ ${issueRubric(codes)}`;
   // lowered when the coding suggestion is internally inconsistent with the protocol (privileged without a basis).
   let confidence = Number.isFinite(raw.confidence) ? raw.confidence : Math.min(raw.suggestedCoding.responsiveConfidence, 100 - Math.abs(50 - raw.suggestedCoding.responsiveConfidence)) / 100;
   if (analysis.suggestedCoding.privileged && !analysis.suggestedCoding.privilegeBasis) confidence = Math.min(confidence, CONFIDENCE_GATE - 0.05);
-  let provenance = recordGeneration({ surface: "ediscovery.analysis", instructions, input, sources: documentSources([d]), confidence, model, target: { kind: "edoc", id: d.id, label: d.bates, matterId: d.matterId }, meta: { responsive: analysis.suggestedCoding.responsive, privileged: analysis.suggestedCoding.privileged, issues: analysis.suggestedCoding.issues } });
+  confidence = Math.min(confidence, quoteConfidenceCap(quotes));
+  let provenance = recordGeneration({ surface: "ediscovery.analysis", instructions, input, sources: documentSources([d]), confidence, model, target: { kind: "edoc", id: d.id, label: d.bates, matterId: d.matterId }, meta: { responsive: analysis.suggestedCoding.responsive, privileged: analysis.suggestedCoding.privileged, issues: analysis.suggestedCoding.issues, rationale: analysis.suggestedCoding.rationale, quotes: quotes.length, unverifiedQuotes: quotes.filter((q) => !q.verified).length } });
   // Verification loop: the summary and key issues are re-read against the document text.
   const checked = await verifyStructured(provenance, { label: "document summary and key issues", output: { summary: analysis.summary, keyIssues: analysis.keyIssues }, evidence: `${docHeader(d)}\n\n${clip(d.text, 30_000)}`, schema: ANALYSIS_CHECK_SCHEMA, verify: opts.verify, signal: opts.signal, count: (v) => 1 + v.keyIssues.length }, { kind: "edoc", id: d.id, label: d.bates, matterId: d.matterId });
   provenance = checked.provenance;

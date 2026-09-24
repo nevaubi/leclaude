@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { flagDocument, getDocument, getDocumentText, listChunks, unflagDocument } from "@/modules/intel/store";
 import type { IntelFlagKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -11,7 +13,7 @@ type Ctx = { params: Promise<{ id: string }> };
 const FLAG_KINDS: IntelFlagKind[] = ["low_confidence", "unverified", "contradicted", "stale", "parse_error", "duplicate", "needs_review", "broken_link"];
 
 /** GET ?maxChars=60000&chunks=1 → { document, text, textLength, truncated, chunks? }. */
-export async function GET(req: NextRequest, { params }: Ctx) {
+async function handleGET(req: NextRequest, { params }: Ctx) {
   intelBootstrap();
   const { id } = await params;
   const doc = getDocument(id);
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 }
 
 /** POST { flag: { kind, note? } } | { unflag: kind } → { document }. */
-export async function POST(req: NextRequest, { params }: Ctx) {
+async function handlePOST(req: NextRequest, { params }: Ctx) {
   intelBootstrap();
   const { id } = await params;
   if (!getDocument(id)) return jsonError("Document not found", 404);
@@ -39,3 +41,6 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
   return jsonError("Provide { flag: { kind, note? } } or { unflag: kind }", 422);
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }, principal) => refs.intelDocument(id, principal) });
+export const POST = withAuth(handlePOST, { action: "write", resource: (_req, { id }, principal) => refs.intelDocument(id, principal) });

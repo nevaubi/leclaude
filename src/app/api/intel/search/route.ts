@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { searchIntel } from "@/modules/intel/store";
 import type { IntelDocumentKind, IntelSearchQuery } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId, queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
@@ -29,16 +31,19 @@ async function run(query: IntelSearchQuery) {
 }
 
 /** GET ?q=&kinds=&jurisdiction=&court=&dateFrom=&dateTo=&entityIds=&matterId=&sourceIds=&limit= → { query, hits, total }. */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelBootstrap();
   try { return await run(fromParams(new URL(req.url))); } catch (e) { return jsonError((e as Error).message, 500); }
 }
 
 /** POST IntelSearchQuery → { query, hits, total }. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelBootstrap();
   let body: IntelSearchQuery;
   try { body = (await req.json()) as IntelSearchQuery; } catch { return jsonError("Invalid JSON body"); }
   if (!body || typeof body !== "object") return jsonError("Body must be an IntelSearchQuery", 422);
   try { return await run({ ...body, q: String(body.q ?? "") }); } catch (e) { return jsonError((e as Error).message, 500); }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
+export const POST = withAuth(handlePOST, { action: "read", resource: async (req) => refs.intel(await bodyMatterId(req)) });

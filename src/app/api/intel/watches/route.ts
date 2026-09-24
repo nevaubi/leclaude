@@ -5,11 +5,13 @@ import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { createWatch, listWatches } from "@/modules/intel/analysis/watches";
 import { intelEntities } from "@/modules/intel/store";
 import type { IntelWatch, IntelWatchKind } from "@/modules/intel/types";
+import { withAuth } from "@/lib/auth/route";
+import { bodyMatterId, queryParam, refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
 
 /** GET ?userId=&kind=&matterId= → { watches } (entity names and types resolved). */
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   intelAnalysisBootstrap();
   const url = new URL(req.url);
   const p = (k: string) => { const v = url.searchParams.get(k); return v == null || v === "" ? undefined : v; };
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST { kind, target, label?, matterId?, channels?, userId? } → 201 { watch }. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   intelAnalysisBootstrap();
   const body = (await req.json().catch(() => ({}))) as { kind?: IntelWatchKind; target?: string; label?: string; matterId?: string; channels?: IntelWatch["channels"]; userId?: string };
   if (!body.kind || !body.target) return jsonError("kind and target are required", 422);
@@ -29,3 +31,6 @@ export async function POST(req: NextRequest) {
     return jsonError((e as Error).message, 422);
   }
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
+export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => refs.intel(await bodyMatterId(req)) });

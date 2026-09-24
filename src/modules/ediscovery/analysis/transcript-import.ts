@@ -41,7 +41,7 @@ const OTHER_SPEAKER_RE = /^(THE\s+(?:VIDEOGRAPHER|REPORTER|COURT\s+REPORTER|COUR
 const UNKNOWN_SPEAKER_RE = /^([A-Z][A-Z .'-]{2,30}):\s+(.*)$/;
 const PAREN_RE = /^\((.*)\)\s*$/;
 const EXHIBIT_MARKED_RE = /(?:Exhibit|Ex\.)\s+(?:No\.?\s*)?([A-Za-z]+-\d+|\d+[A-Za-z]?)\b[^)]*?(?:marked|identified|introduced)/i;
-const EXHIBIT_REF_RE = /(?:Exhibit|Ex\.)\s+(?:No\.?\s*)?([A-Za-z]+-\d+|\d+[A-Za-z]?)\b/i;
+const EXHIBIT_REF_RE = /(?:(?:Exhibit|Ex\.)\s+(?:No\.?\s*)?|\bmarked\s+as\s+)([A-Za-z]+-\d+|\d+[A-Za-z]?)\b/i;
 const BATES_RE = /\b([A-Z]{2,6}-\d{5,})\b/;
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 
@@ -158,7 +158,7 @@ function tokenize(text: string, format: TranscriptFormat, issues: ParseIssue[], 
   return { tokens, rawLines, numberedLines, markers };
 }
 
-interface Block { kind: "question" | "answer" | "objection" | "colloquy"; page?: number; line?: number; text: string; by?: string; basis?: (typeof OBJECTION_BASES)[number] }
+interface Block { kind: "question" | "answer" | "objection" | "colloquy"; page?: number; line?: number; text: string; by?: string }
 
 /**
  * Parse a transcript into DepositionQA pairs plus a parse report. Pure; the
@@ -188,9 +188,11 @@ export function parseTranscript(text: string, opts: ParseOptions = {}): ParsedTr
 
   // Header metadata from the first ~120 raw lines.
   const head = tokens.slice(0, 120).map((t) => t.text).join("\n");
-  const w = head.match(/DEPOSITION\s+OF\s*:?\s*([A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+){0,3})/);
+  // The witness name stays on the caption line: spaces and tabs only, never a newline, or the next header line would join it.
+  const w = head.match(/DEPOSITION\s+OF\s*:?[ \t]*([A-Z][A-Za-z.'\-]+(?:[ \t]+[A-Z][A-Za-z.'\-]+){0,3})/);
   if (w && !/^(?:THE|A|AN)$/i.test(w[1])) meta.witnessName = w[1].replace(/\s+(?:TAKEN|VOLUME|ON)$/i, "").replace(/,$/, "").trim().toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_, s: string, c: string) => s + c.toUpperCase());
-  const wn = head.match(/WITNESS\s*:\s*([A-Z][A-Za-z.'\- ]+)/);
+  // A "WITNESS: Name" header field on its own line; never the "THE WITNESS:" speaker label.
+  const wn = head.match(/^[ \t]*WITNESS\s*:[ \t]*([A-Z][A-Za-z.'\-]+(?:[ \t]+[A-Z][A-Za-z.'\-]+){0,3})[ \t]*$/m);
   if (!meta.witnessName && wn) meta.witnessName = wn[1].trim();
   meta.date = toIsoDate(head);
   const vol = head.match(/VOLUME\s+(I{1,3}|IV|V|VI|\d+)\b/i);
@@ -211,6 +213,12 @@ export function parseTranscript(text: string, opts: ParseOptions = {}): ParsedTr
   };
   const start = (b: Block) => { if (st.cur) blocks.push(st.cur); st.cur = b; };
   const append = (t: string) => { if (!st.cur) return false; st.cur.text = st.cur.text ? `${st.cur.text} ${t}` : t; return true; };
+  const markExhibit = (inner: string) => {
+    const ex = inner.match(EXHIBIT_MARKED_RE);
+    if (ex) { const id = ex[1]; if (!exhibits.has(id)) exhibits.set(id, { id, description: inner.replace(/\s+/g, " ").slice(0, 160), bates: inner.match(BATES_RE)?.[1] }); }
+  };
+  // A parenthetical that wraps ("(Exhibit 3 marked for identification;" / "memo, MFC-0041936.)") stays one colloquy block.
+  let parenOpen = false;
 
   for (const t of tokens) {
     if (t.pageMarker != null) continue;
@@ -218,6 +226,12 @@ export function parseTranscript(text: string, opts: ParseOptions = {}): ParsedTr
     const text = t.text;
     if (!text) continue;
     let m: RegExpMatchArray | null;
+    if (parenOpen) {
+      append(text);
+      if (text.includes(")")) { parenOpen = false; if (st.cur) markExhibit(st.cur.text.replace(/^\(|\)\s*$/g, "")); }
+      continue;
+    }
+    if (text.startsWith("(") && !text.includes(")")) { start({ kind: "colloquy", page: t.page, line: t.line, text }); stats.colloquy++; parenOpen = true; continue; }
     if ((m = text.match(BY_RE))) { examiner = speakerName(m[1], opts.speakers); bump(examiner, "examiner"); if (!meta.takenBy) meta.takenBy = examiner; if (m[2]) { start({ kind: "question", page: t.page, line: t.line, text: m[2].replace(/^Q\s*[.:]\s*/i, "") }); } continue; }
     if ((m = text.match(Q_RE))) { start({ kind: "question", page: t.page, line: t.line, text: m[1] }); stats.questions++; if (examiner) bump(examiner, "examiner", "questions"); continue; }
     if ((m = text.match(A_RE))) { start({ kind: "answer", page: t.page, line: t.line, text: m[1] }); stats.answers++; continue; }
@@ -226,14 +240,13 @@ export function parseTranscript(text: string, opts: ParseOptions = {}): ParsedTr
     if ((m = text.match(SPEAKER_RE))) {
       const by = speakerName(m[1], opts.speakers);
       const body = m[2];
-      if (/objection|object\b|instruct/i.test(body)) { start({ kind: "objection", page: t.page, line: t.line, text: body, by, basis: basisFromObjection(body) }); stats.objections++; bump(by, by === examiner ? "examiner" : "defender", "objections"); }
+      if (/objection|object\b|instruct/i.test(body)) { start({ kind: "objection", page: t.page, line: t.line, text: body, by }); stats.objections++; bump(by, by === examiner ? "examiner" : "defender", "objections"); }
       else { start({ kind: "colloquy", page: t.page, line: t.line, text: body, by }); stats.colloquy++; bump(by, by === examiner ? "examiner" : "other"); }
       continue;
     }
     if ((m = text.match(PAREN_RE))) {
       const inner = m[1];
-      const ex = inner.match(EXHIBIT_MARKED_RE);
-      if (ex) { const id = ex[1]; if (!exhibits.has(id)) exhibits.set(id, { id, description: inner.replace(/\s+/g, " ").slice(0, 160), bates: inner.match(BATES_RE)?.[1] }); }
+      markExhibit(inner);
       start({ kind: "colloquy", page: t.page, line: t.line, text: inner });
       stats.colloquy++;
       continue;
@@ -255,11 +268,13 @@ export function parseTranscript(text: string, opts: ParseOptions = {}): ParsedTr
   const estimate = (len: number) => { const pos = { page: estPage, line: estLine }; let n = Math.max(1, Math.ceil(len / 58)); while (n-- > 0) { estLine++; if (estLine > linesPerPage) { estLine = 1; estPage++; } } return pos; };
   const at = (b: Block, len: number) => (b.page != null && b.line != null ? { page: b.page, line: b.line } : estimate(len));
   const flush = () => { if (pending) { transcript.push(pending); pending = null; } };
+  /** Reporter lines carry double spaces after periods and wrapped-line joins; the record keeps single spaces. */
+  const norm = (t: string) => t.replace(/\s+/g, " ").trim();
   for (const b of blocks) {
     if (b.kind === "question") {
       flush();
       const pos = at(b, b.text.length);
-      const q: DepositionQA = { page: pos.page, line: pos.line, question: b.text.trim(), answer: "" };
+      const q: DepositionQA = { page: pos.page, line: pos.line, question: norm(b.text), answer: "" };
       const ex = b.text.match(EXHIBIT_REF_RE);
       if (ex) { q.exhibit = ex[1]; if (!exhibits.has(ex[1])) exhibits.set(ex[1], { id: ex[1], description: b.text.slice(0, 160), bates: b.text.match(BATES_RE)?.[1] }); }
       pending = q;
@@ -268,22 +283,24 @@ export function parseTranscript(text: string, opts: ParseOptions = {}): ParsedTr
     if (b.kind === "objection") {
       if (b.page == null) estimate(b.text.length);
       if (!pending) { push({ at: b.page != null ? `${b.page}:${b.line}` : "estimated", kind: "orphan-objection", message: "Objection without a pending question", sample: b.text.slice(0, 90) }); continue; }
-      const text = b.text.replace(/^objection[.,:]?\s*/i, "").trim();
-      pending.objection = text ? { by: b.by ?? "Counsel", basis: b.basis ?? "form", text } : { by: b.by ?? "Counsel", basis: b.basis ?? "form" };
+      // The basis is read from the whole objection, including continuation lines joined after the block started.
+      const basis = basisFromObjection(b.text);
+      const text = norm(b.text.replace(/^objection[.,:]?\s*/i, ""));
+      pending.objection = text ? { by: b.by ?? "Counsel", basis, text } : { by: b.by ?? "Counsel", basis };
       continue;
     }
     if (b.kind === "answer") {
       if (b.page == null) estimate(b.text.length);
       if (!pending) {
         const prev = transcript[transcript.length - 1];
-        if (prev) { prev.answer = `${prev.answer} ${b.text}`.trim(); continue; }
+        if (prev) { prev.answer = norm(`${prev.answer} ${b.text}`); continue; }
         push({ at: b.page != null ? `${b.page}:${b.line}` : "estimated", kind: "answer-without-question", message: "Answer recorded before any question", sample: b.text.slice(0, 90) });
         const pos = at(b, b.text.length);
-        transcript.push({ page: pos.page, line: pos.line, question: "(no question recorded)", answer: b.text.trim() });
+        transcript.push({ page: pos.page, line: pos.line, question: "(no question recorded)", answer: norm(b.text) });
         continue;
       }
-      if (pending.answer) { flush(); const prev = transcript[transcript.length - 1]; prev.answer = `${prev.answer} ${b.text}`.trim(); continue; }
-      pending.answer = b.text.trim();
+      if (pending.answer) { flush(); const prev = transcript[transcript.length - 1]; prev.answer = norm(`${prev.answer} ${b.text}`); continue; }
+      pending.answer = norm(b.text);
       continue;
     }
     // colloquy: never becomes testimony; exhibits were captured already
@@ -294,10 +311,14 @@ export function parseTranscript(text: string, opts: ParseOptions = {}): ParsedTr
 
   // Speakers → roles; defender = the most frequent objector who is not the examiner.
   const speakerRows: ParsedTranscript["speakers"] = Array.from(speakers.entries()).map(([label, s]) => ({ label, count: s.count, role: s.role })).sort((a, b) => b.count - a.count);
-  const defender = Array.from(speakers.entries()).filter(([label, s]) => label !== examiner && s.objections > 0).sort((a, b) => b[1].objections - a[1].objections)[0]?.[0];
+  // The defender is the most frequent objector who is not the examining attorney of record (the first examiner, not the last).
+  const defender = Array.from(speakers.entries()).filter(([label, s]) => label !== meta.takenBy && s.objections > 0).sort((a, b) => b[1].objections - a[1].objections)[0]?.[0];
   if (defender) { meta.defendingBy = defender; const row = speakerRows.find((r) => r.label === defender); if (row) row.role = "defender"; }
 
-  const pages = transcript.length ? Math.max(...transcript.map((q) => q.page)) : 0;
+  // Page count comes from every numbered line (a transcript usually ends with colloquy), not only from the testimony.
+  let maxPage = 0;
+  for (const t of tokens) { if (t.page != null && t.page > maxPage) maxPage = t.page; if (t.pageMarker != null && t.pageMarker > maxPage) maxPage = t.pageMarker; }
+  const pages = transcript.length ? Math.max(maxPage, ...transcript.map((q) => q.page)) : 0;
   const firstPage = transcript.length ? Math.min(...transcript.map((q) => q.page)) : 0;
   const issueCount = Array.from(counts.values()).reduce((a, b) => a + b, 0);
   let confidence = format === "page-line" ? 1 : format === "page-numbered" ? Math.min(1, numberedLines / Math.max(1, rawLines)) : 0.45;

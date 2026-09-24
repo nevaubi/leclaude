@@ -106,6 +106,12 @@ export type ContentPart =
 export interface InferenceMessage {
   role: "user" | "assistant" | "tool";
   content: ContentPart[];
+  /**
+   * Provider-native content for byte-faithful replay on the SAME provider (OpenAI Responses items, Anthropic content
+   * blocks including thinking blocks with their signatures). A provider that does not match `raw.provider` renders
+   * the typed `content` instead and drops what it cannot express.
+   */
+  raw?: { provider: ProviderId; content: unknown[] };
 }
 
 export interface ToolSpec {
@@ -117,6 +123,11 @@ export interface ToolSpec {
   examples?: Record<string, unknown>[];
   /** Loaded on demand by providers with deferred tools; always loaded elsewhere. */
   defer?: boolean;
+  /**
+   * Programmatic tool calling: who may invoke the tool. "code_execution" lets the model call it from inside the
+   * server-side code execution container (first-party Anthropic only); other providers ignore it.
+   */
+  callers?: ("direct" | "code_execution")[];
 }
 
 export type BuiltinToolSpec =
@@ -153,6 +164,14 @@ export interface InferenceRequest {
   metadata?: Record<string, string>;
   matterId?: string;
   traceId?: string;
+  /** Let the provider retain the response server-side for continuation (OpenAI `store`). Default false. */
+  store?: boolean;
+  /** Stream reasoning summaries / thinking text (OpenAI reasoning summaries, Anthropic `thinking.display`). */
+  reasoningSummary?: boolean;
+  /** Output verbosity hint (OpenAI `text.verbosity`); ignored by providers without an equivalent. */
+  verbosity?: "low" | "medium" | "high";
+  /** Code execution container to reuse (programmatic tool calling continuation). */
+  containerId?: string;
 }
 
 // ---------------- Events and results ----------------
@@ -161,14 +180,18 @@ export type InferenceEvent =
   | { type: "start"; provider: ProviderId; model: string }
   | { type: "text.delta"; delta: string }
   | { type: "reasoning.delta"; delta: string }
-  | { type: "tool.call"; id: string; name: string; args: Record<string, unknown> }
+  | { type: "tool.call"; id: string; name: string; args: Record<string, unknown>; caller?: "direct" | "code_execution" }
   | { type: "citation"; source: string; title?: string; quote?: string; url?: string; blockIndex?: number }
   | { type: "web_search"; status: "searching" | "completed"; query?: string }
   | { type: "usage"; usage: InferenceUsage }
   | { type: "done"; stopReason: StopReason }
   | { type: "error"; message: string; code?: InferenceErrorCode };
 
-export type StopReason = "end" | "tool_calls" | "max_tokens" | "refusal" | "error" | "cancelled";
+/**
+ * "pause_turn": a server-side tool loop paused and the assistant turn must be sent back as-is to continue.
+ * "unknown": the provider reported a stop reason this runtime does not recognise; terminal, never success.
+ */
+export type StopReason = "end" | "tool_calls" | "max_tokens" | "refusal" | "error" | "cancelled" | "pause_turn" | "unknown";
 
 export type InferenceErrorCode =
   | "not_configured"
@@ -184,6 +207,10 @@ export type InferenceErrorCode =
   | "refusal"
   | "unknown";
 
+/**
+ * `input` is the whole context the request paid for (uncached + cache reads + cache writes); `cacheRead`/`cacheWrite`
+ * are the subsets served from / written to the prompt cache. Never add them to `input` again.
+ */
 export interface InferenceUsage {
   input: number;
   output: number;
@@ -205,14 +232,21 @@ export interface InferenceResult {
   model: string;
   text: string;
   json?: unknown;
-  toolCalls: { id: string; name: string; args: Record<string, unknown> }[];
+  toolCalls: { id: string; name: string; args: Record<string, unknown>; caller?: "direct" | "code_execution" }[];
   citations: InferenceCitation[];
   usage: InferenceUsage;
   stopReason: StopReason;
+  /** Server-side continuation id (OpenAI response id); null for providers without server-side conversation state. */
   responseId: string | null;
   latencyMs: number;
   /** Provider-native assistant turn to append when continuing a conversation without server state. */
   assistantTurn?: InferenceMessage;
+  /** Provider message id (informational; Anthropic `msg_…`, OpenAI `resp_…`). */
+  messageId?: string;
+  /** Code execution container id to pass back on the next turn (programmatic tool calling). */
+  containerId?: string;
+  /** Raw provider stop reason when `stopReason` is "unknown". */
+  rawStopReason?: string;
 }
 
 export class InferenceError extends Error {
@@ -232,7 +266,13 @@ export class InferenceError extends Error {
 
 // ---------------- Provider and router ----------------
 
-export interface EmbedOptions { model?: string; signal?: AbortSignal; dimensions?: number }
+export interface EmbedOptions {
+  model?: string;
+  signal?: AbortSignal;
+  dimensions?: number;
+  /** Cohere-style asymmetric embeddings: index-time "document" vs search-time "query". Providers without the notion ignore it. */
+  inputType?: "document" | "query";
+}
 
 export interface ImageOptions { size?: string; quality?: string; signal?: AbortSignal }
 
