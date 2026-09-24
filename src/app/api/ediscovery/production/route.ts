@@ -1,0 +1,19 @@
+import type { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { matterFrom } from "@/modules/ediscovery/api-utils";
+import { production, productionCsv } from "@/modules/ediscovery/service";
+
+export const runtime = "nodejs";
+
+/** ?matter= → production summary JSON; ?format=csv → load file (DAT-style CSV) for producible documents. */
+export async function GET(req: NextRequest) {
+  const m = matterFrom(req);
+  if ("error" in m) return m.error;
+  if (req.nextUrl.searchParams.get("format") === "csv") {
+    const matter = db().matters.get(m.matterId)!;
+    return new Response(productionCsv(m.matterId), {
+      headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="production-${matter.slug}-${new Date().toISOString().slice(0, 10)}.csv"` },
+    });
+  }
+  return Response.json(production(m.matterId));
+}

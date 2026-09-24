@@ -415,20 +415,47 @@ export async function similarDocuments(id: string, k = 10): Promise<SimilarDoc[]
   if (detail.family.parent) push(detail.family.parent, "family", 0.9, "Parent document.");
   for (const r of detail.family.attachments) push(r, "family", 0.9, "Attachment.");
   for (const r of detail.family.thread) push(r, "thread", 0.85, "Same email thread.");
-  const query = `${doc.subject} ${doc.text.replace(/\s+/g, " ").slice(0, 600)}`;
-  try {
-    const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, query, { k: k + out.length + 1, perDoc: 1, filter: (meta) => meta.matterId === doc.matterId });
-    for (const h of hits) {
-      if (seen.has(h.docId)) continue;
-      const other = db().edocs.get(h.docId);
-      if (!other) continue;
-      push(detail.row.id === other.id ? detail.row : toRow(other, new Map(), new Map()), h.semantic != null ? "semantic" : "keyword", Number(h.score.toFixed(3)), makeSnippet(h.text, doc.subject.toLowerCase().split(/\s+/).filter((w) => w.length > 4), 90));
-      if (out.length >= k) break;
+  const all = matterDocs(doc.matterId);
+  const terms = distinctiveTerms(doc, all, 10);
+  // Hybrid search (embeddings + BM25 when a key exists; BM25 only otherwise). Try a broad query first, then a tighter one.
+  for (const q of [terms.join(" "), terms.slice(0, 4).join(" ")]) {
+    if (out.length >= k || !q) break;
+    try {
+      const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, q, { k: k + seen.size + 2, perDoc: 1, filter: (meta) => meta.matterId === doc.matterId });
+      for (const h of hits) {
+        if (seen.has(h.docId)) continue;
+        const other = db().edocs.get(h.docId);
+        if (!other) continue;
+        push(toRow(other, new Map(), new Map()), h.semantic != null ? "semantic" : "keyword", Number(h.score.toFixed(3)), makeSnippet(h.text, terms, 90));
+        if (out.length >= k) break;
+      }
+    } catch (e) {
+      console.warn("[ediscovery] similar search failed:", (e as Error).message);
     }
-  } catch (e) {
-    console.warn("[ediscovery] similar search failed:", (e as Error).message);
+  }
+  // Term-overlap fallback so the tab is never empty on small corpora.
+  if (out.length < k && terms.length) {
+    const scored = all
+      .filter((x) => !seen.has(x.id))
+      .map((x) => { const hay = toSearchable(x).haystack; const n = terms.filter((t) => hay.includes(t)).length; return { x, n }; })
+      .filter((r) => r.n >= Math.max(2, Math.ceil(terms.length / 3)))
+      .sort((a, b) => b.n - a.n || a.x.date.localeCompare(b.x.date));
+    for (const r of scored) { push(toRow(r.x, new Map(), new Map()), "keyword", Number((r.n / terms.length).toFixed(3)), makeSnippet(r.x.text, terms, 90)); if (out.length >= k) break; }
   }
   return out.slice(0, k);
+}
+
+const STOP = new Set("the and for that with this from have will would there their they been were which what when where about into your please than then them these those also because only over under after before between during through more most some such very just should could might must shall does done being other same each into upon within without regarding subject sent date from cc to re fw fwd".split(" "));
+
+/** Frequent, non-generic terms of a document (terms present in >60% of the matter's docs are ignored). */
+export function distinctiveTerms(doc: EDocument, corpus: EDocument[], n = 10): string[] {
+  const words = `${doc.subject} ${doc.subject} ${doc.text}`.toLowerCase().match(/[a-z][a-z0-9-]{4,}/g) ?? [];
+  const tf = new Map<string, number>();
+  for (const w of words) if (!STOP.has(w)) tf.set(w, (tf.get(w) ?? 0) + 1);
+  const candidates = Array.from(tf.entries()).filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]).slice(0, 40);
+  const limit = Math.max(1, Math.floor(corpus.length * 0.6));
+  const df = (t: string) => { let c = 0; for (const d of corpus) if (toSearchable(d).haystack.includes(t)) { c++; if (c > limit) break; } return c; };
+  return candidates.filter(([t]) => df(t) <= limit).slice(0, n).map(([t]) => t);
 }
 
 // ---------------------------------------------------------------------------

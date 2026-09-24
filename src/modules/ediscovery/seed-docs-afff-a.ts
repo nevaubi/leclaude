@@ -1302,7 +1302,7 @@ G. Hale — DRAFT`,
     threadId: T_BIODEG,
     aiScore: 86,
     aiIssues: ["MKT-01", "LEG-01"],
-    coding: { responsive: true, privileged: null, issues: ["MKT-01"], notes: "Kaine added to cc mid-thread. Is the request to Legal enough to privilege this? Probably not — primary purpose is business. Flag for second-level." },
+    coding: { responsive: null, privileged: null, issues: [], notes: "Kaine added to cc mid-thread. Is the request to Legal enough to privilege this? Probably not — primary purpose is business. Flag for second-level." },
     body: `Helen — noted, and I am not going to argue chemistry with you.
 
 Karen — slide 8 comes out as written. Replace with "Meridian is committed to the AFFF market and to continued investment in product safety research." Slide 5: change "biodegradable" to "readily biodegradable hydrocarbon surfactants" and move it to the technical footnote.
@@ -1591,7 +1591,7 @@ cc: T. Ashby, Ashby Lowe LLP; MDEQ Office of Pollution Control (File No. 01-0447
     to: ["Gregory Hale"],
     aiScore: 64,
     aiIssues: ["CUS-01"],
-    coding: { responsive: true, privileged: false, issues: ["CUS-01"], reviewerId: R.lopez, reviewedAt: "2026-09-11T10:20:00Z" },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `CITY OF SAVANNAH FIRE & EMERGENCY SERVICES
 Training Division
 121 East Oglethorpe Avenue, Savannah, Georgia 31401
@@ -1650,7 +1650,7 @@ Helen`,
     cc: ["Dr. Yusuf Bello"],
     aiScore: 66,
     aiIssues: ["TOX-01", "TOX-02"],
-    coding: { responsive: true, privileged: false, issues: ["TOX-01", "TOX-02"], reviewerId: R.lopez, reviewedAt: "2026-09-11T10:32:00Z" },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `Helen,
 
 Spreadsheet SK-0417-indiv.xls is on the FTP site with the calibration data. Individual half-lives in the five HD recovery males range 84–116 days (mean 99). Consistent with your figure.
@@ -1763,7 +1763,7 @@ Nadia`,
     to: ["Paul Merrick"],
     aiScore: 12,
     aiIssues: [],
-    coding: { responsive: false, privileged: false, issues: [], reviewerId: R.lopez, reviewedAt: "2026-09-11T11:25:00Z", notes: "Pricing only. Non-responsive under RFP 14 definition; note it references the re-qualification." },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `Paul — NAVSUP renewal bid is due 25 Jan. Proposed: $18.40/gal delivered, 5-year IDIQ, minimum 400K gal/yr. That is 6% under 3M's last price and 3% over our 2001 municipal average. Re-qualification was accepted 12 Nov so we are on the QPL for the term. Need your OK by Friday.
 
 Alan`,

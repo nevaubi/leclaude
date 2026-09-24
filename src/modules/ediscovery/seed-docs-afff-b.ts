@@ -173,7 +173,7 @@ Martin`,
     threadId: T_MW7,
     aiScore: 88,
     aiIssues: ["ENV-01", "REG-02"],
-    coding: { responsive: true, privileged: null, issues: ["ENV-01"], notes: "Meeting notes summarising decisions including counsel's advice. Mixed. Redact ¶3 (Kaine advice) and produce remainder? Second-level review." },
+    coding: { responsive: null, privileged: null, issues: [], notes: "Meeting notes summarising decisions including counsel's advice. Mixed. Redact ¶3 (Kaine advice) and produce remainder? Second-level review." },
     body: `Actions from yesterday's meeting, as I understood them:
 
 1. Drain re-route: accelerate; complete by 15 August. Halloran to add a second crew. (Merrick)
@@ -198,7 +198,7 @@ Greg`,
     cc: ["Alan Pryce"],
     aiScore: 84,
     aiIssues: ["REG-02", "ENV-01"],
-    coding: { responsive: true, privileged: false, issues: ["REG-02", "ENV-01"], reviewerId: R.lopez, reviewedAt: "2026-09-12T09:00:00Z" },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `Martin —
 
 Janet Rourke (IEPA Bureau of Water, Springfield) called me this morning. Ostensibly about Macon County FPD — she wanted to know whether Meridian had provided the District with disposal guidance (yes, and the sump). Then she asked, in passing, whether Meridian "does any groundwater monitoring at the Decatur plant for the foam chemicals." I said we have a monitoring well network and that we sample it. She asked whether we would share the data. I said I would need to check with our regulatory group and would get back to her.
@@ -565,7 +565,7 @@ M. Suarez`,
     cc: ["Alan Pryce"],
     aiScore: 78,
     aiIssues: ["ENV-01"],
-    coding: { responsive: true, privileged: false, issues: ["ENV-01"], reviewerId: R.lopez, reviewedAt: "2026-09-12T12:00:00Z" },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `Paul, Martin —
 
 2003 annual summary from Beacon:
@@ -659,7 +659,7 @@ L. Whitfield, Ph.D., DABT`,
     cc: ["Martin Suarez"],
     aiScore: 74,
     aiIssues: ["PRD-01", "MKT-01"],
-    coding: { responsive: true, privileged: false, issues: ["PRD-01"], reviewerId: R.lopez, reviewedAt: "2026-09-12T12:30:00Z" },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `All —
 
 Decisions from the product review:
@@ -684,7 +684,7 @@ Alan`,
     cc: ["Robert Kaine"],
     aiScore: 66,
     aiIssues: ["REG-02", "PRD-01"],
-    coding: { responsive: true, privileged: false, issues: ["REG-02", "PRD-01"], reviewerId: R.lopez, reviewedAt: "2026-09-12T12:35:00Z" },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `All —
 
 EPA has invited Meridian to join the 2010/2015 PFOA Stewardship Program as a fluorotelomer producer, following our MF-6A launch. Participation means annual reporting of PFOA and long-chain precursor content in our products and a commitment to a 95% reduction by 2010 and elimination by 2015. MF-6A is a C6 telomer and our analytical work (Helen, May 2008) shows PFOA and C8 precursor content below 50 ppm, so we are effectively already compliant.
@@ -766,7 +766,7 @@ Director, Product Stewardship`,
     to: ["Martin Suarez", "Paul Merrick"],
     aiScore: 62,
     aiIssues: ["ENV-01"],
-    coding: { responsive: true, privileged: false, issues: ["ENV-01"], reviewerId: R.lopez, reviewedAt: "2026-09-12T12:50:00Z" },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `Martin, Paul —
 
 2011 mid-year: MW-7 at 18 µg/L (down from 44 peak); MW-8 at 7.2; MW-10 (off-site) at 2.6 and roughly flat since 2008. City wells still non-detect (now at 0.01 µg/L reporting limit with the new method). Beacon's model has the plume stable — source removed, slow dilution, no further off-site advance.
@@ -855,7 +855,7 @@ M. Suarez`,
     cc: ["Helen Voss"],
     aiScore: 71,
     aiIssues: ["ENV-01"],
-    coding: { responsive: true, privileged: false, issues: ["ENV-01"], reviewerId: R.lopez, reviewedAt: "2026-09-13T09:00:00Z", notes: "References July and August 2017 interim EHS reports not located in the review set — collection gap flagged to T. Bradley." },
+    coding: { responsive: null, privileged: null, issues: [] },
     body: `Alan, Nadia —
 
 Attaching the Q3 2017 EHS report. Note the groundwater monitoring section references the July and August interim reports on the MW-7 resampling; those went to Paul and Martin separately in August. MW-7 came back at 9.8 µg/L in the July round and 11.2 in August — the first increase since 2004. Beacon attributes it to the wet spring raising the water table into the residual source zone under the old Lagoon 2 footprint. They are recommending a fourth quarterly round and a review of the 2003 closure cap.
