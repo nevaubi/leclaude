@@ -4,6 +4,36 @@ import { getOpenAI } from "./openai";
 import { aiConfig, isReasoningModel } from "./config";
 import { normalizeArgs, toOpenAITool, toolLabel, toStrictSchema, type AgentEmit, type ToolContext, type ToolDef } from "./tools";
 
+/**
+ * Reasoning models spend hidden reasoning tokens against max_output_tokens.
+ * Callers size caps for the visible answer, so give reasoning models generous
+ * headroom; otherwise responses come back `incomplete` with empty JSON.
+ */
+export function outputTokenBudget(model: string, requested: number | undefined): number | undefined {
+  if (requested == null) return undefined;
+  if (!isReasoningModel(model)) return requested;
+  return Math.max(requested * 3, requested + 16_000);
+}
+
+/** Extract the first JSON object/array from model text (tolerates code fences and prose). */
+export function parseModelJSON<T = unknown>(text: string): T {
+  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try { return JSON.parse(t) as T; } catch { /* fall through */ }
+  const start = Math.min(...[t.indexOf("{"), t.indexOf("[")].filter((i) => i >= 0));
+  if (!Number.isFinite(start)) throw new Error("Model returned no JSON");
+  const end = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]"));
+  return JSON.parse(t.slice(start, end + 1)) as T;
+}
+
+function assertComplete(res: Response, what: string) {
+  if (res.status === "incomplete") {
+    const reason = res.incomplete_details?.reason ?? "unknown";
+    throw new Error(`${what} was cut off (${reason === "max_output_tokens" ? "output token limit reached; the model's reasoning consumed the budget" : reason}). Try a narrower scope or raise OPENAI_REASONING_EFFORT down / max tokens up.`);
+  }
+  const refusal = res.output?.flatMap((o) => (o.type === "message" ? o.content : [])).find((c) => c.type === "refusal") as { refusal?: string } | undefined;
+  if (refusal?.refusal) throw new Error(`Model refused: ${refusal.refusal}`);
+}
+
 export type AgentEvent =
   | { type: "start"; model: string }
   | { type: "text.delta"; delta: string }
@@ -90,7 +120,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       input,
       tools: tools.length ? tools : undefined,
       previous_response_id: previousResponseId ?? undefined,
-      max_output_tokens: opts.maxOutputTokens,
+      max_output_tokens: outputTokenBudget(model, opts.maxOutputTokens),
       parallel_tool_calls: opts.parallelToolCalls ?? true,
       store: true,
       metadata: opts.metadata,
@@ -251,13 +281,14 @@ export async function generateText(opts: GenerateOptions): Promise<{ text: strin
     model,
     instructions: opts.instructions,
     input: opts.input,
-    max_output_tokens: opts.maxOutputTokens,
+    max_output_tokens: outputTokenBudget(model, opts.maxOutputTokens),
     tools: opts.tools,
     store: false,
   };
   if (isReasoningModel(model)) params.reasoning = { effort: opts.reasoningEffort ?? (opts.fast ? "low" : cfg.reasoningEffort) };
   else if (opts.temperature != null) params.temperature = opts.temperature;
   const res = (await client.responses.create(params, { signal: opts.signal })) as Response;
+  if (!res.output_text?.trim()) assertComplete(res, "Generation");
   return { text: res.output_text, responseId: res.id, usage: res.usage };
 }
 
@@ -269,16 +300,21 @@ export async function generateJSON<T = unknown>(opts: GenerateOptions & { schema
     model,
     instructions: opts.instructions,
     input: opts.input,
-    max_output_tokens: opts.maxOutputTokens,
+    max_output_tokens: outputTokenBudget(model, opts.maxOutputTokens),
     store: false,
     text: { format: { type: "json_schema", name: opts.name ?? "result", schema: strictJsonSchema(opts.schema), strict: true } },
   };
   if (isReasoningModel(model)) params.reasoning = { effort: opts.reasoningEffort ?? (opts.fast ? "low" : cfg.reasoningEffort) };
   else if (opts.temperature != null) params.temperature = opts.temperature;
   const res = (await client.responses.create(params, { signal: opts.signal })) as Response;
+  assertComplete(res, "Structured generation");
   const text = res.output_text?.trim();
   if (!text) throw new Error("Model returned no structured output");
-  return JSON.parse(text) as T;
+  try {
+    return parseModelJSON<T>(text);
+  } catch (e) {
+    throw new Error(`Model returned malformed JSON (${(e as Error).message}); output began: ${text.slice(0, 200)}`);
+  }
 }
 
 /** Same rules as function-tool strict mode. */

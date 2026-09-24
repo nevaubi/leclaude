@@ -72,3 +72,17 @@ describe("runAgent", () => {
     expect(events.find((e) => e.type === "tool.call")).toMatchObject({ name: "lookup", args: { q: "pfas" } });
   });
 });
+
+import { outputTokenBudget, parseModelJSON } from "@/lib/ai/agent";
+describe("output budgets and JSON parsing", () => {
+  it("gives reasoning models headroom and leaves others alone", () => {
+    expect(outputTokenBudget("gpt-5.4", 1800)).toBeGreaterThanOrEqual(17_800);
+    expect(outputTokenBudget("gpt-4.1", 1800)).toBe(1800);
+    expect(outputTokenBudget("gpt-5.4", undefined)).toBeUndefined();
+  });
+  it("parses fenced or prose-wrapped JSON", () => {
+    expect(parseModelJSON('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+    expect(parseModelJSON('Here you go: {"a":[1,2]} thanks')).toEqual({ a: [1, 2] });
+    expect(() => parseModelJSON("no json here")).toThrow();
+  });
+});
