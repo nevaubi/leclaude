@@ -22,7 +22,7 @@ import type { DocRow, SearchResponse } from "../../types";
 import { TIMELINE_CATEGORIES, type AnalysisTabProps, type TimelineCategory, type TimelineFilters } from "../types";
 import { filterEvents, formatEventDate, sortEvents, sourceLabel } from "../chronology";
 import { TimelineSvg, CategoryLegend } from "./timeline-svg";
-import { AiButtonHint, AiLabel, CategoryChip, CiteChip, NoKeyCallout, ProvenanceBadge, TabHeader, formatShortDate } from "./shared";
+import { KeyHint, ModelLabel, CategoryChip, CiteChip, NoKeyCallout, ProvenanceBadge, TabHeader, formatShortDate } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, useOpenTestimony, useOverview, useTimeline } from "./use-analysis-data";
 
 type Src = TimelineEvent["sources"][number];
@@ -73,7 +73,7 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         actions={
           <>
             <Tip label="Toggle the visual timeline"><Button size="sm" variant="ghost" onClick={() => setShowChart((v) => !v)} className={cn(showChart && "bg-accent")} aria-pressed={showChart}><CalendarRange className="size-4" /> <span className="hidden md:inline">Timeline</span></Button></Tip>
-            <AiButtonHint configured={aiConfigured}><Button size="sm" variant="outline" onClick={() => setExtractOpen(true)}><Sparkles className="size-4" /> <span className="hidden lg:inline">Extract from documents</span><span className="lg:hidden">Extract</span></Button></AiButtonHint>
+            <KeyHint configured={aiConfigured}><Button size="sm" variant="outline" onClick={() => setExtractOpen(true)}><Sparkles className="size-4" /> <span className="hidden lg:inline">Extract from documents</span><span className="lg:hidden">Extract</span></Button></KeyHint>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><Download className="size-4" /> <span className="hidden md:inline">Export</span> <ChevronDown className="size-3.5 opacity-60" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -138,7 +138,7 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
                       <div className="flex items-start gap-2">
                         <span className="mt-1 inline-flex shrink-0 gap-px" title={`Significance ${e.significance}/5`}>{Array.from({ length: 5 }).map((_, i) => <span key={i} className={cn("h-2.5 w-1 rounded-sm", i < e.significance ? "bg-primary/70" : "bg-muted")} />)}</span>
                         <div className="min-w-0 break-words">
-                          <div className="font-medium leading-snug">{e.title}{e.createdBy === "ai" && <AiLabel className="ml-1.5 align-middle" />}<ProvenanceBadge record={e} className="ml-1 align-middle" /></div>
+                          <div className="font-medium leading-snug">{e.title}{e.createdBy === "ai" && <ModelLabel className="ml-1.5 align-middle" />}<ProvenanceBadge record={e} className="ml-1 align-middle" /></div>
                           {e.description && <div className="mt-0.5 line-clamp-2 text-[11.5px] text-muted-foreground">{e.description}</div>}
                           {e.personIds?.length ? <div className="mt-0.5 text-[10.5px] text-muted-foreground">{e.personIds.map((p) => people.get(p) ?? p).join(", ")}</div> : null}
                         </div>
@@ -280,7 +280,7 @@ function ExtractDialog({ open, onOpenChange, matterId, aiConfigured, onDone }: {
   return (
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) { setResult(null); setSelected(new Set()); setProgress(null); } }}>
       <DialogContent size="lg" className="flex max-h-[92vh] flex-col">
-        <DialogHeader><DialogTitle className="flex items-center gap-2">Extract events from documents <AiLabel /></DialogTitle><DialogDescription>Select documents; the model reads each one and proposes dated events with Bates cites. Events sharing a date and title are merged into existing entries rather than duplicated.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="flex items-center gap-2">Extract events from documents <ModelLabel /></DialogTitle><DialogDescription>Select documents; the model reads each one and proposes dated events with Bates cites. Events sharing a date and title are merged into existing entries rather than duplicated.</DialogDescription></DialogHeader>
         {(noKey || !aiConfigured) && <NoKeyCallout feature="AI event extraction" compact />}
         <div className="flex items-center gap-2">
           <div className="relative flex-1"><Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search documents (defaults to hot documents)" className="h-8 pl-7 text-xs" /></div>

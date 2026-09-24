@@ -19,7 +19,7 @@ import type { Relationship } from "@/lib/types/domain";
 import { type AnalysisTabProps, type GraphNode, type KnowledgeMap } from "../types";
 import { RELATIONSHIP_LABELS } from "../graph";
 import { ForceGraph } from "./force-graph";
-import { AiButtonHint, AiLabel, CiteChip, ListSkeleton, NoKeyCallout, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, CategoryChip, formatShortDate, tokenDot } from "./shared";
+import { KeyHint, ModelLabel, CiteChip, ListSkeleton, NoKeyCallout, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, CategoryChip, formatShortDate, tokenDot } from "./shared";
 import { api, exportMarkdownToWord, isNoKey, useGraph, useKnowledgeMaps, useOpenTestimony, useOverview, usePerson } from "./use-analysis-data";
 import type { TimelineCategory } from "../types";
 
@@ -86,7 +86,7 @@ export function PeopleGraphTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         </div>
         <div className="space-y-1.5 border-t p-2">
           <Button size="sm" variant="outline" className="w-full justify-start" onClick={() => setAddOpen(true)}><Plus className="size-4" /> Add relationship</Button>
-          <AiButtonHint configured={aiConfigured}><Button size="sm" variant="outline" className="w-full justify-start" onClick={() => setKmOpen(true)}><BrainCircuit className="size-4" /> Who knew what, when <AiLabel className="ml-auto" /></Button></AiButtonHint>
+          <KeyHint configured={aiConfigured}><Button size="sm" variant="outline" className="w-full justify-start" onClick={() => setKmOpen(true)}><BrainCircuit className="size-4" /> Who knew what, when <ModelLabel className="ml-auto" /></Button></KeyHint>
         </div>
       </aside>
       <div className="relative min-w-0 flex-1 p-3">
@@ -251,11 +251,11 @@ function KnowledgeMapDialog({ open, onOpenChange, matterId, aiConfigured, topics
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="xl" className="flex max-h-[92vh] flex-col">
-        <DialogHeader><DialogTitle className="flex items-center gap-2"><BrainCircuit className="size-4" /> Who knew what, when <AiLabel /></DialogTitle><DialogDescription>For a topic, the model maps each person&apos;s knowledge to the earliest evidence in the record, with Bates and page:line cites. Saved with the matter.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><BrainCircuit className="size-4" /> Who knew what, when <ModelLabel /></DialogTitle><DialogDescription>For a topic, the model maps each person&apos;s knowledge to the earliest evidence in the record, with Bates and page:line cites. Saved with the matter.</DialogDescription></DialogHeader>
         {(noKey || !aiConfigured) && <NoKeyCallout feature="Knowledge maps" compact />}
         <div className="flex flex-wrap items-center gap-2">
           <form className="relative flex-1" onSubmit={(e) => { e.preventDefault(); void run(); }}><Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic — e.g. PFOS persistence and half-life; MW-7 off-site migration" className="h-8 pl-7 text-xs" /></form>
-          <AiButtonHint configured={aiConfigured}><Button size="sm" onClick={run} disabled={running || !topic.trim()}>{running ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Map knowledge</Button></AiButtonHint>
+          <KeyHint configured={aiConfigured}><Button size="sm" onClick={run} disabled={running || !topic.trim()}>{running ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Map knowledge</Button></KeyHint>
         </div>
         <div className="flex flex-wrap gap-1">{topics.slice(0, 8).map((t) => <button key={t} type="button" onClick={() => setTopic(t)} className="h-6 rounded-full border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent cursor-pointer">{t}</button>)}</div>
         <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">

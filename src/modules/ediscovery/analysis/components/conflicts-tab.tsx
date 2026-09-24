@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Conflict } from "@/lib/types/domain";
 import { CONFLICT_KINDS, type AnalysisTabProps, type ConflictNote, type ConflictRow, type DepositionSummary } from "../types";
-import { AiLabel, CiteChip, ConflictStatusBadge, ListSkeleton, ProvenanceBadge, SeverityBadge, kindLabel, formatShortDate } from "./shared";
+import { ModelLabel, CiteChip, ConflictStatusBadge, ListSkeleton, ProvenanceBadge, SeverityBadge, kindLabel, formatShortDate } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, useConflict, useConflicts, useDepositions, useOpenTestimony, type ConflictFilters } from "./use-analysis-data";
 
 type Side = Conflict["sides"][number];
@@ -77,7 +77,7 @@ export function ConflictsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
             <ul className="p-1.5">{rows.map((c) => (
               <li key={c.id}>
                 <button type="button" onClick={() => setSelectedId(c.id)} className={cn("w-full rounded-md px-2 py-2 text-left transition-colors cursor-pointer", selectedId === c.id ? "bg-accent text-accent-foreground" : "hover:bg-sidebar-accent")} aria-current={selectedId === c.id ? "true" : undefined}>
-                  <div className="flex flex-wrap items-center gap-1"><SeverityBadge severity={c.severity} /><ConflictStatusBadge status={c.status} /><span className="text-[10.5px] text-muted-foreground">{kindLabel(c.kind)}</span>{c.createdBy === "ai" && <AiLabel />}<ProvenanceBadge record={c} /></div>
+                  <div className="flex flex-wrap items-center gap-1"><SeverityBadge severity={c.severity} /><ConflictStatusBadge status={c.status} /><span className="text-[10.5px] text-muted-foreground">{kindLabel(c.kind)}</span>{c.createdBy === "ai" && <ModelLabel />}<ProvenanceBadge record={c} /></div>
                   <div className={cn("mt-1 line-clamp-2 text-[12.5px] leading-snug", c.status !== "open" && "text-muted-foreground")}>{c.title}</div>
                   <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">{c.witnessNames.length > 0 && <span className="flex items-center gap-1">{c.witnessNames.map((w) => <PersonAvatar key={w} name={w} size="xs" />)}<span>{c.witnessNames.join(", ")}</span></span>}{c.noteCount > 0 && <span className="inline-flex items-center gap-0.5"><MessageSquareText className="size-3" />{c.noteCount}</span>}</div>
                 </button>
@@ -151,7 +151,7 @@ function ConflictDetail({ id, depositions, onOpenDocument, onChanged }: { id: st
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 border-b px-5 pt-4 pb-3">
-        <div className="flex flex-wrap items-center gap-1.5"><SeverityBadge severity={c.severity} /><ConflictStatusBadge status={c.status} /><span className="text-[11px] text-muted-foreground">{kindLabel(c.kind)}</span>{c.createdBy === "ai" && <AiLabel />}<ProvenanceBadge record={c} compact={false} /><span className="font-mono text-[10.5px] text-muted-foreground">{c.id}</span></div>
+        <div className="flex flex-wrap items-center gap-1.5"><SeverityBadge severity={c.severity} /><ConflictStatusBadge status={c.status} /><span className="text-[11px] text-muted-foreground">{kindLabel(c.kind)}</span>{c.createdBy === "ai" && <ModelLabel />}<ProvenanceBadge record={c} compact={false} /><span className="font-mono text-[10.5px] text-muted-foreground">{c.id}</span></div>
         <h2 className="mt-1.5 text-[15px] font-semibold leading-snug">{c.title}</h2>
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           {c.status !== "resolved" && <Button size="sm" variant="success" onClick={() => setStatus("resolved")} disabled={busy}><CircleCheck className="size-4" /> Resolve</Button>}
@@ -179,7 +179,7 @@ function ConflictDetail({ id, depositions, onOpenDocument, onChanged }: { id: st
           ))}
         </div>
         <section className="mt-5">
-          <div className="mb-1 flex items-center gap-2"><h3 className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Analysis</h3>{c.createdBy === "ai" && <AiLabel />}<span className="flex-1" />{!editingAnalysis && <Button size="xs" variant="ghost" onClick={() => { setAnalysis(c.analysis); setEditingAnalysis(true); }}>Edit</Button>}</div>
+          <div className="mb-1 flex items-center gap-2"><h3 className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Analysis</h3>{c.createdBy === "ai" && <ModelLabel />}<span className="flex-1" />{!editingAnalysis && <Button size="xs" variant="ghost" onClick={() => { setAnalysis(c.analysis); setEditingAnalysis(true); }}>Edit</Button>}</div>
           {editingAnalysis ? <div><Textarea value={analysis} onChange={(e) => setAnalysis(e.target.value)} rows={6} className="text-[13px]" autoFocus /><div className="mt-1.5 flex justify-end gap-1.5"><Button size="sm" variant="ghost" onClick={() => setEditingAnalysis(false)}>Cancel</Button><Button size="sm" onClick={saveAnalysis}>Save</Button></div></div> : <p className="whitespace-pre-line rounded-lg border bg-muted/30 p-3 text-[13px] leading-relaxed">{c.analysis || "No analysis yet."}</p>}
         </section>
         <section className="mt-5">

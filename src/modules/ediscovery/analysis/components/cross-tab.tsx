@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Conflict } from "@/lib/types/domain";
 import { type AnalysisTabProps, type CrossExcerpt, type FactMatrix } from "../types";
 import { highlightTerms } from "../transcript";
-import { AiButtonHint, AiLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, TabHeader, kindLabel, formatShortDate } from "./shared";
+import { KeyHint, ModelLabel, CiteChip, FlagBadge, NoKeyCallout, Pane, ProvenanceBadge, SeverityBadge, ConflictStatusBadge, TabHeader, kindLabel, formatShortDate } from "./shared";
 import { api, downloadFile, exportMarkdownToWord, isNoKey, useCross, useDepositions, useFactMatrices, useOpenTestimony, useOverview } from "./use-analysis-data";
 
 function Highlighted({ text, re }: { text: string; re: RegExp | null }) {
@@ -76,9 +76,9 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
         actions={
           <>
             <Tip label="Build a topics × sources matrix from the excerpts below"><Button size="sm" variant="outline" onClick={() => setMatrixOpen((v) => !v)} className={cn(matrixOpen && "bg-accent")} aria-pressed={matrixOpen}><Table2 className="size-4" /> <span className="hidden md:inline">Fact matrix</span> {matrices.data?.matrices.length ? <span className="rounded bg-muted px-1 text-[10px] tabular">{matrices.data.matrices.length}</span> : null}</Button></Tip>
-            <AiButtonHint configured={aiConfigured}>
+            <KeyHint configured={aiConfigured}>
               <Button size="sm" onClick={findContradictions} disabled={finding || !testimony.length}>{finding ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} <span className="hidden md:inline">Find contradictions</span><span className="md:hidden">Contradictions</span>{selected.size ? ` (${selected.size})` : ""}</Button>
-            </AiButtonHint>
+            </KeyHint>
           </>
         }
       >
@@ -180,7 +180,7 @@ function ConflictLine({ c, fresh }: { c: Conflict; fresh?: boolean }) {
         <SeverityBadge severity={c.severity} /><ConflictStatusBadge status={c.status} />
         <span className="text-[10.5px] text-muted-foreground">{kindLabel(c.kind)}</span>
         {fresh && <Badge variant="success" className="h-[16px] px-1 py-0 text-[10px]">new</Badge>}
-        {c.createdBy === "ai" && <AiLabel />}
+        {c.createdBy === "ai" && <ModelLabel />}
         <ProvenanceBadge record={c} />
       </div>
       <div className="mt-1 text-[12px] font-medium leading-snug">{c.title}</div>
@@ -232,7 +232,7 @@ function FactMatrixSection({ matterId, topic, witnessId, aiConfigured, matrices,
         <div className="flex-1" />
         {matrices.length > 1 && <Select value={active?.id ?? ""} onValueChange={setActiveId}><SelectTrigger size="sm" className="h-8 w-[260px]"><SelectValue placeholder="Saved matrices" /></SelectTrigger><SelectContent>{matrices.map((m) => <SelectItem key={m.id} value={m.id}>{m.topic} · {formatShortDate(m.createdAt.slice(0, 10))}</SelectItem>)}</SelectContent></Select>}
         {active && <><Button size="sm" variant="outline" onClick={() => exportCsv(active)}><Download className="size-4" /> CSV</Button><Button size="sm" variant="outline" onClick={() => exportMarkdownToWord({ title: `Fact matrix — ${active.topic}`, markdown: toMarkdown(active), matterId, tags: ["fact-matrix", "ediscovery"] })}><FileText className="size-4" /> Word</Button><Tip label="Delete this matrix"><Button size="icon-sm" variant="ghost" onClick={() => remove(active)} aria-label="Delete matrix"><Trash2 className="size-4" /></Button></Tip></>}
-        <AiButtonHint configured={aiConfigured}><Button size="sm" onClick={build} disabled={building || !topic}>{building ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Generate for “{topic.slice(0, 24)}{topic.length > 24 ? "…" : ""}”</Button></AiButtonHint>
+        <KeyHint configured={aiConfigured}><Button size="sm" onClick={build} disabled={building || !topic}>{building ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} Generate for “{topic.slice(0, 24)}{topic.length > 24 ? "…" : ""}”</Button></KeyHint>
       </div>
       {loading && !matrices.length ? <Skeleton className="h-40" /> : !active ? (
         <div className="flex flex-1 items-center justify-center"><EmptyState icon={Table2} title="No fact matrix yet" description={aiConfigured ? "Generate one for the current topic; it is saved with the matter and exportable to CSV or Word." : "Fact matrices are generated with the OpenAI Responses API. Add OPENAI_API_KEY to enable."} /></div>
