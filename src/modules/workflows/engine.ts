@@ -2,14 +2,21 @@ import "server-only";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { AIConfigError } from "@/lib/ai/config";
-import type { Workflow, WorkflowEdge, WorkflowNode, WorkflowRun, WorkflowRunStep } from "@/lib/types/domain";
+import type { Task, Workflow, WorkflowEdge, WorkflowNode, WorkflowRun, WorkflowRunStep } from "@/lib/types/domain";
+import { findNearDuplicateTask } from "@/lib/integrity/dedupe";
 import { executionPlan, isLoopBackEdge, validateWorkflow, type ExecutionPlan } from "./graph";
-import { EXECUTORS, StepError, TrustGateError, matterContext, type ExecContext, type RunTrustState } from "./executors";
+import { EXECUTORS, StepError, TrustGateError, matterContext, type ExecContext, type Executor, type RunTrustState } from "./executors";
+import { AGENT_EXECUTORS } from "./executors-agents";
+import { INTEL_EXECUTORS } from "./executors-intel";
+import { validateFrontendValues } from "./frontend";
 import { audit } from "@/lib/integrity/audit";
-import { resolveDeep, resolveTemplate, resolveText, type ResolveReport, type TemplateContext } from "./template-expr";
+import { resolveDateRule, resolveDeep, resolveTemplate, resolveText, type ResolveReport, type TemplateContext } from "./template-expr";
 import { publishRunEvent } from "./events";
-import { nodeSpec } from "./registry";
-import { WORKFLOW_CURRENT_USER, type RunApproval, type RunArtifact, type RunStartRequest, type RunUsage, type WorkflowRunRecord } from "./types";
+import { nodeSpec, type AnyNodeType } from "./registry";
+import { WORKFLOW_CURRENT_USER, type RunApproval, type RunArtifact, type RunFollowUps, type RunHandoff, type RunOutput, type RunStartRequest, type RunUsage, type WorkflowRunRecord } from "./types";
+
+/** Every executor the engine can run: the original catalogue plus the intelligence, steward, output and agent steps. */
+export const ALL_EXECUTORS: Record<AnyNodeType, Executor> = { ...EXECUTORS, ...(INTEL_EXECUTORS as Record<AnyNodeType, Executor>), ...(AGENT_EXECUTORS as Record<AnyNodeType, Executor>) };
 
 /**
  * Workflow engine: executes a validated DAG with dynamic scheduling (a node
@@ -32,7 +39,7 @@ function activeRuns() {
 const MAX_LOOP_ITERATIONS = 50;
 const STRING_CAP = 300_000;
 
-const DEFAULT_TIMEOUT_SEC: Record<string, number> = { trigger: 10, ai: 180, data: 60, logic: 60 * 60 * 24, action: 30 };
+const DEFAULT_TIMEOUT_SEC: Record<string, number> = { trigger: 10, ai: 180, data: 60, intel: 600, review: 900, output: 120, logic: 60 * 60 * 24, action: 30 };
 
 /** Estimated USD per 1M tokens by model tier (override through env). */
 function rates(tier: "primary" | "fast") {
@@ -92,6 +99,8 @@ class RunExecution {
   private matter: Record<string, unknown> | null;
   private paused = false;
   private failed: { message: string; code?: string } | null = null;
+  /** Config patches applied by the steward when it re-runs a step (kept for the rest of the run). */
+  private configOverrides = new Map<string, Record<string, unknown>>();
 
   constructor(run: WorkflowRunRecord, workflow: Workflow, private controller: AbortController) {
     this.run = run;
@@ -168,20 +177,46 @@ class RunExecution {
     publishRunEvent(this.run.id, { type: "artifact", runId: this.run.id, artifact: a });
   }
 
+  private addHandoff(nodeId: string, h: Omit<RunHandoff, "at" | "nodeId"> & { at?: string }): RunHandoff {
+    const handoff: RunHandoff = { ...h, at: h.at ?? new Date().toISOString(), nodeId };
+    this.run.handoffs = [...(this.run.handoffs ?? []), handoff];
+    audit("ai.apply", { kind: "workflowRun", id: this.run.id, label: `${this.workflow.name} › handoff ${handoff.from} → ${handoff.to}`, matterId: this.run.matterId }, { handoff: true, from: handoff.from, to: handoff.to, brief: handoff.brief.slice(0, 300), evidenceIds: handoff.evidenceIds?.slice(0, 20), nodeId, workflowId: this.workflow.id });
+    publishRunEvent(this.run.id, { type: "handoff", runId: this.run.id, handoff });
+    return handoff;
+  }
+
+  private addDeliverable(nodeId: string, o: Omit<RunOutput, "nodeId" | "at" | "id"> & { id?: string }): RunOutput {
+    const output: RunOutput = { ...o, id: o.id ?? `out_${nanoid(8)}`, nodeId, at: new Date().toISOString() };
+    this.run.deliverables = [...(this.run.deliverables ?? []).filter((d) => !(d.nodeId === nodeId && d.blobId && d.blobId === output.blobId && d.docId === output.docId)), output];
+    publishRunEvent(this.run.id, { type: "output", runId: this.run.id, output });
+    return output;
+  }
+
+  private async startChild(workflowId: string, opts: { inputs?: Record<string, unknown>; matterId?: string | null; wait?: boolean; event?: Record<string, unknown> }): Promise<{ id: string; status: string; workflowId: string; name: string }> {
+    const target = db().workflows.get(workflowId);
+    if (!target) throw new StepError(`Workflow ${workflowId} not found`, "not_found");
+    if (target.isTemplate) throw new StepError(`"${target.name}" is a template; start your own copy of it instead`, "is_template");
+    if (target.id === this.workflow.id) throw new StepError("A workflow cannot start itself", "self_start");
+    const child = await startRun(target, { inputs: opts.inputs ?? {}, matterId: opts.matterId ?? undefined, triggeredBy: "event", triggeredById: this.run.triggeredById, parentRunId: this.run.id, event: { parentRunId: this.run.id, parentWorkflowId: this.workflow.id, parentWorkflowName: this.workflow.name, eventType: "workflow", ...(opts.event ?? {}) }, wait: opts.wait });
+    this.run.childRunIds = [...(this.run.childRunIds ?? []), child.id];
+    this.persist();
+    return { id: child.id, status: child.status, workflowId: child.workflowId, name: target.name };
+  }
+
   // ───────────── template context ─────────────
 
   private templateContext(frame: Frame): TemplateContext {
-    const steps: Record<string, { output?: unknown; status?: string; label?: string }> = {};
+    const steps: Record<string, { output?: unknown; status?: string; label?: string; error?: string }> = {};
     const chain: Frame[] = [];
     for (let f: Frame | undefined = frame; f; f = f.parent) chain.unshift(f);
-    for (const f of chain) for (const s of f.steps.values()) steps[s.nodeId] = { output: s.output, status: s.status, label: this.nodes.get(s.nodeId)?.label };
+    for (const f of chain) for (const s of f.steps.values()) steps[s.nodeId] = { output: s.output, status: s.status, label: this.nodes.get(s.nodeId)?.label, error: s.error };
     return {
       inputs: this.run.inputs,
       steps,
       matter: this.matter,
       loop: frame.loop ?? frame.parent?.loop ?? null,
-      run: { id: this.run.id, workflowId: this.workflow.id, workflowName: this.workflow.name, startedAt: this.run.startedAt, triggeredBy: this.run.triggeredBy, href: `/workflows/runs/${this.run.id}` },
-      user: { id: WORKFLOW_CURRENT_USER.id, name: WORKFLOW_CURRENT_USER.name },
+      run: { id: this.run.id, workflowId: this.workflow.id, workflowName: this.workflow.name, startedAt: this.run.startedAt, triggeredBy: this.run.triggeredBy, href: `/workflows/runs/${this.run.id}`, deliverables: (this.run.deliverables ?? []).map((d) => ({ id: d.id, title: d.title, format: d.format, href: d.href, downloadHref: d.downloadHref, docId: d.docId, libraryItemId: d.libraryItemId })), handoffs: this.run.handoffs ?? [] },
+      user: { id: this.run.triggeredById ?? WORKFLOW_CURRENT_USER.id, name: db().people.get(this.run.triggeredById ?? WORKFLOW_CURRENT_USER.id)?.name ?? WORKFLOW_CURRENT_USER.name },
       now: new Date().toISOString(),
     };
   }
@@ -192,11 +227,14 @@ class RunExecution {
 
   private isEdgeActive(e: WorkflowEdge, frame: Frame): boolean {
     const src = frame.steps.get(e.source) ?? frame.parent?.steps.get(e.source);
+    // The steward (review.auto) also runs after a step that failed with onError: continue.
+    if (src?.status === "failed" && this.nodes.get(e.target)?.type === "review.auto") return true;
     if (!src || src.status !== "succeeded") return false;
     const type: string | undefined = this.nodes.get(e.source)?.type;
     const out = (src.output ?? {}) as Record<string, unknown>;
     switch (type) {
       case "logic.branch": return !e.sourceHandle || e.sourceHandle === out.matched;
+      case "ai.route": return !e.sourceHandle || e.sourceHandle === out.matched || e.sourceHandle === "out";
       case "logic.approval": return out.approved ? !e.sourceHandle || e.sourceHandle === "approved" || e.sourceHandle === "out" : e.sourceHandle === "rejected";
       case "logic.review": return out.approved || out.trusted ? !e.sourceHandle || e.sourceHandle === "approved" || e.sourceHandle === "out" : e.sourceHandle === "rejected";
       case "logic.loop": return e.sourceHandle !== "each";
@@ -254,20 +292,38 @@ class RunExecution {
     if (node.type === "logic.loop") return this.runLoop(node, frame, activeSources);
     const startedAt = new Date().toISOString();
     const report: ResolveReport = { missing: [], errors: [] };
-    // Re-executed nodes (a lifted trust gate) keep the gate's log lines so the panel shows why it paused.
-    this.setStep(frame, id, { status: "running", startedAt, error: undefined, logs: (frame.steps.get(id)?.logs ?? []).filter((l) => /^Trust gate/.test(l)) });
+    const override = this.configOverrides.get(id);
+    const config = override ? { ...node.config, ...override } : node.config;
+    // Re-executed nodes (a lifted trust gate, a steward re-run) keep the lines that explain why.
+    this.setStep(frame, id, { status: "running", startedAt, error: undefined, logs: (frame.steps.get(id)?.logs ?? []).filter((l) => /^(Trust gate|Steward)/.test(l)) });
     const ctx: ExecContext = {
-      node, run: this.run, workflow: this.workflow, config: node.config, ctx: this.templateContext(frame), report,
+      node, run: this.run, workflow: this.workflow, config, ctx: this.templateContext(frame), report,
       signal: this.signal,
       log: (line) => this.log(frame, id, line),
       progress: (label, value) => publishRunEvent(this.run.id, { type: "step.progress", runId: this.run.id, nodeId: id, label, value }),
       artifact: (a) => this.addArtifact({ ...a, nodeId: id }),
+      handoff: (h) => this.addHandoff(id, h),
+      deliver: (o) => this.addDeliverable(id, o),
+      rerunStep: async (targetId, patch) => {
+        if (targetId === id) throw new Error("A step cannot re-run itself");
+        const targetNode = this.nodes.get(targetId);
+        if (!targetNode) throw new Error(`Unknown step "${targetId}"`);
+        if (this.plan.bodyNodeIds.has(targetId)) throw new Error(`"${targetNode.label}" runs inside a loop and cannot be re-run by the steward`);
+        const root = this.rootFrame(frame);
+        this.configOverrides.set(targetId, { ...(this.configOverrides.get(targetId) ?? {}), ...patch, onError: "continue" });
+        const active = this.incoming(targetId).filter((e) => this.isEdgeActive(e, root)).map((e) => e.source);
+        root.steps.set(targetId, { nodeId: targetId, status: "pending", logs: [...(root.steps.get(targetId)?.logs ?? []), `Steward re-run${Object.keys(patch).length ? ` with ${JSON.stringify(patch)}` : ""}`] });
+        await this.execNode(targetId, root, active);
+        return root.steps.get(targetId) ?? { nodeId: targetId, status: "failed", error: "The step did not execute" };
+      },
+      startWorkflow: (workflowId, opts) => this.startChild(workflowId, opts),
       activeSources,
     };
     const category = node.type.split(".")[0];
-    const timeoutSec = Number(node.config.timeoutSec) || DEFAULT_TIMEOUT_SEC[category] || 60;
+    const timeoutSec = Number(config.timeoutSec) || DEFAULT_TIMEOUT_SEC[category] || 60;
     const retriable = Boolean(spec?.usesAI || spec?.usesNetwork);
-    const retries = retriable ? Math.min(3, Math.max(0, Number(node.config.retries ?? 1) || 0)) : 0;
+    const retries = retriable ? Math.min(3, Math.max(0, Number(config.retries ?? 1) || 0)) : 0;
+    const continueOnError = config.onError === "continue";
     let attempt = 0;
     let lastErr: unknown;
     while (attempt <= retries) {
@@ -282,7 +338,9 @@ class RunExecution {
         stepController.signal.addEventListener("abort", () => { if (!this.signal.aborted) timedOut = true; }, { once: true });
         let result;
         try {
-          result = await EXECUTORS[node.type]({ ...ctx, signal: stepController.signal });
+          const exec = ALL_EXECUTORS[node.type as AnyNodeType];
+          if (!exec) throw new StepError(`No executor for node type "${node.type}"`, "unknown_type");
+          result = await exec({ ...ctx, signal: stepController.signal });
         } catch (e) {
           if (timedOut && (e instanceof DOMException || (e as Error)?.name === "AbortError")) throw new TimeoutError(timeoutSec * 1000);
           throw e;
@@ -290,13 +348,13 @@ class RunExecution {
         if (report.missing.length) this.log(frame, id, `Unresolved variables: ${Array.from(new Set(report.missing)).slice(0, 8).join(", ")}`);
         for (const err of report.errors.slice(0, 5)) this.log(frame, id, `Template: ${err}`);
         if (result.usage) {
-          const tier = node.config.modelTier === "fast" ? "fast" : "primary";
+          const tier = config.modelTier === "fast" ? "fast" : "primary";
           this.usage.input += result.usage.input; this.usage.output += result.usage.output; this.usage.total += result.usage.total;
           this.usage.calls += result.calls ?? 1;
           this.usage.costUsd = Number((this.usage.costUsd + estimateCostUsd(result.usage, tier)).toFixed(6));
         }
         const finishedAt = new Date().toISOString();
-        this.setStep(frame, id, { status: "succeeded", finishedAt, output: capStrings(result.output), input: capStrings(summarizeInput(node.config, ctx.ctx), 2000), tokens: result.usage?.total });
+        this.setStep(frame, id, { status: "succeeded", finishedAt, output: capStrings(result.output), input: capStrings(summarizeInput(config, ctx.ctx), 2000), tokens: result.usage?.total });
         return;
       } catch (e) {
         if (e instanceof TrustGateError) {
@@ -320,7 +378,68 @@ class RunExecution {
     const info = errorInfo(lastErr);
     this.setStep(frame, id, { status: "failed", finishedAt: new Date().toISOString(), error: info.message });
     if (frame.parent) throw Object.assign(new Error(info.message), { code: info.code, nodeId: id });
+    // onError: continue — the step stays failed, downstream steps that depend on it are skipped, a steward step may fix it, the run goes on.
+    if (continueOnError && info.code !== "cancelled" && !this.signal.aborted) {
+      this.log(frame, id, `Failed (${info.code ?? "error"}); the run continues (on failure: continue)`);
+      this.run.logs = [...(this.run.logs ?? []), `"${node.label}" failed and the run continued: ${info.message}`];
+      if (!(this.run.stewardship ?? []).some((s) => s.nodeId === id)) this.run.stewardship = [...(this.run.stewardship ?? []), { nodeId: id, code: info.code, fixed: false, escalated: false, note: info.message.slice(0, 300) }];
+      return;
+    }
     this.fail(info, frame, id);
+  }
+
+  // ───────────── follow-ups (front end `after` settings) ─────────────
+
+  private async runFollowUps(rootFrame: Frame) {
+    const fe = this.workflow.frontend ?? this.run.snapshot?.frontend;
+    const after = fe?.after;
+    const notifyIds = fe?.output?.notifyPeopleIds ?? [];
+    if (!after?.createTask?.title && !after?.triggerWorkflowIds?.length && !notifyIds.length) return;
+    const follow: RunFollowUps = { taskIds: [], triggered: [], notified: [], notes: [] };
+    const ctx = this.templateContext(rootFrame);
+    const report: ResolveReport = { missing: [], errors: [] };
+    const d = db();
+    const now = new Date();
+    if (after?.createTask?.title) {
+      try {
+        const title = resolveText(after.createTask.title, ctx, report).trim().slice(0, 200) || `Follow up: ${this.workflow.name}`;
+        const matterId = this.run.matterId;
+        const dup = findNearDuplicateTask(d.tasks.find((t) => t.status !== "done"), { title, matterId });
+        if (dup) { follow.taskIds.push(dup.id); follow.notes.push(`Task "${dup.title}" already open; reused`); }
+        else {
+          const due = resolveDateRule(after.createTask.dueRule ?? "+3d", now);
+          const assigneeId = after.createTask.assigneeId && d.people.has(after.createTask.assigneeId) ? after.createTask.assigneeId : (this.run.triggeredById ?? WORKFLOW_CURRENT_USER.id);
+          const deliverables = (this.run.deliverables ?? []).slice(0, 6).map((o) => `- ${o.title}: ${o.href ?? o.downloadHref ?? ""}`).join("\n");
+          const task: Task = { id: `t_${nanoid(10)}`, title, description: `From workflow "${this.workflow.name}" (run ${this.run.id}).${deliverables ? `\n\nOutputs:\n${deliverables}` : ""}`, matterId, assigneeId, createdById: this.run.triggeredById ?? WORKFLOW_CURRENT_USER.id, status: "todo", priority: "medium", dueAt: due ? due.toISOString().slice(0, 10) : undefined, createdAt: now.toISOString(), updatedAt: now.toISOString(), tags: ["workflow", "follow-up"], source: "workflow", links: [{ label: `Run · ${this.workflow.name}`, href: `/workflows/runs/${this.run.id}` }] };
+          d.tasks.put(task);
+          audit("create", { kind: "task", id: task.id, label: task.title, matterId }, { source: "workflow.after", runId: this.run.id, workflowId: this.workflow.id });
+          follow.taskIds.push(task.id);
+          this.addArtifact({ kind: "task", id: task.id, title: task.title, href: `/?task=${task.id}`, nodeId: "__after__", meta: { dueAt: task.dueAt, assignee: d.people.get(assigneeId)?.name } });
+        }
+      } catch (e) { follow.notes.push(`Follow-up task not created: ${(e as Error).message}`); }
+    }
+    for (const wid of after?.triggerWorkflowIds ?? []) {
+      if (!wid || wid === this.workflow.id) continue;
+      try {
+        const inputs = { ...Object.fromEntries(Object.entries(this.run.inputs).filter(([k]) => k !== "__event")), parent_run_id: this.run.id, parent_workflow: this.workflow.name, parent_deliverables: (this.run.deliverables ?? []).map((o) => ({ id: o.id, title: o.title, format: o.format, href: o.href, downloadHref: o.downloadHref, docId: o.docId, libraryItemId: o.libraryItemId })) };
+        const child = await this.startChild(wid, { inputs, matterId: this.run.matterId ?? null, event: { after: true } });
+        follow.triggered.push({ workflowId: child.workflowId, runId: child.id, name: child.name });
+      } catch (e) { follow.notes.push(`Could not start ${d.workflows.get(wid)?.name ?? wid}: ${(e as Error).message}`); }
+    }
+    if (notifyIds.length) {
+      const deliverables = (this.run.deliverables ?? []);
+      const message = `${this.workflow.name} finished${deliverables.length ? `: ${deliverables.map((o) => o.title).slice(0, 3).join(", ")}${deliverables.length > 3 ? ` (+${deliverables.length - 3})` : ""}` : ""}`;
+      for (const userId of notifyIds) {
+        if (!d.people.has(userId)) continue;
+        const notif = { id: `wn_${nanoid(10)}`, runId: this.run.id, workflowId: this.workflow.id, nodeId: "__after__", channel: "in-app", recipientIds: [userId], message, href: `/workflows/runs/${this.run.id}`, createdAt: now.toISOString(), read: false };
+        d.collection<typeof notif>("workflow_notifications").put(notif);
+        follow.notified.push(userId);
+      }
+      if (follow.notified.length) this.addArtifact({ kind: "notification", id: `after_${this.run.id}`, title: message.slice(0, 120), href: `/workflows/runs/${this.run.id}`, nodeId: "__after__", meta: { recipients: follow.notified.map((id) => d.people.get(id)?.name ?? id) } });
+    }
+    this.run.followUps = follow;
+    if (follow.notes.length) this.run.logs = [...(this.run.logs ?? []), ...follow.notes];
+    this.persist();
   }
 
   private fail(info: { message: string; code?: string }, frame: Frame, nodeId: string) {
@@ -452,6 +571,7 @@ class RunExecution {
     const outputs: Record<string, unknown> = {};
     for (const s of rootFrame.steps.values()) if (s.status === "succeeded" && !this.nodes.get(s.nodeId)?.type.startsWith("trigger.")) outputs[s.nodeId] = s.output;
     this.run.outputs = outputs;
+    try { await this.runFollowUps(rootFrame); } catch (e) { this.run.logs = [...(this.run.logs ?? []), `Follow-ups failed: ${(e as Error).message}`]; }
     this.setRunStatus("succeeded");
     publishRunEvent(this.run.id, { type: "run.done", runId: this.run.id, status: "succeeded" });
   }
@@ -480,6 +600,10 @@ export function createRunRecord(workflow: Workflow, opts: StartRunOptions): Work
     const matterInput = (workflow.inputs ?? []).find((i) => i.type === "matter");
     if (matterInput && typeof inputs[matterInput.key] === "string" && db().matters.has(inputs[matterInput.key] as string)) matterId = inputs[matterInput.key] as string;
   }
+  if (!matterId) {
+    const field = workflow.frontend?.fields?.find((f) => f.type === "matter");
+    if (field && typeof inputs[field.key] === "string" && db().matters.has(inputs[field.key] as string)) matterId = inputs[field.key] as string;
+  }
   const now = new Date().toISOString();
   return {
     id: `run_${nanoid(10)}`,
@@ -497,8 +621,11 @@ export function createRunRecord(workflow: Workflow, opts: StartRunOptions): Work
     usage: { input: 0, output: 0, total: 0, calls: 0, costUsd: 0 },
     artifacts: [],
     approvals: [],
+    handoffs: [],
+    deliverables: [],
+    childRunIds: [],
     parentRunId: opts.parentRunId,
-    snapshot: { nodes: workflow.nodes, edges: workflow.edges, inputs: workflow.inputs },
+    snapshot: { nodes: workflow.nodes, edges: workflow.edges, inputs: workflow.inputs, frontend: workflow.frontend },
   };
 }
 
@@ -508,6 +635,14 @@ export async function startRun(workflow: Workflow, opts: StartRunOptions = {}): 
   if (!v.ok) throw new StepError(`Workflow is not runnable: ${v.issues.filter((i) => i.level === "error").map((i) => i.message).join("; ")}`, "invalid_workflow");
   const missing = (workflow.inputs ?? []).filter((i) => i.required && (opts.inputs?.[i.key] == null || opts.inputs?.[i.key] === "")).map((i) => i.label);
   if (missing.length) throw new StepError(`Missing required input${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`, "missing_inputs");
+  // Front-end fields (required, accepted file types, options) are enforced for runs a person starts; scheduled and event runs carry preset payloads.
+  if ((opts.triggeredBy ?? "manual") === "manual" && workflow.frontend?.fields?.length) {
+    const errs = validateFrontendValues(workflow.frontend, opts.inputs ?? {});
+    if (errs.length) {
+      const label = (key: string) => workflow.frontend?.fields.find((f) => f.key === key)?.label ?? key;
+      throw new StepError(`Invalid input${errs.length > 1 ? "s" : ""}: ${errs.map((e) => `${label(e.key)} — ${e.message}`).join("; ")}`, "invalid_inputs");
+    }
+  }
   const run = createRunRecord(workflow, opts);
   db().workflowRuns.put(run);
   db().workflows.update(workflow.id, (w) => ({ ...w, runsCount: (w.runsCount ?? 0) + 1, lastRunAt: run.startedAt }));

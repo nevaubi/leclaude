@@ -11,7 +11,19 @@ import type { Authority, SearchHit, SearchSettings, SearchSource } from "../type
 
 export type LaneKind = "controlling" | "contrary" | "regulatory" | "record" | "secondary" | "fast";
 
+/**
+ * Where a lane retrieves from: the structured providers, or the firm's
+ * intelligence corpus ("intel"), whose hits are normalized onto the lane's
+ * provider kinds (opinion → caselaw, CFR → regulations, docket entries →
+ * dockets…) so sources, citations and reading stay uniform.
+ */
+export type RetrievalSource = SearchSource | "intel";
+
 export interface ResearchLane {
+  /** Also feed the lane from the intelligence corpus (default true for provider lanes). */
+  intel?: boolean;
+  /** One-line note shown under the lane card ("Also searches the intelligence corpus"). */
+  note?: string;
   id: string;
   kind: LaneKind;
   name: string;

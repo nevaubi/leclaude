@@ -21,9 +21,10 @@ import { createOfficeDoc } from "@/modules/office/shared/docs-service";
 import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
 import { evaluateBranch, type BranchRule } from "./conditions";
 import { markdownTable, resolveDateRule, resolveDeep, resolveTemplate, stringify, type ResolveReport, type TemplateContext } from "./template-expr";
-import type { RunArtifact, WorkflowRunRecord } from "./types";
+import type { RunArtifact, RunHandoff, RunOutput, WorkflowRunRecord } from "./types";
 import { WORKFLOW_CURRENT_USER } from "./types";
 import { workbookFromTable } from "@/modules/office/sheet/from-rows";
+import type { WorkflowRunStep } from "@/lib/types/domain";
 
 // ─────────────────────────── Context ───────────────────────────
 
@@ -38,6 +39,14 @@ export interface ExecContext {
   log: (line: string) => void;
   progress: (label: string, value?: number) => void;
   artifact: (a: Omit<RunArtifact, "nodeId">) => void;
+  /** Record an agent handoff on the run (ai.route, ai.agent). */
+  handoff: (h: Omit<RunHandoff, "at" | "nodeId"> & { at?: string }) => RunHandoff;
+  /** Record a deliverable (file / document / library item / insight) on the run. */
+  deliver: (o: Omit<RunOutput, "nodeId" | "at" | "id"> & { id?: string }) => RunOutput;
+  /** Re-execute an earlier step of this run with a config patch (the steward's fixes). Resolves with the step's final state. */
+  rerunStep: (nodeId: string, patch: Record<string, unknown>) => Promise<WorkflowRunStep>;
+  /** Start another workflow as a child run of this one. */
+  startWorkflow: (workflowId: string, opts: { inputs?: Record<string, unknown>; matterId?: string | null; wait?: boolean }) => Promise<{ id: string; status: string; workflowId: string; name: string }>;
   /** Incoming edge sources that were active for this node (for merge). */
   activeSources: string[];
 }
@@ -127,11 +136,18 @@ export function assertTrusted(x: ExecContext, what: string) {
   throw new TrustGateError(`${what} paused: ${bad.length} AI step${bad.length > 1 ? "s" : ""} not trusted — ${reasons.join("; ")}`, reasons, bad.map((t) => t.id));
 }
 
-function str(v: unknown): string { return stringify(v); }
-function num(v: unknown, d: number): number { const n = Number(v); return Number.isFinite(n) ? n : d; }
-function bool(v: unknown): boolean { return typeof v === "string" ? ["true", "yes", "1", "on"].includes(v.toLowerCase()) : Boolean(v); }
+export function str(v: unknown): string { return stringify(v); }
+export function num(v: unknown, d: number): number { const n = Number(v); return Number.isFinite(n) ? n : d; }
+export function bool(v: unknown): boolean { return typeof v === "string" ? ["true", "yes", "1", "on"].includes(v.toLowerCase()) : Boolean(v); }
 function person(id: unknown) { return id ? db().people.get(String(id)) : null; }
-function personName(id: unknown) { return person(id)?.name ?? "Unassigned"; }
+export function personName(id: unknown) { return person(id)?.name ?? "Unassigned"; }
+/** An array from a config value: arrays as-is, JSON arrays parsed, otherwise comma / newline separated ids. */
+export function idList(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => (x && typeof x === "object" ? String((x as Record<string, unknown>).id ?? (x as Record<string, unknown>).docId ?? "") : String(x ?? ""))).map((s) => s.trim()).filter(Boolean);
+  if (typeof v === "string") { const t = v.trim(); if (!t) return []; if (t.startsWith("[")) { try { return idList(JSON.parse(t)); } catch { /* fall through */ } } return t.split(/[,\n]/).map((s) => s.trim()).filter(Boolean); }
+  if (v && typeof v === "object") return idList(Object.values(v as Record<string, unknown>));
+  return [];
+}
 
 /** Resolve every string in the node config against the template context. */
 export function resolveConfig(x: ExecContext): Record<string, unknown> {
@@ -168,7 +184,7 @@ export function matterContext(matterId?: string | null): Record<string, unknown>
 
 // ─────────────────────────── Model helper ───────────────────────────
 
-interface ModelCall {
+export interface ModelCall {
   instructions: string;
   input: string | ResponseInput;
   tier?: "fast" | "primary";
@@ -178,9 +194,9 @@ interface ModelCall {
   reasoningEffort?: "low" | "medium" | "high";
 }
 
-interface ModelResult { text: string; json?: unknown; usage: { input: number; output: number; total: number }; calls: number; citations: { title: string; url?: string; cite?: string; source?: string }[]; toolCalls: number; /** Tool results the model read (research evidence for verification). */ evidence: VerifySource[]; model: string; instructions: string; input: string | ResponseInput }
+export interface ModelResult { text: string; json?: unknown; usage: { input: number; output: number; total: number }; calls: number; citations: { title: string; url?: string; cite?: string; source?: string }[]; toolCalls: number; /** Tool results the model read (research evidence for verification). */ evidence: VerifySource[]; model: string; instructions: string; input: string | ResponseInput }
 
-async function callModel(x: ExecContext, call: ModelCall): Promise<ModelResult> {
+export async function callModel(x: ExecContext, call: ModelCall): Promise<ModelResult> {
   const cfg = aiConfig();
   const model = call.tier === "fast" ? cfg.fastModel : cfg.model;
   const research = call.research ?? {};
@@ -241,14 +257,14 @@ function inputSources(c: Record<string, unknown>): ProvenanceSource[] {
  * sources (citations the model read + record cites in its inputs), confidence
  * and usage. Audited as ai.generate with the run and node ids.
  */
-function recordStep(x: ExecContext, r: ModelResult, extra: { confidence?: number; sources?: ProvenanceSource[]; surface?: string; meta?: Record<string, unknown> } = {}): Provenance {
+export function recordStep(x: ExecContext, r: ModelResult, extra: { confidence?: number; sources?: ProvenanceSource[]; surface?: string; meta?: Record<string, unknown> } = {}): Provenance {
   const sources = [...(extra.sources ?? []), ...citationSources(r.citations), ...inputSources(resolveConfig(x))];
   const p = gateReview(makeProvenance({ surface: extra.surface ?? `workflow.${x.node.type}`, instructions: r.instructions, input: typeof r.input === "string" ? r.input : JSON.stringify(r.input), sources, confidence: extra.confidence, model: r.model, usage: r.usage }));
   audit("ai.generate", { kind: "workflow.step", id: `${x.run.id}:${x.node.id}`, label: `${x.workflow.name} › ${x.node.label}`, matterId: x.run.matterId }, { surface: p.surface, model: r.model, tokens: r.usage.total, toolCalls: r.toolCalls, sources: p.sources.slice(0, 10).map((s) => s.cite ?? s.url ?? s.title), confidence: p.confidence, workflowId: x.workflow.id, runId: x.run.id, nodeId: x.node.id, ...(extra.meta ?? {}) });
   return p;
 }
 
-function storeStepProvenance(x: ExecContext, p: Provenance, title?: string) {
+export function storeStepProvenance(x: ExecContext, p: Provenance, title?: string) {
   putProvenance({ kind: "workflow.step", recordId: `${x.run.id}:${x.node.id}`, matterId: x.run.matterId, title: title ?? `${x.workflow.name} › ${x.node.label}`, href: `/workflows/runs/${x.run.id}`, provenance: p });
   if (p.verification) x.log(`Verification: ${p.verification.status} (${p.verification.supported} supported, ${p.verification.unsupported} unsupported, ${p.verification.contradicted} contradicted)${p.verification.unresolvedCites?.length ? `; unresolved cites: ${p.verification.unresolvedCites.slice(0, 5).join(", ")}` : ""}`);
   if (p.review?.status === "pending") x.log(`Needs review: ${p.review.note ?? "below confidence gate"}`);
@@ -256,12 +272,12 @@ function storeStepProvenance(x: ExecContext, p: Provenance, title?: string) {
 }
 
 /** Evidence set for narrative verification: what the model read (tool results) plus text the step was given. */
-function evidenceFor(r: ModelResult, given: { title: string; text: string }[]): VerifySource[] {
+export function evidenceFor(r: ModelResult, given: { title: string; text: string }[]): VerifySource[] {
   return [...given.filter((g) => g.text.trim()).map((g) => ({ title: g.title, text: g.text.slice(0, 20_000) })), ...r.evidence].slice(0, 24);
 }
 
 /** Narrative verification (fail-soft): claims against evidence + record-cite cross-check; returns the text with [VERIFY] marks. */
-async function verifyNarrativeStep(x: ExecContext, p: Provenance, text: string, sources: VerifySource[], opts: { maxClaims?: number } = {}): Promise<{ provenance: Provenance; text: string }> {
+export async function verifyNarrativeStep(x: ExecContext, p: Provenance, text: string, sources: VerifySource[], opts: { maxClaims?: number } = {}): Promise<{ provenance: Provenance; text: string }> {
   const verify = x.config.verify !== false;
   const cites = extractRecordCites(sources.map((s) => `${s.cite ?? ""} ${s.text}`).join("\n"));
   let provenance = p;
@@ -280,7 +296,7 @@ async function verifyNarrativeStep(x: ExecContext, p: Provenance, text: string, 
 }
 
 /** Structured verification (fail-soft): self-correct rows against the evidence; records dropped/changed rows. */
-async function verifyStructuredStep<T>(x: ExecContext, p: Provenance, label: string, output: T, evidence: string, schema: Record<string, unknown>): Promise<{ provenance: Provenance; output: T; changes: string[] }> {
+export async function verifyStructuredStep<T>(x: ExecContext, p: Provenance, label: string, output: T, evidence: string, schema: Record<string, unknown>): Promise<{ provenance: Provenance; output: T; changes: string[] }> {
   const r = await safeSelfCorrect<T>({ label, output, evidence, schema, verify: x.config.verify !== false, signal: x.signal });
   const checkedAt = new Date().toISOString();
   const count = (v: unknown) => (Array.isArray(v) ? v.length : v && typeof v === "object" ? Object.keys(v as object).length : 1);
@@ -292,12 +308,12 @@ async function verifyStructuredStep<T>(x: ExecContext, p: Provenance, label: str
 }
 
 
-function dedupe<T extends { title: string; url?: string; cite?: string }>(items: T[]): T[] {
+export function dedupe<T extends { title: string; url?: string; cite?: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((c) => { const k = c.url ?? c.cite ?? c.title; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-function firmPreamble(x: ExecContext) {
+export function firmPreamble(x: ExecContext) {
   const m = x.ctx.matter as Record<string, unknown> | null;
   return [
     `You are a workflow step of ${FIRM_NAME}'s internal legal AI platform, running inside the workflow "${x.workflow.name}" (step "${x.node.label}"). ${todayLine()}`,
@@ -672,7 +688,7 @@ const logicDelay: Executor = async (x) => {
 
 // ───────────── Actions ─────────────
 
-function href(kind: RunArtifact["kind"], id: string, docKind?: string) {
+export function href(kind: RunArtifact["kind"], id: string, docKind?: string) {
   switch (kind) {
     case "task": return `/?task=${id}`;
     case "event": return `/?event=${id}`;
@@ -684,7 +700,7 @@ function href(kind: RunArtifact["kind"], id: string, docKind?: string) {
 }
 
 /** Provenance of the last AI step feeding an action, so the records it creates stay traceable (TrustBadge on run artifacts). */
-function upstreamProvenance(x: ExecContext): Provenance | undefined {
+export function upstreamProvenance(x: ExecContext): Provenance | undefined {
   const list = upstreamTrust(x).map((t) => t.provenance).filter((p): p is Provenance => !!p);
   return list.length ? list[list.length - 1] : undefined;
 }
@@ -846,6 +862,7 @@ const actionSaveDocument: Executor = async (x) => {
   }
   const link = href("document", doc.id, kind);
   x.artifact({ kind: "document", id: doc.id, title: doc.title, href: link, meta: { kind, provenance: docProvenance } });
+  x.deliver({ kind: "document", format: kind === "sheet" ? "xlsx" : "docx", title: doc.title, href: link, docId: doc.id, libraryItemId, matterId: doc.matterId, size: doc.size, meta: { provenance: docProvenance, source: "action.save_document" } });
   x.log(`Saved ${kind === "sheet" ? "workbook" : "document"} "${doc.title}"`);
   return { output: { docId: doc.id, kind, title: doc.title, href: link, libraryItemId, size: doc.size, created: true, provenance: docProvenance } };
 };
@@ -873,7 +890,7 @@ const actionNotify: Executor = async (x) => {
   return { output: { notificationId: notif.id, updateId: update.id, recipients, channel: "in-app" } };
 };
 
-function toCsv(v: unknown): string {
+export function toCsv(v: unknown): string {
   const rows = Array.isArray(v) ? v : typeof v === "string" ? (() => { try { return JSON.parse(v); } catch { return null; } })() : null;
   if (!Array.isArray(rows)) return str(v);
   const wb = tableFromRows("export", rows);
@@ -901,6 +918,7 @@ const actionExport: Executor = async (x) => {
     libraryItemId = item.id;
   }
   x.artifact({ kind: "file", id: rec.id, title: filename, href: url, meta: { size: rec.size, format } });
+  x.deliver({ kind: "file", format: ext, title: filename, downloadHref: url, blobId: rec.id, libraryItemId, matterId: c.matterId ? str(c.matterId) : x.run.matterId, mime, size: rec.size, meta: { source: "action.export" } });
   x.log(`Exported ${filename} (${rec.size.toLocaleString()} bytes)`);
   return { output: { blobId: rec.id, url, size: rec.size, filename, format, libraryItemId } };
 };

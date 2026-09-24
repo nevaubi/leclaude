@@ -35,6 +35,22 @@ const LANE_NAME: Record<LaneKind, { name: string; brief: string }> = {
   fast: { name: "Fast answer", brief: "One pass over the structured providers" },
 };
 
+/** Lanes fed by the intelligence corpus and the note shown on their card. */
+const INTEL_LANE_NOTE: Record<LaneKind, string> = {
+  controlling: "Also searches ingested opinions and statutes in the intelligence corpus",
+  contrary: "Also searches ingested opinions in the intelligence corpus",
+  regulatory: "Also searches ingested CFR sections, Federal Register actions and recalls",
+  record: "Also searches watched dockets and MDL records in the intelligence corpus",
+  secondary: "Also searches indexed news, agency pages and local folders",
+  fast: "Also searches the intelligence corpus",
+};
+
+/** Whether a lane should also retrieve from the intelligence corpus (every provider-backed lane does). */
+export function intelFeeds(kind: LaneKind, sources: SearchSource[]): boolean {
+  void kind;
+  return sources.some((s) => s !== "web" && s !== "ediscovery");
+}
+
 /** Clean the natural-language question into a boolean-ish retrieval query. */
 export function retrievalQuery(question: string): string {
   const q = question.trim().replace(/\s+/g, " ");
@@ -67,6 +83,8 @@ export function planLanes(input: PlanInput): ResearchLane[] {
     maxSteps,
     maxReads,
     round,
+    intel: intelFeeds(kind, sources),
+    note: intelFeeds(kind, sources) ? INTEL_LANE_NOTE[kind] : undefined,
   });
 
   if (input.mode === "fast") {

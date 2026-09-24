@@ -22,7 +22,7 @@ export async function parseBody<T>(req: Request, schema: ZodType<T>): Promise<{ 
 export function errorResponse(e: unknown): Response {
   if (e instanceof AIConfigError) return jsonError(e.message, 503, { code: "no_api_key" });
   if (e instanceof StepError) {
-    const status = e.code === "not_found" ? 404 : e.code === "not_waiting" ? 409 : e.code === "invalid_workflow" || e.code === "missing_inputs" ? 422 : 400;
+    const status = e.code === "not_found" ? 404 : e.code === "not_waiting" ? 409 : e.code === "invalid_workflow" || e.code === "missing_inputs" || e.code === "invalid_inputs" ? 422 : 400;
     return jsonError(e.message, status, { code: e.code });
   }
   const msg = e instanceof Error ? e.message : String(e);

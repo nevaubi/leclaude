@@ -35,6 +35,42 @@ export const edgeSchema = z.object({
   label: z.string().optional().nullable(),
 });
 
+export const outputFormatSchema = z.enum(["docx", "xlsx", "pdf", "csv", "md", "pptx"]);
+
+export const frontendFieldSchema = z.object({
+  key: z.string().min(1).max(64).regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, "keys must be identifiers"),
+  label: z.string().min(1).max(140),
+  type: z.enum(["file", "files", "text", "textarea", "select", "multiselect", "toggle", "date", "number", "matter", "person", "library-folder", "bates-prefix", "output-format", "label"]),
+  required: z.boolean().optional(),
+  help: z.string().max(600).optional(),
+  placeholder: z.string().max(300).optional(),
+  options: z.array(z.string().max(200)).max(100).optional(),
+  accept: z.array(z.string().max(60)).max(40).optional(),
+  default: z.unknown().optional(),
+  group: z.string().max(80).optional(),
+});
+
+/** The one-page start form and output/after-run settings a workflow ships with (Workflow.frontend). */
+export const workflowFrontendSchema = z.object({
+  title: z.string().min(1).max(140),
+  intro: z.string().max(2000).optional(),
+  fields: z.array(frontendFieldSchema).max(40),
+  submitLabel: z.string().max(60).optional(),
+  output: z.object({
+    formats: z.array(outputFormatSchema).max(6).optional(),
+    defaultFormat: outputFormatSchema.optional(),
+    defaultLabel: z.string().max(300).optional(),
+    libraryFolderId: z.string().max(120).optional(),
+    notifyPeopleIds: z.array(z.string()).max(50).optional(),
+  }).optional(),
+  after: z.object({
+    triggerWorkflowIds: z.array(z.string()).max(10).optional(),
+    createTask: z.object({ title: z.string().max(300), assigneeId: z.string().optional(), dueRule: z.string().max(60).optional() }).optional(),
+  }).optional(),
+});
+
+export type WorkflowFrontendInput = z.infer<typeof workflowFrontendSchema>;
+
 export const workflowUpsertSchema = z.object({
   name: z.string().min(1).max(140),
   description: z.string().max(2000).optional(),
@@ -45,6 +81,9 @@ export const workflowUpsertSchema = z.object({
   status: z.enum(["draft", "active", "archived"]).optional(),
   tags: z.array(z.string()).optional(),
   isTemplate: z.boolean().optional(),
+  /** null removes the front end; undefined leaves it unchanged. */
+  frontend: workflowFrontendSchema.nullable().optional(),
+  system: z.boolean().optional(),
 });
 
 export type WorkflowUpsert = z.infer<typeof workflowUpsertSchema>;
@@ -53,6 +92,8 @@ export const runStartSchema = z.object({
   inputs: z.record(z.string(), z.unknown()).optional(),
   matterId: z.string().nullable().optional(),
   triggeredBy: z.enum(["manual", "schedule", "event", "api"]).optional(),
+  /** True when the values come from the front end page (already mapped by mapFrontendValues). */
+  frontend: z.boolean().optional(),
 });
 
 export const approvalSchema = z.object({ approved: z.boolean(), comment: z.string().max(4000).optional() });

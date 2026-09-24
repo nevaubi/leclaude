@@ -157,4 +157,53 @@ export function extractPlainText(content: unknown): string {
   return out.join(" ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
 }
 
-export const INTERNAL_TOOLS = [searchEdiscoveryTool, getEdiscoveryDocumentTool, searchLibraryTool, getLibraryItemTool, matterContextTool];
+/**
+ * Intelligence context for the agents: the matter's judge, court and MDL as
+ * resolved entities, recent docket and regulatory activity, the sourced
+ * chronology and ranked insights; the user's matters, calendar, due tasks and
+ * watches; and, with a query, the best-matching passages from the ingested
+ * corpus (opinions, dockets, regulations, recalls, news, local files). Loads
+ * the intel modules lazily so the toolkit stays light when they are unused.
+ */
+export const getIntelContextTool = defineTool<{ matter_id?: string; user_id?: string; query?: string; entity_id?: string; limit?: number }>({
+  name: "get_intel_context",
+  description: "Intelligence context from the firm's background-ingested corpus: for a matter, the resolved judge/court/MDL, recent docket and regulatory activity, a sourced chronology and ranked insights; for a user, active matters, the next two weeks of calendar, due tasks and watches; for a query, the most relevant passages from opinions, dockets, regulations, Federal Register notices, FDA recalls, MDL records, news and local documents (with record ids and URLs). Use it before answering matter-specific questions or when the user asks what changed.",
+  parameters: {
+    type: "object",
+    properties: {
+      matter_id: { type: "string", description: "Matter id for matter context" },
+      user_id: { type: "string", description: "User id for personal context (defaults to the current user)" },
+      query: { type: "string", description: "Search the intelligence corpus for passages" },
+      entity_id: { type: "string", description: "Intel entity id (judge, attorney, firm, MDL, product…) for a compact profile" },
+      limit: { type: "integer", description: "Passages to return for a query (default 6, max 12)" },
+    },
+    required: [],
+  },
+  label: (a) => (a.query ? `Searching intelligence: ${a.query}` : a.matter_id ? "Loading matter intelligence" : "Loading intelligence context"),
+  async execute({ matter_id, user_id, query, entity_id, limit }) {
+    const [{ buildMatterContext, buildUserContext }, { searchIntel, intelEntities }, { profileSummary }] = await Promise.all([import("@/modules/intel/context/user-context"), import("@/modules/intel/store"), import("@/modules/intel/analysis/profiles")]);
+    const out: Record<string, unknown> = {};
+    if (matter_id) {
+      const m = buildMatterContext(matter_id);
+      if (!m) throw new Error(`No matter ${matter_id}`);
+      out.matter = { ...m.matter, judge: m.judge, court: m.court, mdl: m.mdl, team: m.team.map((p) => p.name), recent_docket: m.activity.docket.slice(0, 6).map((d) => ({ id: d.id, date: d.date, title: d.title, url: d.url, confidence: d.confidence, flags: d.flags.map((f) => f.kind) })), recent_regulatory: m.activity.regulatory.slice(0, 6).map((d) => ({ id: d.id, date: d.date, title: d.title, url: d.url })), chronology: m.chronology.slice(-15), insights: m.insights.slice(0, 5).map((i) => ({ id: i.id, kind: i.kind, title: i.title, summary: i.summary.slice(0, 400), confidence: i.confidence, status: i.status })), calendar: m.calendar.slice(0, 8), tasks: m.tasks.slice(0, 8), records_by_kind: m.byKind };
+    }
+    if (user_id || (!matter_id && !query && !entity_id)) {
+      const u = buildUserContext(user_id);
+      out.user = { id: u.userId, name: u.user.name, team: u.team.map((p) => p.name), matters: u.matters.map((m) => ({ id: m.id, shortName: m.shortName, status: m.status, stage: m.stage, court: m.court, judge: m.judge, keyDates: m.keyDates.slice(0, 3), recentRecords: m.recentRecords })), calendar: u.calendar.slice(0, 10), tasks: u.tasks.slice(0, 10), watches: u.watches.map((w) => ({ kind: w.kind, label: w.label })), insights: u.insights.slice(0, 5).map((i) => ({ id: i.id, kind: i.kind, title: i.title, summary: i.summary.slice(0, 300) })), upcoming: u.upcoming.slice(0, 4).map((x) => ({ event: x.event.title, at: x.event.startsAt, matter: x.matter?.shortName, prep: x.insights.map((i) => i.title), records: x.records.map((r) => r.title) })) };
+    }
+    if (entity_id) {
+      const e = intelEntities().get(entity_id);
+      if (!e) throw new Error(`No entity ${entity_id}`);
+      const p = profileSummary(e);
+      out.entity = { id: e.id, type: e.type, name: e.name, aliases: e.aliases, attributes: e.attributes, documents: p.counts.documents, tendencies: p.tendencies.map((t) => ({ motion: t.label, total: t.total, granted: t.granted, denied: t.denied, partial: t.partial })), related: p.related.map((r) => `${r.relation} ${r.entity.name} (×${r.weight})`), recent: p.recent.map((d) => ({ id: d.id, date: d.date, title: d.title, url: d.url })) };
+    }
+    if (query) {
+      const hits = await searchIntel({ q: query, matterId: matter_id, limit: Math.min(limit ?? 6, 12) });
+      out.hits = hits.map((h) => ({ id: h.doc.id, kind: h.doc.kind, title: h.doc.title, court: h.doc.court, citation: h.doc.citation, docket: h.doc.docketNumber, date: h.doc.dates.decided ?? h.doc.dates.filed ?? h.doc.dates.published ?? h.doc.dates.event, url: h.doc.url, confidence: h.doc.confidence, flags: h.doc.flags.map((f) => f.kind), passage: h.chunk.text.slice(0, 700), score: Number(h.score.toFixed(3)) }));
+    }
+    return out;
+  },
+});
+
+export const INTERNAL_TOOLS = [searchEdiscoveryTool, getEdiscoveryDocumentTool, searchLibraryTool, getLibraryItemTool, matterContextTool, getIntelContextTool];
