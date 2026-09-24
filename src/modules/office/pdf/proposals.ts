@@ -48,7 +48,7 @@ export function opTitle(op: PdfOp): string {
 /** Apply one operation, returning a new model (input untouched). Throws on invalid targets. */
 export function applyOp(model: PdfModel, raw: PdfOp | Record<string, unknown>): PdfModel {
   const op = raw as PdfOp;
-  const next: PdfModel = { ...model, pages: model.pages.map((p) => ({ ...p })), annotations: model.annotations.map((a) => ({ ...a })), bookmarks: model.bookmarks ? [...model.bookmarks] : undefined, meta: { ...model.meta } };
+  const next: PdfModel = { ...model, pages: [...model.pages].sort((a, b) => a.order - b.order).map((p) => ({ ...p })), annotations: model.annotations.map((a) => ({ ...a })), bookmarks: model.bookmarks ? [...model.bookmarks] : undefined, meta: { ...model.meta } };
   const known = new Set(next.pages.map((p) => p.index));
   const requirePages = (list: number[]) => { for (const n of list) if (!known.has(n)) throw new Error(`No page with source number ${n}`); };
   switch (op.op) {
@@ -89,6 +89,7 @@ export function applyOp(model: PdfModel, raw: PdfOp | Record<string, unknown>): 
       const set = new Set(op.sourcePages);
       const remaining = next.pages.filter((p) => !p.deleted && !set.has(p.index));
       if (!remaining.length) throw new Error("Cannot delete every page");
+      // Deleted pages keep their position so a restore puts them back where they were.
       next.pages = next.pages.map((p) => (set.has(p.index) ? { ...p, deleted: true } : p));
       return renumber(next);
     }
@@ -117,10 +118,9 @@ export function applyOp(model: PdfModel, raw: PdfOp | Record<string, unknown>): 
       const count = Math.max(1, Math.min(50, op.count ?? 1));
       const maxIdx = Math.max(9999, ...next.pages.map((p) => p.index));
       const blanks: PdfPage[] = Array.from({ length: count }, (_, i) => ({ id: i === 0 && op.id ? op.id : newPageId(), index: maxIdx + 1 + i, rotation: 0, width, height, order: 0, blank: true }));
-      const ordered = [...active];
-      ordered.splice(after, 0, ...blanks);
-      const deleted = next.pages.filter((p) => p.deleted);
-      next.pages = [...ordered, ...deleted];
+      // Insert into the full list right after the reference active page (or at the very start).
+      const at = after === 0 ? 0 : next.pages.findIndex((p) => p.id === active[after - 1].id) + 1;
+      next.pages.splice(at, 0, ...blanks);
       return renumber(next);
     }
     case "fill_form":
@@ -153,11 +153,9 @@ export function applyOp(model: PdfModel, raw: PdfOp | Record<string, unknown>): 
   }
 }
 
-/** Recompute `order` so active pages are 0..n-1 in sequence and deleted pages follow. */
+/** Array position is authoritative: recompute `order` sequentially (deleted pages keep their slot). */
 function renumber(m: PdfModel): PdfModel {
-  const active = m.pages.filter((p) => !p.deleted).sort((a, b) => a.order - b.order);
-  const deleted = m.pages.filter((p) => p.deleted).sort((a, b) => a.order - b.order);
-  m.pages = [...active, ...deleted].map((p, i) => ({ ...p, order: i }));
+  m.pages = m.pages.map((p, i) => ({ ...p, order: i }));
   return m;
 }
 

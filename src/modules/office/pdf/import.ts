@@ -12,7 +12,10 @@ export async function importDocument(bytes: Uint8Array, filename: string): Promi
   const head = new TextDecoder("latin1").decode(bytes.subarray(0, 8));
   if (!head.startsWith("%PDF")) throw new Error(`${filename} is not a PDF file`);
   const { model, extraction } = await modelFromBytes(bytes, { name: filename });
-  const title = (extraction.meta.title && extraction.meta.title.length < 160 ? extraction.meta.title : "") || filename.replace(/\.pdf$/i, "");
+  // Prefer the file name (productions and scans carry meaningless metadata titles); keep the metadata title for reference.
+  const fromName = filename.replace(/\.pdf$/i, "").replace(/[_]+/g, " ").trim();
+  const title = fromName || extraction.meta.title || "Imported PDF";
   model.meta.title = title;
+  if (extraction.meta.title) model.meta.pdfTitle = extraction.meta.title;
   return { title, content: model, meta: { pages: model.pageCount, hasForm: model.meta.hasForm, producer: extraction.meta.producer, textChars: extraction.pages.reduce((n, p) => n + p.text.length, 0) } };
 }

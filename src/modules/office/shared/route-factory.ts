@@ -18,6 +18,7 @@ export interface OfficeAgentContext<S> {
   snapshot: S;
   matter: Matter | null;
   docTitle: string;
+  docId?: string;
   context: Record<string, unknown>;
   /** Register an edit proposal; it is streamed to the client and returned for chaining. */
   propose: (p: Omit<EditProposal, "id" | "status">) => EditProposal;
@@ -69,6 +70,7 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
         snapshot,
         matter,
         docTitle: body.docTitle ?? "Untitled",
+        docId: body.docId,
         context: body.context ?? {},
         proposals,
         findings,

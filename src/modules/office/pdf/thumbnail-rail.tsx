@@ -130,7 +130,10 @@ function Thumb({ page, display, pdfDoc, cacheKey, current, selected, annotations
     <div ref={(n) => { setNodeRef(n); (ref as React.MutableRefObject<HTMLDivElement | null>).current = n; }} style={{ transform: CSS.Transform.toString(transform), transition }} data-thumb={display} {...attributes} {...listeners} onClick={onClick} role="option" aria-selected={selected || current} className={cn("group flex cursor-pointer gap-1.5 rounded-md p-1 transition-colors", (current || selected) ? "bg-accent" : "hover:bg-accent/60", isDragging && "opacity-60")}>
       <span className={cn("w-4 shrink-0 pt-0.5 text-right text-[10px] tabular", current ? "font-semibold text-foreground" : "text-muted-foreground")}>{display}</span>
       <div className={cn("relative flex-1 overflow-hidden rounded-sm border bg-paper", selected ? "border-primary ring-1 ring-primary/40" : current ? "border-primary/50" : "border-border", portrait ? "aspect-[8.5/11]" : "aspect-[11/8.5]")}>
-        {src ? <img src={src} alt={`Page ${display}`} className="h-full w-full object-contain" draggable={false} /> : page.blank ? <div className="flex h-full items-center justify-center text-[9px] uppercase text-muted-foreground/60">blank</div> : <div className="h-full w-full animate-pulse bg-muted/50" />}
+        {src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt={`Page ${display}`} className="h-full w-full object-contain" draggable={false} />
+        ) : page.blank ? <div className="flex h-full items-center justify-center text-[9px] uppercase text-muted-foreground/60">blank</div> : <div className="h-full w-full animate-pulse bg-muted/50" />}
         {(annotations > 0 || comments > 0) && (
           <div className="absolute bottom-1 right-1 flex gap-0.5">
             {annotations > 0 && <span className="rounded bg-warning/90 px-1 text-[9px] font-medium tabular text-warning-foreground">{annotations}</span>}

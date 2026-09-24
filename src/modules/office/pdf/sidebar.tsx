@@ -144,7 +144,7 @@ function OutlineTab() {
         <Input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} placeholder={`Bookmark page ${currentPage}…`} className="h-7 text-xs" />
         <Button size="sm" className="h-7" onClick={add}><Bookmark className="size-3.5" /> Add</Button>
       </div>
-      {bookmarks.length === 0 ? <div className="px-2 py-1 text-xs text-muted-foreground">Bookmarks are written into the exported PDF's outline.</div> : (
+      {bookmarks.length === 0 ? <div className="px-2 py-1 text-xs text-muted-foreground">Bookmarks are written into the exported PDF&apos;s outline.</div> : (
         <ul className="space-y-0.5">
           {bookmarks.map((b) => (
             <li key={b.id} className="group flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent" style={{ paddingLeft: 8 + ((b.level ?? 1) - 1) * 12 }}>

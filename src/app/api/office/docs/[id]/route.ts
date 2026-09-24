@@ -29,3 +29,6 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params;
   return Response.json({ ok: deleteOfficeDoc(id) });
 }
+
+/** Alias for keepalive/sendBeacon saves on page unload (beacons can only POST). */
+export const POST = PUT;

@@ -48,16 +48,26 @@ export async function modelFromBytes(bytes: Uint8Array, opts: { name?: string; t
 
 /** Resolve annotations that carry a `quote` but no rects (seeded/agent) against the extraction. */
 export function resolveQuotedAnnotations(model: PdfModel, extraction: Extraction): PdfModel {
-  const annotations = model.annotations.map((a) => {
+  const annotations = model.annotations.map((a0) => {
+    let a = a0;
     if (a.rects.length || !a.quote) return a;
-    const page = extraction.pages.find((p) => p.page === a.page);
-    if (!page) return a;
-    const hits = searchRuns(page.runs, a.quote, { limit: 1 });
-    if (!hits.length) return a;
-    const r = hits[0].rects;
-    if (a.type === "note" || a.type === "stamp" || a.type === "text") {
+    // Search the annotation's page first, then the rest of the document (seeded quotes may sit on a neighbouring page).
+    const ordered = [...extraction.pages].sort((x, y) => (x.page === a.page ? -1 : y.page === a.page ? 1 : x.page - y.page));
+    let page: (typeof ordered)[number] | undefined;
+    let hit: ReturnType<typeof searchRuns>[number] | undefined;
+    for (const p of ordered) { const hits = searchRuns(p.runs, a.quote, { limit: 1 }); if (hits.length) { page = p; hit = hits[0]; break; } }
+    if (!page || !hit) return a;
+    if (page.page !== a.page) a = { ...a, page: page.page };
+    const r = hit.rects;
+    if (a.type === "stamp") {
+      // Stamps sit in the top-right corner of the page the quote is on (never over the quoted text).
+      const text = (a.text ?? "STAMP").toUpperCase();
+      const w = Math.min(page.width - 48, Math.max(120, text.length * 12 + 30)), h = 40;
+      return { ...a, rects: [{ x: page.width - w - 24, y: page.height - h - 18, w, h }] };
+    }
+    if (a.type === "note" || a.type === "text") {
       const b = r[0];
-      const w = a.type === "note" ? 20 : a.type === "stamp" ? 190 : 200, h = a.type === "note" ? 20 : a.type === "stamp" ? 44 : 60;
+      const w = a.type === "note" ? 20 : 200, h = a.type === "note" ? 20 : 60;
       return { ...a, rects: [{ x: Math.min(b.x + b.w + 6, page.width - w - 20), y: b.y + b.h - h + (a.type === "note" ? 0 : 10), w, h }] };
     }
     return { ...a, rects: r };

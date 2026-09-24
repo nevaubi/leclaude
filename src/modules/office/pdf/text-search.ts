@@ -114,7 +114,7 @@ export function snippetAround(text: string, start: number, end: number, radius =
 
 /** Built-in PII patterns for "redact every SSN / account number / phone / email". */
 export const PII_PATTERNS: { id: string; label: string; pattern: string }[] = [
-  { id: "ssn", label: "Social Security numbers", pattern: "\\b(?!000|666|9\\d\\d)\\d{3}[- ]?(?!00)\\d{2}[- ]?(?!0000)\\d{4}\\b" },
+  { id: "ssn", label: "Social Security numbers", pattern: "\\b(?!000|666|9\\d\\d)\\d{3}[- ](?!00)\\d{2}[- ](?!0000)\\d{4}\\b" },
   { id: "account", label: "Account / routing numbers", pattern: "\\b(?:acct|account|routing|aba|iban)\\.?\\s*(?:no\\.?|number|#)?\\s*:?\\s*[A-Z]{0,2}\\d[\\d -]{6,}\\d\\b" },
   { id: "card", label: "Payment card numbers", pattern: "\\b(?:\\d[ -]?){13,16}\\b" },
   { id: "phone", label: "Phone numbers", pattern: "\\(?\\b\\d{3}\\)?[-. ]\\d{3}[-. ]\\d{4}\\b" },

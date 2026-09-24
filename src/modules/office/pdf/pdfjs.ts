@@ -1,22 +1,25 @@
 "use client";
 /**
  * Browser-side pdf.js loader. The library is imported lazily (it touches DOM
- * globals) and the worker is bundled by Next through `new URL(..., import.meta.url)`.
+ * globals). The worker is served by /api/office/pdf/worker (reading the
+ * pdfjs-dist bundle at request time); set NEXT_PUBLIC_PDFJS_WORKER_URL to
+ * serve it statically instead (see scripts/copy-worker.mjs).
  */
 import type { PDFDocumentProxy, PDFPageProxy, PageViewport } from "pdfjs-dist";
 import type { PdfRect } from "./model";
 import type { TextRun } from "./text-search";
 
 export type { PDFDocumentProxy, PDFPageProxy, PageViewport };
-type PdfJs = typeof import("pdfjs-dist");
+type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 
 let libPromise: Promise<PdfJs> | null = null;
 
 export function loadPdfjs(): Promise<PdfJs> {
   if (!libPromise) {
-    libPromise = import("pdfjs-dist").then((lib) => {
+    // The legacy build carries the polyfills (e.g. Map.prototype.getOrInsertComputed) that the modern bundle assumes.
+    libPromise = import("pdfjs-dist/legacy/build/pdf.mjs").then((lib) => {
       if (!lib.GlobalWorkerOptions.workerSrc) {
-        lib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        lib.GlobalWorkerOptions.workerSrc = process.env.NEXT_PUBLIC_PDFJS_WORKER_URL || "/api/office/pdf/worker";
       }
       return lib;
     });
