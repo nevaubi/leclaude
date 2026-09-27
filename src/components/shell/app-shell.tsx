@@ -19,7 +19,8 @@ import { DEFAULT_USER } from "@/lib/current-user";
 
 export interface ShellUser { id: string; name: string; role?: string; email?: string }
 
-const DEFAULT_SHELL_USER: ShellUser = { ...DEFAULT_USER, role: "Partner", email: "jwhitfield@seegerweiss.com" };
+/** Neutral placeholder only; the layout always passes the workspace owner. */
+const DEFAULT_SHELL_USER: ShellUser = { ...DEFAULT_USER };
 
 /**
  * Application shell: a slim icon rail (expandable to labels), a 44px top bar
