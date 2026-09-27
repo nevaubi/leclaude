@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/filterbar-helpers";
 import { acceptsFile, addFiles, describeFiles, flattenFolders, formatAccept, formatFileSize, normalizeAccept } from "@/components/ui/form-helpers";
 import { GLOBAL_SHORTCUTS, detectPlatform, formatKeys, isTypingTarget, mergeShortcutGroups } from "@/components/ui/shortcut-help-helpers";
-import { currentUser, resolveUserId, DEFAULT_USER } from "@/lib/current-user";
+import { currentUser, resolveUserId, DEFAULT_USER , setWorkspaceUser} from "@/lib/current-user";
 import { corpusDirs, providerStatuses, providersPayload } from "@/modules/settings/providers";
 import { SETTINGS_GROUPS, sectionForHash } from "@/modules/settings/settings-groups";
 import { GO_CHORD, NAV } from "@/components/shell/nav";
@@ -275,14 +275,17 @@ describe("Shortcut help", () => {
 // ---------------------------------------------------------------------------
 
 describe("current user", () => {
-  it("falls back to the demo persona and honours a valid env override", () => {
-    expect(resolveUserId(undefined)).toBe("p_jwhitfield");
-    expect(resolveUserId({ LECLAUDE_USER_ID: "  " })).toBe("p_jwhitfield");
+  it("falls back to the workspace owner or a neutral placeholder and honours a valid env override", () => {
+    expect(resolveUserId(undefined)).toBe(DEFAULT_USER.id);
+    expect(resolveUserId({ LECLAUDE_USER_ID: "  " })).toBe(DEFAULT_USER.id);
     expect(resolveUserId({ LECLAUDE_USER_ID: "p_praman" })).toBe("p_praman");
-    expect(resolveUserId({ LECLAUDE_USER_ID: "bad id!" })).toBe("p_jwhitfield");
+    expect(resolveUserId({ LECLAUDE_USER_ID: "bad id!" })).toBe(DEFAULT_USER.id);
     const prev = process.env.LECLAUDE_USER_ID;
     delete process.env.LECLAUDE_USER_ID;
-    expect(currentUser()).toEqual(DEFAULT_USER);
+    setWorkspaceUser(null);
+    expect(currentUser()).toEqual({ id: DEFAULT_USER.id, name: DEFAULT_USER.name });
+    setWorkspaceUser({ id: "p_jwhitfield", name: "Jordan Whitfield" });
+    expect(currentUser()).toEqual({ id: "p_jwhitfield", name: "Jordan Whitfield" });
     expect(currentUser((id) => (id === "p_jwhitfield" ? "Jordan W." : undefined)).name).toBe("Jordan W.");
     process.env.LECLAUDE_USER_ID = "p_praman";
     expect(currentUser()).toEqual({ id: "p_praman", name: "p_praman" });

@@ -1,21 +1,32 @@
 /**
- * The signed-in user. LeClaude runs as a single demo persona (Jordan Whitfield,
- * Partner) until real authentication lands; every module reads the identity
- * from here instead of carrying its own constant.
+ * The signed-in user. Until an identity provider is configured (AUTH_MODE=jwt/header, see
+ * src/lib/auth), the identity is the workspace owner recorded by first-run setup
+ * (src/lib/workspace.ts applies it at database init). Every module reads the identity from
+ * here instead of carrying its own constant.
  *
- * Client-safe: no server imports. `LECLAUDE_USER_ID` (server env) overrides the
- * id so a deployment can run as another seeded person; the name is resolved
- * lazily by callers that have the people collection (see `resolveCurrentUser`).
+ * Client-safe: no server imports. `LECLAUDE_USER_ID` (server setting) overrides the id; the
+ * name is resolved lazily by callers that have the people collection.
  */
 export interface CurrentUser {
   id: string;
   name: string;
 }
 
-export const DEFAULT_USER: CurrentUser = { id: "p_jwhitfield", name: "Jordan Whitfield" };
+/** Placeholder identity before first-run setup; never a real person. */
+export const DEFAULT_USER: CurrentUser = { id: "u_owner", name: "Workspace owner" };
 
-/** Static identity for modules that need a constant (seeds, defaults). Prefer `currentUser()` at call time. */
-export const CURRENT_USER: CurrentUser = DEFAULT_USER;
+let workspaceUser: CurrentUser | null = null;
+
+/** Set by the workspace layer from the stored owner (first-run setup, or the demo seed). */
+export function setWorkspaceUser(user: CurrentUser | null) {
+  workspaceUser = user ? { id: user.id, name: user.name } : null;
+}
+
+/** Live view of the current identity for modules that read `.id` / `.name`; resolved at each access. Prefer `currentUser()`. */
+export const CURRENT_USER: CurrentUser = {
+  get id() { return currentUser().id; },
+  get name() { return currentUser().name; },
+};
 
 /** Pure resolver, unit-tested: an env override wins when it is a non-empty person id. */
 export function resolveUserId(env: { LECLAUDE_USER_ID?: string } | undefined, fallback = DEFAULT_USER.id): string {
@@ -30,7 +41,8 @@ export function resolveUserId(env: { LECLAUDE_USER_ID?: string } | undefined, fa
  */
 export function currentUser(lookupName?: (id: string) => string | undefined): CurrentUser {
   const env = typeof process !== "undefined" ? (process.env as { LECLAUDE_USER_ID?: string }) : undefined;
-  const id = resolveUserId(env);
-  if (id === DEFAULT_USER.id) return { id, name: lookupName?.(id) ?? DEFAULT_USER.name };
+  const base = workspaceUser ?? DEFAULT_USER;
+  const id = resolveUserId(env, base.id);
+  if (id === base.id) return { id, name: lookupName?.(id) ?? base.name };
   return { id, name: lookupName?.(id) ?? id };
 }

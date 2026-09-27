@@ -13,7 +13,8 @@ import { buildGraph, resolvePersonName } from "./graph";
 import { CURRENT_USER, currentUser } from "@/lib/current-user";
 
 /** Kept for existing importers; prefer `currentUser().id` at call time (honours LECLAUDE_USER_ID). */
-export const CURRENT_USER_ID = CURRENT_USER.id;
+/** The acting user id, resolved per call. */
+export function currentUserId(): string { return CURRENT_USER.id; }
 const DESIGNATIONS = "ediscovery_designations";
 const CONFLICT_NOTES = "ediscovery_conflict_notes";
 const FACT_MATRICES = "ediscovery_fact_matrices";

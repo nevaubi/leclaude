@@ -11,7 +11,6 @@ vi.hoisted(() => {
 import { NextRequest } from "next/server";
 import { db, resetSqlite } from "@/lib/db";
 import { CONFIDENCE_GATE } from "@/lib/integrity/types";
-import { CURRENT_USER } from "@/lib/current-user";
 import { MATTERS } from "@/lib/seed/ids";
 import { E } from "@/modules/intel/seed-corpus";
 import { getDocument, intelEntities, intelInsights, upsertDocument } from "@/modules/intel/store";
@@ -46,7 +45,7 @@ import * as analysisRoute from "@/app/api/intel/analysis/route";
 import type { IntelDocument, IntelInsight, IntelTimelineEntry } from "@/modules/intel/types";
 
 const AFFF = MATTERS.afff;
-const USER = CURRENT_USER.id;
+const USER = "p_jwhitfield"; // demo workspace owner (LECLAUDE_SEED=demo)
 const BASE = "http://localhost/api/intel";
 const req = (path: string, init: RequestInit = {}) => new NextRequest(`${BASE}${path}`, init as ConstructorParameters<typeof NextRequest>[1]);
 const post = (path: string, body: unknown, method = "POST") => req(path, { method, body: JSON.stringify(body), headers: { "content-type": "application/json" } });

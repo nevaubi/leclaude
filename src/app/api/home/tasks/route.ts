@@ -1,7 +1,7 @@
 import { jsonError } from "@/lib/ai/sse";
 import { createTask, listTasks } from "@/modules/home/service";
 import { taskCreateSchema } from "@/modules/home/schemas";
-import { CURRENT_USER_ID } from "@/modules/home/types";
+import { currentUserId } from "@/modules/home/types";
 import type { Task } from "@/lib/types/domain";
 import { param, parseBody } from "@/modules/home/api-utils";
 import { withAuth } from "@/lib/auth/route";
@@ -13,7 +13,7 @@ async function handleGET(req: Request) {
   const url = new URL(req.url);
   const tasks = listTasks({
     matterId: param(url, "matter"),
-    assigneeId: url.searchParams.get("mine") === "1" ? CURRENT_USER_ID : param(url, "assignee"),
+    assigneeId: url.searchParams.get("mine") === "1" ? currentUserId() : param(url, "assignee"),
     status: param(url, "status") as Task["status"] | null,
     overdue: url.searchParams.get("overdue") === "1",
     includeDone: url.searchParams.get("includeDone") !== "0",

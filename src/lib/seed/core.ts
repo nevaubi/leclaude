@@ -1,4 +1,5 @@
 import "server-only";
+import { saveWorkspace } from "@/lib/workspace";
 import type { Database } from "@/lib/db";
 import type { Matter, Person } from "@/lib/types/domain";
 import { MATTERS, PEOPLE } from "./ids";
@@ -143,5 +144,7 @@ const matters: Matter[] = [
 
 export function seedCore(db: Database) {
   db.people.putMany(people);
+  // Demo workspace: the sample partner is the owner so the demo reads as a configured firm.
+  if (!db.kv.get("workspace")) saveWorkspace({ firmName: "Seeger Weiss LLP", owner: { id: "p_jwhitfield", name: "Jordan Whitfield", email: "jwhitfield@seegerweiss.com", role: "Partner" } });
   db.matters.putMany(matters);
 }

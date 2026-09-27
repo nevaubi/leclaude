@@ -42,7 +42,8 @@ import {
 } from "./types";
 
 /** The signed-in reviewer (LECLAUDE_USER_ID override honoured through @/lib/current-user). */
-export const CURRENT_USER_ID = currentUser().id;
+/** The acting reviewer id, resolved per call. */
+export function currentUserId(): string { return currentUser().id; }
 /** Maximum number of documents returned by a semantic (hybrid) search. */
 export const SEMANTIC_K = 60;
 /** Hard cap on rows per search page (the grid is virtualised; the client pages in 500s and refreshes with everything loaded). */
@@ -509,7 +510,7 @@ export function getDocument(id: string, opts: { recordView?: boolean } = {}): Do
   };
 }
 
-export function updateCoding(id: string, patch: CodingPatch, reviewerId: string = CURRENT_USER_ID): EDocument | null {
+export function updateCoding(id: string, patch: CodingPatch, reviewerId: string = currentUserId()): EDocument | null {
   const cur = db().edocs.get(id);
   if (!cur) return null;
   const coding = { ...cur.coding, ...patch };
@@ -589,7 +590,7 @@ export function bulkCode(req: BulkCodingRequest): { updated: number } {
   const ids = req.includeFamilies ? expandFamilies(Array.from(new Set(req.ids))).ids : Array.from(new Set(req.ids));
   const docs = ids.map((id) => db().edocs.get(id)).filter(Boolean) as EDocument[];
   const now = new Date().toISOString();
-  const reviewerId = req.reviewerId ?? CURRENT_USER_ID;
+  const reviewerId = req.reviewerId ?? currentUserId();
   const next = docs.map((cur) => {
     const coding = { ...cur.coding, ...req.patch };
     let issues = coding.issues ?? [];

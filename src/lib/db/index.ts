@@ -7,6 +7,7 @@ import type {
   Person, Matter, Task, CalendarEvent, NewsItem, TeamUpdate, EDocument, Deposition, TimelineEvent, Relationship, Conflict, IssueCode, PrivilegeLogEntry, Workflow, WorkflowRun, OfficeDocument, OfficeVersion, OfficeComment, LibraryItem,
 } from "@/lib/types/domain";
 import { ensureSeeded } from "@/lib/seed";
+import { applyWorkspaceIdentity } from "@/lib/workspace";
 
 /**
  * Typed handles for every shared collection. Call `db()` from server code
@@ -41,6 +42,7 @@ export interface Database {
 }
 
 let handle: Database | null = null;
+let identityApplied = false;
 
 export function db(): Database {
   if (!handle) {
@@ -71,6 +73,7 @@ export function db(): Database {
     };
   }
   ensureSeeded(handle);
+  if (!identityApplied) { identityApplied = true; applyWorkspaceIdentity(); }
   return handle;
 }
 

@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     environment: "node",
-    env: { LECLAUDE_DATA_DIR: path.resolve(".vitest-data") },
+    env: { LECLAUDE_DATA_DIR: path.resolve(".vitest-data"), LECLAUDE_SEED: "demo" },
     fileParallelism: false,
   },
   resolve: {

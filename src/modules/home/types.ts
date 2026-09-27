@@ -3,7 +3,8 @@ import type { CalendarEvent, Matter, NewsItem, Person, PracticeArea, Task, TeamU
 import { CURRENT_USER } from "@/lib/current-user";
 
 /** Static id of the demo persona; services resolve the live identity with `currentUser()` (honours LECLAUDE_USER_ID). */
-export const CURRENT_USER_ID = CURRENT_USER.id;
+/** The signed-in user id, resolved per call. */
+export function currentUserId(): string { return CURRENT_USER.id; }
 
 export type BriefItemKind = "deadline" | "hearing" | "task" | "news" | "update" | "matter" | "note";
 
