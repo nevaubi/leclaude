@@ -5,7 +5,8 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     environment: "node",
-    env: { LECLAUDE_DATA_DIR: path.resolve(".vitest-data"), LECLAUDE_SEED: "demo" },
+    env: { // VITEST_DATA_DIR lets concurrent runs (parallel workers) use separate databases.
+    LECLAUDE_DATA_DIR: process.env.VITEST_DATA_DIR || path.resolve(".vitest-data"), LECLAUDE_SEED: "demo" },
     fileParallelism: false,
   },
   resolve: {
