@@ -95,7 +95,7 @@ export function PeopleGraphTab({ matterId, onOpenDocument }: AnalysisTabProps) {
   const listRows = React.useMemo<ListRow[]>(() => {
     const t = q.trim().toLowerCase();
     const people: ListRow[] = nodes.map((n) => ({ id: n.id, kind: "person", label: n.label, role: ROLE_LABEL[n.role ?? ""] ?? n.role ?? "", organization: n.organization, docs: n.docCount, testimony: n.testimony ?? 0, links: n.degree }));
-    const orgRows: ListRow[] = orgs.map((o) => ({ id: o.id, kind: "org", label: o.label, role: `${o.memberIds.length} people`, docs: o.docCount, testimony: o.testimony, links: o.memberIds.length }));
+    const orgRows: ListRow[] = orgs.map((o) => ({ id: o.id, kind: "org", label: o.label, role: `${o.memberIds.length} ${o.memberIds.length === 1 ? "person" : "people"}`, docs: o.docCount, testimony: o.testimony, links: o.memberIds.length }));
     const all = [...people, ...orgRows];
     return t ? all.filter((r) => `${r.label} ${r.organization ?? ""} ${r.role}`.toLowerCase().includes(t)) : all;
   }, [nodes, orgs, q]);
@@ -121,7 +121,7 @@ export function PeopleGraphTab({ matterId, onOpenDocument }: AnalysisTabProps) {
   };
 
   const inspectorVisible = !narrow || inspectorOpen;
-  const caption = <><span className="tabular">{hood.nodes.length} people · {hood.edges.length} relationships{hood.truncated ? " · strongest shown" : ""}</span><span className="hidden lg:inline">arrows walk the neighbors · Enter focuses · E selects the edge · Backspace goes back</span></>;
+  const caption = <><span className="tabular">{hood.nodes.length} {hood.nodes.length === 1 ? "person" : "people"} · {hood.edges.length} relationship{hood.edges.length === 1 ? "" : "s"}{hood.truncated ? " · strongest shown" : ""}</span><span className="hidden lg:inline">arrows walk the neighbors · Enter focuses · E selects the edge · Backspace goes back</span></>;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -273,7 +273,7 @@ function PersonInspector({ matterId, node, data, filters, onClose, onSelectEdge,
 function OrgInspector({ org, nodes, onClose, onFocus }: { org: GraphOrg; nodes: GraphNode[]; onClose?: () => void; onFocus: (id: string) => void }) {
   const members = org.memberIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is GraphNode => !!n).sort((a, b) => b.docCount - a.docCount);
   return (
-    <Inspector title={org.label} subtitle={`${members.length} people · ${org.docCount} documents · ${org.testimony} Q/A`} width={340} onClose={onClose}>
+    <Inspector title={org.label} subtitle={`${members.length} ${members.length === 1 ? "person" : "people"} · ${org.docCount} documents · ${org.testimony} Q/A`} width={340} onClose={onClose}>
       <table className="w-full table-fixed text-[12px]">
         <thead className="grid-head sticky top-0 z-10 bg-background"><tr><th className="px-3 py-1 text-left">Person</th><th className="w-[110px] px-2 py-1 text-left">Role</th><th className="w-[44px] px-1 py-1 text-right">Docs</th></tr></thead>
         <tbody>{members.map((m) => <tr key={m.id} className="row-default row-hover cursor-pointer border-t border-border/60" onClick={() => onFocus(m.id)}><td className="truncate px-3 font-medium">{m.label}</td><td className="truncate px-2 text-muted-foreground">{m.title ?? ROLE_LABEL[m.role ?? ""] ?? m.role}</td><td className="px-1 text-right tabular">{m.docCount}</td></tr>)}</tbody>

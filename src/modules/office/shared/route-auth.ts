@@ -1,4 +1,5 @@
 import "server-only";
+import { db } from "@/lib/db";
 import { hasMatterAccess } from "@/lib/auth/policy";
 import { bodyString, queryParam, refs } from "@/lib/auth/resources";
 import type { Principal, ResourceRef } from "@/lib/auth/types";
@@ -26,16 +27,25 @@ export async function officeDocFromBody(req: Request, _params: unknown, principa
   return narrowest(principal, doc, matterId);
 }
 
-/** Collection routes: the matter filter or target from the query string or the JSON body. */
-export async function officeCollection(req: Request): Promise<ResourceRef> {
-  const fromQuery = queryParam(req, "matterId", "matter");
-  const fromBody = req.method === "GET" || req.method === "HEAD" ? undefined : await bodyString(req, "matterId", "matter");
-  return { kind: "office_doc", matterId: fromQuery ?? fromBody };
+/** A target library folder that belongs to a matter the principal cannot open wins over the requested matter. */
+function withFolder(principal: Principal, ref: ResourceRef, folderId: string | undefined): ResourceRef {
+  const folderMatter = folderId ? db().library.get(folderId)?.matterId : undefined;
+  if (folderMatter && !hasMatterAccess(principal, folderMatter)) return { kind: "office_doc", matterId: folderMatter };
+  return ref;
 }
 
-/** Multipart uploads (import): the target matter from the form. */
-export async function officeUploadTarget(req: Request): Promise<ResourceRef> {
+/** Collection routes: the matter filter or target from the query string or the JSON body (and its target folder). */
+export async function officeCollection(req: Request, _params: unknown, principal: Principal): Promise<ResourceRef> {
+  const fromQuery = queryParam(req, "matterId", "matter");
+  const write = !(req.method === "GET" || req.method === "HEAD");
+  const fromBody = write ? await bodyString(req, "matterId", "matter") : undefined;
+  const ref: ResourceRef = { kind: "office_doc", matterId: fromQuery ?? fromBody };
+  return write ? withFolder(principal, ref, await bodyString(req, "folderId")) : ref;
+}
+
+/** Multipart uploads (import): the target matter and folder from the form. */
+export async function officeUploadTarget(req: Request, _params: unknown, principal: Principal): Promise<ResourceRef> {
   const form = await req.clone().formData().catch(() => null);
-  const m = form?.get("matterId");
-  return { kind: "office_doc", matterId: typeof m === "string" && m.trim() ? m.trim() : undefined };
+  const field = (k: string) => { const v = form?.get(k); return typeof v === "string" && v.trim() ? v.trim() : undefined; };
+  return withFolder(principal, { kind: "office_doc", matterId: field("matterId") }, field("folderId"));
 }

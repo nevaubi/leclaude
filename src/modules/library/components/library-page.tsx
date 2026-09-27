@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronRight, FolderInput, KeyRound, Library as LibraryIcon, Loader2, MessageSquareText, Star, Trash2, X, Download } from "lucide-react";
+import { ChevronRight, FolderInput, Library as LibraryIcon, Loader2, MessageSquareText, Star, Trash2, X, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
@@ -88,7 +88,7 @@ function Topbar() {
       {matter && <Badge variant="outline" size="sm" className="hidden sm:inline-flex">{matter.shortName}</Badge>}
       {list?.total != null && !isSearching && <span className="hidden text-[11.5px] tabular text-muted-foreground md:inline">{list.total} item{list.total === 1 ? "" : "s"}</span>}
       <div className="hidden items-center gap-1 md:flex">
-        <Tip label={aiConfigured ? "Ask the library (internal research)" : "Ask the library — OpenAI key required for answers"} shortcut="A"><Button variant={askOpen ? "secondary" : "ghost"} size="xs" onClick={() => setAskOpen(!askOpen)} className="gap-1.5"><MessageSquareText className="size-3.5" /> Ask{!aiConfigured && <KeyRound className="size-3 text-warning" />}</Button></Tip>
+        <Tip label={aiConfigured ? "Ask the library (internal research)" : "Ask the library — OpenAI key required for answers"} shortcut="A"><Button variant={askOpen ? "secondary" : "ghost"} size="xs" onClick={() => setAskOpen(!askOpen)} className="gap-1.5"><MessageSquareText className="size-3.5" /> Ask</Button></Tip>
       </div>
     </TopbarSlot>
   );

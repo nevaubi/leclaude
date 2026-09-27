@@ -78,7 +78,7 @@ export function SearchRail({ response, loading, onSaveSearch }: { response: Sear
           <FacetGroup title="Document type" facetKey="types" buckets={facets.type} filters={filters} onToggle={toggleFilter} />
           <FacetGroup title="Coding status" facetKey="statuses" buckets={facets.status} filters={filters} onToggle={toggleFilter} hideZero={false} />
           <FacetGroup title="Issue codes" facetKey="issues" buckets={facets.issues} filters={filters} onToggle={toggleFilter} renderLabel={(b) => { const ic = issueCodes.find((c) => c.code === b.value); const cls = issueColorClasses(ic?.color); return <span className="flex min-w-0 items-center gap-1.5"><span className={cn("size-1.5 shrink-0 rounded-full", cls.dot)} /><span className="font-mono text-[11px]">{b.value}</span><span className="truncate text-muted-foreground">{b.label}</span></span>; }} />
-          {facets.score.some((b) => b.count > 0) && <FacetGroup title="Suggested score" facetKey="scores" buckets={facets.score} filters={filters} onToggle={toggleFilter} hideZero={false} />}
+          {facets.score.some((b) => b.value !== "unscored" && b.count > 0) && <FacetGroup title="Suggested score" facetKey="scores" buckets={facets.score} filters={filters} onToggle={toggleFilter} hideZero={false} />}
           {!response?.totalWorkspace && <p className="px-3 pt-1 text-[11.5px] text-muted-foreground">Facets appear once the matter has documents.</p>}
         </>
       )}

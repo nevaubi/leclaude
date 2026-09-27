@@ -70,9 +70,11 @@ const RUN_VARIANT: Record<WorkflowRun["status"], "success" | "destructive" | "wa
 };
 
 
-export function RunStatusBadge({ status, className }: { status: WorkflowRun["status"]; className?: string }) {
+export function RunStatusBadge({ status, className, compact }: { status: WorkflowRun["status"]; className?: string; compact?: boolean }) {
   const variant = RUN_VARIANT[status] ?? "secondary";
   const tone = variant === "secondary" ? "muted" : variant;
+  const label = RUN_STATUS_LABEL[status] ?? status;
+  if (compact) return <span className={cn("inline-flex w-3 items-center justify-center", className)} title={label}>{status === "running" ? <Loader2 className="size-3 animate-spin text-muted-foreground" aria-label={label} /> : <StatusDot tone={tone} label={label} />}</span>;
   return (
     <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-[12px]", variant === "destructive" ? "text-destructive" : "text-foreground/85", className)}>
       {status === "running" ? <Loader2 className="size-3 animate-spin text-muted-foreground" aria-hidden /> : <StatusDot tone={tone} />}

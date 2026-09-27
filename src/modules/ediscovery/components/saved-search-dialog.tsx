@@ -50,7 +50,7 @@ export function SavedSearchDialog({ open, onOpenChange, onSaved }: { open: boole
             <div className="font-mono">{q.trim() || <span className="text-muted-foreground">(no query)</span>}</div>
             <div className="mt-1 text-muted-foreground">View: {SAVED_VIEWS.find((v) => v.id === view)?.label} · {facetCount} facet filter{facetCount === 1 ? "" : "s"}{semantic ? " · semantic ranking" : ""}</div>
           </div>
-          <Field label="Name" required htmlFor="ss-name"><Input id="ss-name" size="sm" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. TSCA 8(e) decision" onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && !empty) void submit(); }} /></Field>
+          <Field label="Name" required htmlFor="ss-name"><Input id="ss-name" size="sm" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Warranty negotiations" onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && !empty) void submit(); }} /></Field>
           <Field label="Description" htmlFor="ss-desc"><Textarea id="ss-desc" value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-[56px] text-xs" placeholder="What this search is for (RFP numbers, protocol section)…" /></Field>
           <label className="flex items-center justify-between text-[12px]"><span>Share with the matter team</span><Switch checked={shared} onCheckedChange={setShared} size="sm" /></label>
           {empty && <p className="text-[11.5px] text-destructive">Type a query, pick a view or set a facet first — an empty search cannot be saved.</p>}

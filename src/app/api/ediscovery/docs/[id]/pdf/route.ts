@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!doc) return jsonError(`No document ${id}`, 404);
   const applied = req.nextUrl.searchParams.get("applied") === "1";
   try {
-    const { bytes, pageMap } = await renderProductionPdfWithMap(doc, { begin: doc.bates, pages: doc.pages ?? 1 }, applied ? listRedactions({ docId: id }) : [], applied ? `${(doc.coding.confidentiality ?? "confidential").toUpperCase()} — SUBJECT TO PROTECTIVE ORDER` : "");
+    const { bytes, pageMap } = await renderProductionPdfWithMap(doc, { begin: doc.bates, pages: doc.pages ?? 1 }, applied ? listRedactions({ docId: id }) : [], applied && doc.coding.confidentiality ? `${doc.coding.confidentiality.toUpperCase()} — SUBJECT TO PROTECTIVE ORDER` : "");
     return new Response(new Uint8Array(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${doc.bates}${applied ? "-redacted" : ""}.pdf"`, "Cache-Control": "no-store", "X-Page-Map": pageMap.join(",") } });
   } catch (e) { return errorResponse(e); }
 }

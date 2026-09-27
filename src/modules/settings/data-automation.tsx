@@ -197,7 +197,7 @@ function DataAutomationPanel({ background, dataDir, corpusFolders }: { backgroun
 
         <SettingsBlock title="Provider status" description="Environment presence only; values are never shown.">
           {providers.data ? (
-            <div className="divide-hairline text-[12px]">{providers.data.providers.map((p) => <div key={p.id} className="flex h-7 items-center gap-2"><span className={cn("size-1.5 shrink-0 rounded-full", p.state === "configured" ? "bg-success" : p.state === "public" ? "bg-muted-foreground/60" : "bg-warning")} aria-hidden /><span className="w-[150px] shrink-0 truncate font-medium">{p.name}</span><span className="min-w-0 flex-1 truncate text-muted-foreground" title={p.detail}>{p.detail}</span><span className="hidden shrink-0 font-mono text-[10.5px] text-muted-foreground xl:inline">{p.env.join(", ")}</span></div>)}</div>
+            <div className="divide-hairline text-[12px]">{providers.data.providers.filter((p) => p.id !== "openai").map((p) => <div key={p.id} className="flex h-7 items-center gap-2"><span className={cn("size-1.5 shrink-0 rounded-full", p.state === "configured" ? "bg-success" : p.state === "public" ? "bg-muted-foreground/60" : "bg-muted-foreground/25")} aria-hidden /><span className="w-[150px] shrink-0 truncate font-medium">{p.name}</span><span className="min-w-0 flex-1 truncate text-muted-foreground" title={p.detail}>{p.detail}</span><span className="hidden shrink-0 font-mono text-[10.5px] text-muted-foreground xl:inline">{p.env.join(", ")}</span></div>)}</div>
           ) : <p className="text-[12px] text-muted-foreground">{providers.error ? `Could not load: ${providers.error}` : "Loading…"}</p>}
         </SettingsBlock>
 

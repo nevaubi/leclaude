@@ -161,7 +161,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
           </Tabs>
           {tab !== "runs" && (
             <>
-              <div className="relative ml-auto min-w-[200px]">
+              <div className="relative ml-auto min-w-[240px]">
                 <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tab === "system" ? "Search automations…" : "Search workflows and templates…"} size="xs" className="pl-7" aria-label="Search workflows" />
               </div>
@@ -322,7 +322,7 @@ function RecentRuns({ runs }: { runs: RunSummary[] }) {
           {runs.map((r) => (
             <li key={r.id}>
               <Link href={`/workflows/runs/${r.id}`} className="flex h-8 items-center gap-2 text-[12px] hover:bg-accent/50">
-                <RunStatusBadge status={r.status} className="shrink-0" />
+                <RunStatusBadge status={r.status} compact className="shrink-0" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{r.workflowName}</span>
                   <span className="block truncate text-[10.5px] text-muted-foreground">{r.matterName ? `${r.matterName} · ` : ""}{r.stepCounts.succeeded}/{r.stepTotal} steps{r.error ? ` · ${r.error}` : ""}</span>

@@ -608,7 +608,7 @@ function OutlineDialog({ open, onOpenChange, matterId, depositions, aiConfigured
             </div>
             <div className="grid gap-1.5">
               <Label>Topics (one per line; optional)</Label>
-              <Textarea value={topics} onChange={(e) => setTopics(e.target.value)} rows={4} placeholder={"8(e) reporting decision, March 2001\nMW-7 notification timing\nMSDS language"} />
+              <Textarea value={topics} onChange={(e) => setTopics(e.target.value)} rows={4} placeholder={"One topic per line, e.g.\nWhen the defect was first reported\nWho approved the recall decision"} />
             </div>
           </div>
         ) : (

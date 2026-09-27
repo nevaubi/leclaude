@@ -93,7 +93,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
         </Select>
         <form className="relative" onSubmit={(e) => { e.preventDefault(); applyTopic(topicInput); }}>
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={topicInput} onChange={(e) => setTopicInput(e.target.value)} placeholder="Topic — e.g. MW-7 notification, 8(e) decision, MSDS language" className="h-7 w-[300px] max-w-[50vw] pl-7 text-xs" aria-label="Topic" />
+          <Input value={topicInput} onChange={(e) => setTopicInput(e.target.value)} placeholder="Topic — e.g. first notice of the defect" className="h-7 w-[300px] max-w-[50vw] pl-7 text-xs" aria-label="Topic" />
         </form>
         <div className="hidden items-center gap-1 overflow-x-auto no-scrollbar lg:flex">
           {(overview.data?.topics ?? []).slice(0, 6).map((t) => <button key={t} type="button" onClick={() => applyTopic(t)} className={cn("h-6 shrink-0 rounded-md border px-2 text-[11px] transition-colors cursor-pointer", topic === t ? "border-foreground/25 bg-accent text-foreground" : "text-muted-foreground hover:bg-accent")}>{t}</button>)}
@@ -106,7 +106,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
         <FactMatrixSection matterId={matterId} topic={topic} witnessId={witnessId === "all" ? undefined : witnessId} aiConfigured={aiConfigured} matrices={matrices.data?.matrices ?? []} loading={matrices.loading} onChanged={matrices.refresh} onOpenDocument={onOpenDocument} />
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 lg:grid-cols-2">
-          <Pane title={<span className="flex items-center gap-1.5"><ScrollText className="size-3.5 text-chart-2" /> Testimony{witnessId !== "all" && witnesses.find((w) => w.id === witnessId) ? ` — ${witnesses.find((w) => w.id === witnessId)!.name}` : ""}</span>} count={testimony.length} actions={selected.size ? <Button size="xs" variant="ghost" onClick={() => setSelected(new Set())}>Clear {selected.size}</Button> : <span className="text-[10.5px] text-muted-foreground">select to focus the AI</span>}>
+          <Pane title={<span className="flex items-center gap-1.5"><ScrollText className="size-3.5 text-muted-foreground" /> Testimony{witnessId !== "all" && witnesses.find((w) => w.id === witnessId) ? ` — ${witnesses.find((w) => w.id === witnessId)!.name}` : ""}</span>} count={testimony.length} actions={selected.size ? <Button size="xs" variant="ghost" onClick={() => setSelected(new Set())}>Clear {selected.size}</Button> : <span className="text-[10.5px] text-muted-foreground">select to focus the AI</span>}>
             {cross.loading && !cross.data ? <ExcerptSkeleton /> : !testimony.length ? <div className="p-4"><EmptyState icon={ScrollText} title="No testimony on this topic" description="Try a broader topic or another witness." /></div> : (
               <ul className="divide-y">
                 {testimony.map((t) => <TestimonyExcerpt key={`${t.id}:${t.index}`} t={t} re={re} checked={selected.has(`${t.id}:${t.index}`)} onToggle={() => toggle(`${t.id}:${t.index}`)} onOpen={() => openTestimony(t.id, t.index)} />)}
@@ -114,7 +114,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
             )}
           </Pane>
           <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
-            <Pane title={<span className="flex items-center gap-1.5"><Files className="size-3.5 text-chart-1" /> Documents on this topic</span>} count={cross.data?.documents.length} actions={<span className="text-[10.5px] text-muted-foreground">{aiConfigured ? "hybrid search" : "keyword (BM25)"}</span>}>
+            <Pane title={<span className="flex items-center gap-1.5"><Files className="size-3.5 text-muted-foreground" /> Documents on this topic</span>} count={cross.data?.documents.length} actions={<span className="text-[10.5px] text-muted-foreground">{aiConfigured ? "hybrid search" : "keyword (BM25)"}</span>}>
               {cross.loading && !cross.data ? <ExcerptSkeleton /> : !cross.data?.documents.length ? <div className="p-4"><EmptyState icon={Files} title={topic ? "No document passages" : "Enter a topic"} description={topic ? "No indexed passages match; rebuild the index from the top bar if documents were added." : "Document passages appear once a topic is set."} /></div> : (
                 <ul className="divide-y">
                   {cross.data.documents.map((d) => (
@@ -131,7 +131,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
                 </ul>
               )}
             </Pane>
-            <Pane title={<span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5 text-destructive" /> Other testimony & conflicts</span>} count={(cross.data?.otherTestimony.length ?? 0) + (cross.data?.conflicts.length ?? 0) + created.length}>
+            <Pane title={<span className="flex items-center gap-1.5"><AlertTriangle className="size-3.5 text-muted-foreground" /> Other testimony & conflicts</span>} count={(cross.data?.otherTestimony.length ?? 0) + (cross.data?.conflicts.length ?? 0) + created.length}>
               {cross.loading && !cross.data ? <ExcerptSkeleton rows={2} /> : (
                 <div className="divide-y">
                   {created.map((c) => <ConflictLine key={c.id} c={c} fresh />)}

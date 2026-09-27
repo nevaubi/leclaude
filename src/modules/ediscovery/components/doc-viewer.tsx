@@ -351,7 +351,7 @@ function TextView({ detail, terms, redactions, redactMode, onCreated, onRemoved 
               <pre data-page-start={span.start} className="whitespace-pre-wrap break-words font-serif text-[13.5px] leading-[1.65] text-foreground/95">
                 {pieces.map((p, j) => p.kind === "plain" ? <React.Fragment key={j}>{highlight(p.text, regex, `${i}-${j}`)}</React.Fragment> : p.kind === "jump" ? <mark key={j} data-jump>{p.text}</mark> : <RedactedSpan key={j} redaction={textRedactions.find((r) => r.id === p.id)!} text={p.text} onClick={(e) => openRedaction(textRedactions.find((r) => r.id === p.id)!, e)} />)}
               </pre>
-              <div className="mt-4 text-center font-mono text-[10px] text-muted-foreground">{pageBates} · {doc.coding.confidentiality ? doc.coding.confidentiality.toUpperCase() : "CONFIDENTIAL"} — SUBJECT TO PROTECTIVE ORDER</div>
+              <div className="mt-4 text-center font-mono text-[10px] text-muted-foreground">{pageBates}{doc.coding.confidentiality ? ` · ${doc.coding.confidentiality.toUpperCase()} — SUBJECT TO PROTECTIVE ORDER` : ""}</div>
             </article>
           );
         })}

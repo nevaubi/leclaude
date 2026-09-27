@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronRight, Clock, Database, KeyRound, Plus, RefreshCw, Star, Users, Library as LibraryIcon } from "lucide-react";
+import { ChevronRight, Clock, Database, Plus, RefreshCw, Star, Users, Library as LibraryIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tip } from "@/components/ui/tooltip";
@@ -174,7 +174,7 @@ function IndexFooter() {
           <Button variant="ghost" size="icon-xs" disabled={busy} onClick={async () => { setBusy(true); try { await actions.rebuildIndex(); } finally { setBusy(false); } }} aria-label="Rebuild index"><RefreshCw className={cn("size-3.5", busy && "animate-spin")} /></Button>
         </Tip>
       </div>
-      {!aiConfigured && <div className="mt-1 flex items-center gap-1 text-warning-foreground/80 dark:text-warning"><KeyRound className="size-3" /> Semantic search and AI need an OpenAI key</div>}
+      {!aiConfigured && <div className="mt-1 text-muted-foreground">Keyword search only until an AI key is set in Settings.</div>}
     </div>
   );
 }

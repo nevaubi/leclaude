@@ -3,6 +3,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Check, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NewMatterDialog } from "@/modules/matters/components/new-matter-dialog";
 import { useHome } from "./home-provider";
 import { firstRunSteps } from "./first-run-model";
 
@@ -11,7 +12,8 @@ import { firstRunSteps } from "./first-run-model";
  * satisfied (a provider in the environment, a teammate added) show as done.
  */
 export function FirstRunChecklist() {
-  const { setup, aiConfigured } = useHome();
+  const { setup, aiConfigured, refresh } = useHome();
+  const [newMatter, setNewMatter] = React.useState(false);
   const steps = firstRunSteps({ ...setup, aiConfigured });
   const remaining = steps.filter((s) => !s.done).length;
   return (
@@ -21,7 +23,7 @@ export function FirstRunChecklist() {
       <ol className="mt-3 divide-y divide-line-quiet border-y border-line-quiet">
         {steps.map((s, i) => (
           <li key={s.id}>
-            <Link href={s.href} className="group flex items-start gap-3 px-1 py-2.5 hover:bg-accent/40 focus-ring rounded-sm">
+            <Link href={s.href} onClick={(e) => { if (s.id === "matter" && !s.done) { e.preventDefault(); setNewMatter(true); } }} className="group flex items-start gap-3 px-1 py-2.5 hover:bg-accent/40 focus-ring rounded-sm">
               <span className={cn("mt-px flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] tabular", s.done ? "border-transparent bg-foreground/5 text-muted-foreground" : "text-foreground")} aria-hidden>
                 {s.done ? <Check className="size-3" /> : i + 1}
               </span>
@@ -35,6 +37,7 @@ export function FirstRunChecklist() {
           </li>
         ))}
       </ol>
+      <NewMatterDialog open={newMatter} onOpenChange={setNewMatter} onCreated={() => { setNewMatter(false); void refresh(); }} />
     </section>
   );
 }

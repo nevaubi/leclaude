@@ -56,8 +56,8 @@ export function AskLibraryPanel({ className }: { className?: string }) {
       ariaLabel="Ask the library"
     >
       {noKey && (
-        <div className="flex items-start gap-2 border-b bg-warning/10 px-3 py-2 text-[11.5px]">
-          <KeyRound className="mt-0.5 size-3.5 shrink-0 text-warning" />
+        <div className="flex items-start gap-2 border-b px-3 py-2 text-[11.5px] text-muted-foreground">
+          <KeyRound className="mt-0.5 size-3.5 shrink-0" />
           <div>OpenAI key required. Add <code className="font-mono">OPENAI_API_KEY</code> to <code className="font-mono">.env.local</code> (see <Link href="/settings#ai" className="text-primary underline">Settings</Link>). Search, browsing and editing work without it.</div>
         </div>
       )}

@@ -43,7 +43,7 @@ function NewItem({ kind, initialTemplates, active, matterId }: { kind: OfficeKin
   };
   const byCategory = React.useMemo(() => { const m = new Map<string, OfficeTemplateSummary[]>(); for (const t of templates) { if (!m.has(t.category)) m.set(t.category, []); m.get(t.category)!.push(t); } return Array.from(m.entries()); }, [templates]);
   return (
-    <div className="flex min-w-0 items-center gap-2" data-kind={kind}>
+    <div className="flex min-w-0 items-center gap-2 lg:border-r lg:border-line-quiet lg:pr-4 lg:last:border-r-0 lg:last:pr-0" data-kind={kind}>
       <OfficeAppIcon kind={kind} size={22} />
       <span className={cn("min-w-0 truncate text-[13px] font-medium", active && "text-primary")}>{meta.label}</span>
       <span className="ml-auto flex shrink-0 items-center">

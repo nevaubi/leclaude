@@ -1,8 +1,7 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpDown, ChevronRight, FileText, Import, LayoutTemplate, Loader2, Search, Upload, X } from "lucide-react";
+import { ArrowUpDown, ChevronRight, FileText, Import, Loader2, Search, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
@@ -10,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tip } from "@/components/ui/tooltip";
-import { EmptyState, StatusDot } from "@/components/ui/misc";
+import { EmptyState } from "@/components/ui/misc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { OfficeKind } from "@/lib/types/domain";
@@ -129,11 +128,6 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
         <button onClick={() => setKind(null)} className="shrink-0 text-[13px] font-semibold hover:text-primary cursor-pointer">Office</button>
         {kind && (<><ChevronRight className="size-3.5 text-muted-foreground" /><span className="text-[13px] text-muted-foreground">{KIND_META[kind].plural}</span></>)}
         {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
-        {!data.aiConfigured && (
-          <Tip label="Add OPENAI_API_KEY to enable the drafting assistants. Editing, comments and versions work without it.">
-            <Link href="/settings#ai" className="hidden items-center gap-1.5 text-[11.5px] text-muted-foreground hover:text-foreground md:inline-flex"><StatusDot tone="warning" /> Assistants off</Link>
-          </Tip>
-        )}
       </TopbarSlot>
 
       {fileOver && (
@@ -196,10 +190,8 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
         {/* Templates */}
         <section className="space-y-3" aria-labelledby="office-templates">
           <div className="flex flex-wrap items-baseline gap-2">
-            <LayoutTemplate className="size-4 self-center text-muted-foreground" />
             <h2 id="office-templates" className="text-[15px] font-semibold">Templates</h2>
             <span className="text-[11.5px] tabular text-muted-foreground">{data.templates.filter((t) => !kind || t.kind === kind).length}{kind ? ` for ${KIND_META[kind].lowerPlural}` : ""}</span>
-            <span className="ml-auto text-[11.5px] text-muted-foreground">Managed in <Link href="/library?folder=lib_folder_templates" className="text-primary hover:underline">Library → Templates</Link></span>
           </div>
           <TemplatesSection templates={data.templates} kind={kind} matterId={matterId || null} query={query} />
         </section>
