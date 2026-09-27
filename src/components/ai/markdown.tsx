@@ -19,15 +19,15 @@ export function Markdown({ children, className, compact }: { children: string; c
           ul: ({ children }) => <ul className="my-1.5 list-disc pl-5 space-y-0.5">{children}</ul>,
           ol: ({ children }) => <ol className="my-1.5 list-decimal pl-5 space-y-0.5">{children}</ol>,
           li: ({ children }) => <li className="[&>p]:my-0">{children}</li>,
-          blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-primary/40 pl-3 text-muted-foreground italic">{children}</blockquote>,
-          a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary break-words">{children}</a>,
+          blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-border pl-3 text-muted-foreground italic">{children}</blockquote>,
+          a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2 decoration-primary/30 hover:decoration-primary break-words">{children}</a>,
           code: ({ className, children, ...props }) => {
             const inline = !/language-/.test(className ?? "") && !String(children).includes("\n");
             return inline ? <code className="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" {...props}>{children}</code> : <code className={cn("font-mono text-[12px]", className)} {...props}>{children}</code>;
           },
-          pre: ({ children }) => <pre className="my-2 overflow-x-auto rounded-md border bg-muted/60 p-3 text-[12px] scrollbar-thin">{children}</pre>,
+          pre: ({ children }) => <pre className="my-2 overflow-x-auto rounded-md border bg-surface-quiet p-3 text-[12px] scrollbar-thin">{children}</pre>,
           table: ({ children }) => <div className="my-2 overflow-x-auto rounded-md border"><table className="w-full text-xs">{children}</table></div>,
-          thead: ({ children }) => <thead className="bg-muted/60">{children}</thead>,
+          thead: ({ children }) => <thead className="text-muted-foreground">{children}</thead>,
           th: ({ children }) => <th className="px-2 py-1.5 text-left font-medium border-b">{children}</th>,
           td: ({ children }) => <td className="px-2 py-1.5 border-b align-top">{children}</td>,
           hr: () => <hr className="my-3" />,

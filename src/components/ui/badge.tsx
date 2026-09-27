@@ -3,30 +3,40 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /**
- * Quiet status badge. Reserve it for filters and decision states (privileged,
- * hot, needs review, failed); counts are plain text, not badges.
+ * Quiet badge. Neutral variants are a very light chip without a border; the
+ * semantic variants (success, warning, destructive, info, accent) render as
+ * plain text led by a 6px dot in a muted semantic colour, never a filled pill.
+ * Decorative icons inside a semantic badge are hidden (the dot carries the
+ * tone); a spinner (`.animate-spin`) stays and replaces the dot.
  */
+const dot =
+  "before:content-[''] before:size-1.5 before:shrink-0 before:rounded-full has-[>.animate-spin]:before:hidden [&>svg:not(.animate-spin)]:hidden bg-transparent px-0 text-muted-foreground";
+
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-[var(--radius-chip)] border font-medium whitespace-nowrap [&>svg]:shrink-0 transition-colors",
+  "inline-flex items-center gap-1.5 rounded-[var(--radius-chip)] border border-transparent font-medium whitespace-nowrap [&>svg]:shrink-0 [&>svg]:text-muted-foreground transition-colors",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-primary text-primary-foreground",
-        secondary: "border-transparent bg-secondary text-secondary-foreground",
-        outline: "text-foreground",
-        muted: "border-transparent bg-muted text-muted-foreground",
-        success: "border-transparent bg-success/12 text-success dark:bg-success/20",
-        warning: "border-transparent bg-warning/18 text-warning-foreground dark:text-warning",
-        destructive: "border-transparent bg-destructive/12 text-destructive",
-        info: "border-transparent bg-info/12 text-info",
-        accent: "border-transparent bg-accent text-accent-foreground",
+        default: "bg-muted text-foreground/80",
+        secondary: "bg-muted text-muted-foreground",
+        outline: "bg-transparent text-muted-foreground",
+        muted: "bg-muted text-muted-foreground",
+        success: cn(dot, "before:bg-success/75"),
+        warning: cn(dot, "before:bg-warning"),
+        destructive: cn(dot, "before:bg-destructive text-foreground/85"),
+        info: cn(dot, "before:bg-muted-foreground/60"),
+        accent: cn(dot, "before:bg-primary"),
       },
       size: {
-        xs: "h-4 px-1 text-[10px] leading-none [&>svg]:size-2.5",
-        sm: "h-[18px] px-1.5 text-[10.5px] leading-none [&>svg]:size-3",
-        default: "px-2 py-0.5 text-[11px] leading-4 [&>svg]:size-3",
+        xs: "h-4 px-1 text-[10.5px] leading-none [&>svg]:size-2.5",
+        sm: "h-[18px] px-1.5 text-[11px] leading-none [&>svg]:size-3",
+        default: "h-5 px-1.5 text-[11px] leading-none [&>svg]:size-3",
       },
     },
+    compoundVariants: [
+      // Dot-led badges sit flush with surrounding text.
+      { variant: ["success", "warning", "destructive", "info", "accent"], className: "px-0" },
+    ],
     defaultVariants: { variant: "default", size: "default" },
   },
 );

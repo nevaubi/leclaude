@@ -49,12 +49,23 @@ export function TrustStateBadge({ state, detail, compact, className, size = "sm"
   const label = state in EVIDENCE_STATES ? evidenceTrustLabel(state as TrustState) : meta.label;
   return (
     <Tip label={<span className="block max-w-xs text-[11px]"><span className="font-medium">{label}.</span> {meta.hint}{detail ? <span className="block opacity-80">{detail}</span> : null}</span>}>
-      <Badge variant={meta.tone} size={size} className={cn("gap-1 cursor-help", compact && "px-1", className)} data-trust-state={state}>
+      <Badge variant={badgeVariant(meta.tone)} size={size} className={cn("cursor-help", meta.tone === "muted" && HOLLOW_DOT, className)} data-trust-state={state}>
         <Icon className="size-3" />
-        {!compact && label}
+        {compact ? <span className="sr-only">{label}</span> : label}
       </Badge>
     </Tip>
   );
+}
+
+/**
+ * Trust renders as neutral text led by a 6px dot (never a filled pill): green only
+ * for verified/approved, amber for partial or unchecked, red for rejected,
+ * contradicted or unresolved, a grey dot for informational states and a hollow
+ * ring for states with no support yet (generated, found, stopped).
+ */
+const HOLLOW_DOT = "before:bg-transparent before:ring-1 before:ring-inset before:ring-muted-foreground/60";
+function badgeVariant(tone: Tone): "success" | "warning" | "destructive" | "info" {
+  return tone === "muted" ? "info" : tone;
 }
 
 const EVIDENCE_STATES: Record<TrustState, true> = { generated: true, source_linked: true, citation_checked: true, claim_checked: true, partially_supported: true, verified: true, human_approved: true, rejected: true };
@@ -84,9 +95,9 @@ export function TrustBadge({ provenance, className, compact }: { provenance?: Pr
   ) : "This item was not produced with recorded provenance.";
   return (
     <Tip label={tip}>
-      <Badge variant={tone} size="sm" className={cn("gap-1 cursor-help", compact && "px-1", className)}>
+      <Badge variant={badgeVariant(tone)} size="sm" className={cn("cursor-help", tone === "muted" && HOLLOW_DOT, className)}>
         <Icon className="size-3" />
-        {!compact && label}
+        {compact ? <span className="sr-only">{label}</span> : label}
       </Badge>
     </Tip>
   );
@@ -95,9 +106,9 @@ export function TrustBadge({ provenance, className, compact }: { provenance?: Pr
 /** Banner for answers that were not grounded in retrieved sources (research, digests). */
 export function NotSourceBackedBanner({ detail, className }: { detail?: string; className?: string }) {
   return (
-    <div className={cn("flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs", className)} role="status">
+    <div className={cn("flex items-start gap-2 rounded-md border px-3 py-2 text-xs text-muted-foreground", className)} role="status">
       <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />
-      <div><span className="font-semibold">Not source-backed.</span> {detail ?? "Research returned nothing usable, so this answer states general practice rather than the record in this matter. Confirm every case-specific fact before relying on it."}</div>
+      <div><span className="font-medium text-foreground">Not source-backed.</span> {detail ?? "Research returned nothing usable, so this answer states general practice rather than the record in this matter. Confirm every case-specific fact before relying on it."}</div>
     </div>
   );
 }

@@ -97,12 +97,12 @@ function FilterChip({ filter: f, value, values, onChange }: { filter: FilterbarF
   const label = chipLabel(f.label, value, (v) => f.options.find((o) => o.value === v)?.label);
   const Icon = f.icon;
   const clear = (e: React.MouseEvent) => { e.stopPropagation(); onChange({ ...values, [f.id]: undefined }); };
-  const chipCls = cn("inline-flex h-7 max-w-[240px] items-center gap-1 rounded-[var(--radius-chip)] border px-2 text-[11.5px] font-medium transition-colors cursor-pointer", active ? "border-primary/35 bg-primary/8 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground");
+  const chipCls = cn("inline-flex h-7 max-w-[240px] items-center gap-1 rounded-[var(--radius-chip)] border border-transparent px-2 text-[11.5px] font-medium transition-colors cursor-pointer", active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground");
   if (f.kind === "date") {
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <button type="button" className={chipCls} aria-pressed={active}>{Icon && <Icon className="size-3" />}<span className="truncate">{label}</span>{active ? <span role="button" aria-label={`Clear ${f.label}`} onClick={clear} className="ml-0.5 rounded p-0.5 hover:bg-primary/15"><X className="size-3" /></span> : <ChevronDown className="size-3 opacity-60" />}</button>
+          <button type="button" className={chipCls} aria-pressed={active}>{Icon && <Icon className="size-3" />}<span className="truncate">{label}</span>{active ? <span role="button" aria-label={`Clear ${f.label}`} onClick={clear} className="ml-0.5 rounded p-0.5 hover:bg-foreground/10"><X className="size-3" /></span> : <ChevronDown className="size-3 opacity-60" />}</button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-56 p-2">
           <div className="mb-1 text-[11px] font-medium text-muted-foreground">{f.label}</div>
@@ -115,10 +115,10 @@ function FilterChip({ filter: f, value, values, onChange }: { filter: FilterbarF
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className={chipCls} aria-pressed={active}>{Icon && <Icon className="size-3" />}<span className="truncate">{label}</span>{active ? <span role="button" aria-label={`Clear ${f.label}`} onClick={clear} className="ml-0.5 rounded p-0.5 hover:bg-primary/15"><X className="size-3" /></span> : <ChevronDown className="size-3 opacity-60" />}</button>
+        <button type="button" className={chipCls} aria-pressed={active}>{Icon && <Icon className="size-3" />}<span className="truncate">{label}</span>{active ? <span role="button" aria-label={`Clear ${f.label}`} onClick={clear} className="ml-0.5 rounded p-0.5 hover:bg-foreground/10"><X className="size-3" /></span> : <ChevronDown className="size-3 opacity-60" />}</button>
       </PopoverTrigger>
       <PopoverContent align="start" className="max-h-80 w-60 overflow-y-auto p-1 scrollbar-thin">
-        <div className="px-2 py-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{f.label}{f.multi ? " · any of" : ""}</div>
+        <div className="px-2 py-1 text-[11.5px] text-muted-foreground">{f.label}{f.multi ? " · any of" : ""}</div>
         {f.options.length === 0 && <div className="px-2 py-1.5 text-[11.5px] text-muted-foreground">No options</div>}
         {f.options.map((o) => {
           const on = selectedSet.has(o.value);

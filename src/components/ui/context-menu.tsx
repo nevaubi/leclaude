@@ -17,13 +17,13 @@ const ContextMenuSubTrigger = React.forwardRef<React.ElementRef<typeof ContextMe
 ContextMenuSubTrigger.displayName = "ContextMenuSubTrigger";
 
 const ContextMenuSubContent = React.forwardRef<React.ElementRef<typeof ContextMenuPrimitive.SubContent>, React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.SubContent>>(({ className, ...props }, ref) => (
-  <ContextMenuPrimitive.SubContent ref={ref} className={cn("z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg animate-fade-in", className)} {...props} />
+  <ContextMenuPrimitive.SubContent ref={ref} className={cn("z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-overlay animate-fade-in", className)} {...props} />
 ));
 ContextMenuSubContent.displayName = "ContextMenuSubContent";
 
 const ContextMenuContent = React.forwardRef<React.ElementRef<typeof ContextMenuPrimitive.Content>, React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>>(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Portal>
-    <ContextMenuPrimitive.Content ref={ref} className={cn("z-50 min-w-[10rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg animate-fade-in", className)} {...props} />
+    <ContextMenuPrimitive.Content ref={ref} className={cn("z-50 min-w-[10rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-overlay animate-fade-in", className)} {...props} />
   </ContextMenuPrimitive.Portal>
 ));
 ContextMenuContent.displayName = "ContextMenuContent";

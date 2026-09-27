@@ -62,8 +62,8 @@ export function Inspector(p: InspectorProps) {
       <header className="flex h-9 shrink-0 items-center gap-2 border-b px-3">
         {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-[12.5px] font-semibold tracking-tight">{p.title}</div>
-          {p.subtitle && <div className="truncate text-[10.5px] text-muted-foreground">{p.subtitle}</div>}
+          <div className="truncate text-[12.5px] font-medium">{p.title}</div>
+          {p.subtitle && <div className="truncate text-[11px] text-muted-foreground">{p.subtitle}</div>}
         </div>
         {p.actions && <div className="flex shrink-0 items-center gap-0.5">{p.actions}</div>}
         {p.onClose && (
@@ -78,7 +78,7 @@ export function Inspector(p: InspectorProps) {
               <button key={t.id} role="tab" aria-selected={active} disabled={t.disabled} onClick={() => p.onTabChange?.(t.id)} className={cn("relative flex items-center gap-1.5 px-2 text-[12px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
                 {t.label}
                 {t.count != null && t.count > 0 && <span className="tabular text-[10.5px] text-muted-foreground">{t.count}</span>}
-                {active && <span className="absolute inset-x-1 bottom-0 h-0.5 bg-primary" aria-hidden />}
+                {active && <span className="absolute inset-x-1 bottom-0 h-0.5 bg-foreground" aria-hidden />}
               </button>
             );
           })}

@@ -3,7 +3,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Moon, Search, Sun, Monitor, Menu, X, LogOut, Keyboard } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Moon, Search, Sun, Monitor, Menu, X, LogOut, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GO_CHORD, NAV, SECONDARY_NAV } from "./nav";
 import { useShellStore } from "./shell-store";
@@ -89,11 +89,10 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
         className={cn(
           "group relative flex items-center rounded-md text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           expanded ? "gap-2.5 px-2.5 py-1.5" : "size-9 justify-center",
-          active ? "bg-primary/10 text-primary dark:bg-primary/15" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+          active ? "bg-primary/8 text-primary dark:bg-primary/12" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
         )}
       >
-        <span className={cn("absolute top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r bg-primary transition-opacity", expanded ? "-left-3" : "-left-[14px]", active ? "opacity-100" : "opacity-0")} aria-hidden />
-        <item.icon className={cn("size-[17px] shrink-0", active ? "text-primary" : "")} strokeWidth={active ? 2.2 : 1.9} />
+        <item.icon className={cn("size-[17px] shrink-0", active ? "text-primary" : "")} strokeWidth={active ? 2 : 1.75} />
         {expanded && <span className="flex-1 truncate">{item.label}</span>}
         {expanded && item.shortcut && <span className="text-[10px] tabular text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100">{item.shortcut}</span>}
       </Link>
@@ -124,11 +123,12 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
               onClick={() => setPaletteOpen(true)}
               aria-label="Search or jump to anything"
               className={cn(
-                "flex items-center rounded-md border border-transparent bg-background/70 text-muted-foreground shadow-xs transition-colors hover:border-border hover:bg-background hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                "flex items-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                expanded && "border",
                 expanded ? "h-8 w-full gap-2 px-2.5 text-[12px]" : "size-9 justify-center",
               )}
             >
-              <Search className="size-4 shrink-0" />
+              <Search className="size-4 shrink-0" strokeWidth={1.75} />
               {expanded && (<><span className="flex-1 text-left">Search or jump to…</span><kbd className="hidden sm:inline">⌘K</kbd></>)}
             </button>
           </Tip>
@@ -157,10 +157,9 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
         <header className="flex h-11 shrink-0 items-center gap-2 border-b bg-background px-3" style={{ height: "var(--topbar-height)" }}>
           <Button variant="ghost" size="icon-xs" className="md:hidden" aria-label="Open navigation" onClick={() => setMobileOpen((o) => !o)}>{mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}</Button>
           <div className="min-w-0 flex-1" id="topbar-slot" />
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <AiStatus />
             <ReviewQueueIndicator />
-            <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="ml-0.5 rounded-full ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer" aria-label="Account menu"><PersonAvatar name={user.name} size="sm" /></button>
@@ -178,6 +177,8 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
                 <DropdownMenuItem asChild><Link href="/settings#review">Review queue</Link></DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setTimeout(() => help.open(), 50)}><Keyboard /> Keyboard shortcuts<DropdownMenuShortcut>?</DropdownMenuShortcut></DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <ThemeItems />
+                <DropdownMenuSeparator />
                 <DropdownMenuItem disabled>Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -190,7 +191,7 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
   );
 }
 
-/** AI availability as text and a dot: "AI on" (model in the tooltip) or a link to add the key. */
+/** AI availability: nothing when configured; a dot and "AI off · add key" when it needs setup. */
 function AiStatus() {
   const [status, setStatus] = React.useState<{ configured: boolean; model: string } | null>(null);
   React.useEffect(() => {
@@ -198,10 +199,9 @@ function AiStatus() {
     fetch("/api/ai/status").then((r) => (r.ok ? r.json() : null)).then((j) => { if (alive && j) setStatus({ configured: Boolean(j.configured), model: String(j.model ?? "") }); }).catch(() => {});
     return () => { alive = false; };
   }, []);
-  if (!status) return null;
-  return status.configured ? (
-    <Tip label={`OpenAI · ${status.model}`}><Link href="/settings#ai" className="hidden h-7 items-center gap-1.5 rounded px-1.5 text-[11px] text-muted-foreground hover:text-foreground md:inline-flex" aria-label="AI on"><span className="size-1.5 rounded-full bg-success" aria-hidden /> AI on</Link></Tip>
-  ) : (
+  // Quiet when healthy: the top bar only speaks up when AI needs configuring.
+  if (!status || status.configured) return null;
+  return (
     <Tip label="Add OPENAI_API_KEY to .env.local to enable AI features"><Link href="/settings#ai" className="hidden h-7 items-center gap-1.5 rounded px-1.5 text-[11px] text-muted-foreground hover:text-foreground md:inline-flex" aria-label="AI off, add key"><span className="size-1.5 rounded-full bg-warning" aria-hidden /> AI off · add key</Link></Tip>
   );
 }
@@ -224,19 +224,21 @@ function ReviewQueueIndicator() {
   );
 }
 
-function ThemeToggle() {
+/** Theme choice lives in the account menu so the top bar keeps one control per job. */
+function ThemeItems() {
   const { theme, setTheme } = useTheme();
+  const item = (value: "light" | "dark" | "system", label: string, Icon: typeof Sun) => (
+    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setTheme(value); }} aria-checked={theme === value} role="menuitemradio">
+      <Icon /> {label}{theme === value && <Check className="ml-auto size-3.5 text-muted-foreground" />}
+    </DropdownMenuItem>
+  );
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label="Theme"><Sun className="size-4 dark:hidden" /><Moon className="size-4 hidden dark:block" /></Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setTheme("light")} className={cn(theme === "light" && "bg-accent")}><Sun /> Light</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")} className={cn(theme === "dark" && "bg-accent")}><Moon /> Dark</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")} className={cn(theme === "system" && "bg-accent")}><Monitor /> System</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenuLabel className="py-1 text-[11px] font-normal text-muted-foreground">Theme</DropdownMenuLabel>
+      {item("light", "Light", Sun)}
+      {item("dark", "Dark", Moon)}
+      {item("system", "System", Monitor)}
+    </>
   );
 }
 

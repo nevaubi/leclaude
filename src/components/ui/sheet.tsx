@@ -33,7 +33,7 @@ const SheetContent = React.forwardRef<
           content.current?.focus({ preventScroll: true });
         }}
         className={cn(
-          "fixed z-50 bg-popover text-popover-foreground shadow-2xl border data-[state=open]:animate-slide-up flex flex-col outline-none",
+          "fixed z-50 bg-popover text-popover-foreground shadow-overlay border data-[state=open]:animate-slide-up flex flex-col outline-none",
           side === "right" && `inset-y-0 right-0 h-full w-full ${width}`,
           side === "left" && `inset-y-0 left-0 h-full w-full ${width}`,
           side === "top" && "inset-x-0 top-0 max-h-[80vh]",

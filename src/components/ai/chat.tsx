@@ -46,7 +46,7 @@ export function MessageBubble({ message: m, userName, onRetry }: { message: Agen
               <img key={i} src={a.dataUrl} alt={a.name} className="h-16 rounded-md border object-cover" />
             ))}</div>
           ) : null}
-          <div className="rounded-md bg-accent/60 px-3 py-1.5 text-[13px] whitespace-pre-wrap">{m.content}</div>
+          <div className="rounded-md bg-muted px-3 py-1.5 text-[13px] whitespace-pre-wrap">{m.content}</div>
         </div>
       </div>
     );
@@ -58,7 +58,7 @@ export function MessageBubble({ message: m, userName, onRetry }: { message: Agen
         {m.tools && m.tools.length > 0 && <ToolActivityList tools={m.tools} />}
         {m.content ? <Markdown>{m.content}</Markdown> : m.status === "streaming" ? <div className="h-3.5 w-24 rounded bg-muted" aria-hidden /> : null}
         {m.status === "error" && (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <div className="flex items-start gap-2 rounded-md border px-3 py-2 text-xs text-foreground [&>svg]:text-destructive">
             <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
             <div className="flex-1">{m.error ?? "Something went wrong."}</div>
             {onRetry && <Button variant="ghost" size="xs" onClick={onRetry}><RotateCcw className="size-3" /> Retry</Button>}

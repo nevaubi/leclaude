@@ -73,7 +73,7 @@ export function ShortcutHelpDialog({ open, onOpenChange, groups }: { open: boole
         <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
           {groups.map((g) => (
             <section key={g.id} className="min-w-0">
-              <h3 className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{g.title}</h3>
+              <h3 className="mb-1 text-[12px] font-medium text-muted-foreground">{g.title}</h3>
               <dl className="divide-y divide-line-quiet">
                 {g.items.map((it, i) => (
                   <div key={i} className="flex h-7 items-center gap-3">

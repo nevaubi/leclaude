@@ -23,7 +23,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border bg-popover p-5 text-popover-foreground shadow-2xl data-[state=open]:animate-slide-up max-h-[92vh] overflow-auto scrollbar-thin",
+        "fixed left-1/2 top-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border bg-popover p-5 text-popover-foreground shadow-overlay data-[state=open]:animate-slide-up max-h-[92vh] overflow-auto scrollbar-thin",
         size === "sm" && "max-w-sm",
         size === "md" && "max-w-lg",
         size === "lg" && "max-w-2xl",

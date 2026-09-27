@@ -16,9 +16,9 @@ export function ToolActivityList({ tools, className, defaultOpen = false }: { to
   const running = tools.some((t) => t.status === "running");
   const done = tools.filter((t) => t.status !== "running").length;
   return (
-    <div className={cn("rounded-md border bg-muted/30 text-xs", className)}>
+    <div className={cn("rounded-md border text-xs", className)}>
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-muted-foreground hover:text-foreground cursor-pointer">
-        {running ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5 text-success" />}
+        {running ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5 text-muted-foreground" />}
         <span className="flex-1 truncate">{running ? tools[tools.length - 1].label : `${done} step${done === 1 ? "" : "s"} · ${summarize(tools)}`}</span>
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
       </button>
@@ -41,7 +41,7 @@ function ToolRow({ tool }: { tool: ToolActivity }) {
   const Icon = ICONS[tool.name] ?? Wrench;
   return (
     <li>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted/50 cursor-pointer">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-surface-quiet cursor-pointer">
         <Icon className={cn("size-3.5 shrink-0", tool.status === "error" ? "text-destructive" : "text-muted-foreground")} />
         <span className="flex-1 truncate">{tool.label}</span>
         {tool.status === "running" && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
@@ -72,8 +72,8 @@ export function CitationList({ citations, className }: { citations: Citation[]; 
     <div className={cn("flex flex-wrap gap-1.5", className)}>
       {citations.map((c, i) => {
         const inner = (
-          <span className="inline-flex max-w-full items-center gap-1 rounded-[var(--radius-chip)] border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors">
-            <span className="tabular text-[10px] font-medium text-primary">{i + 1}</span>
+          <span className="inline-flex max-w-full items-center gap-1 rounded-[var(--radius-chip)] bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+            <span className="tabular text-[10px] font-medium text-foreground/70">{i + 1}</span>
             <span className="truncate max-w-[220px]">{c.title}</span>
             {c.source && <span className="hidden sm:inline text-[10px] opacity-70">· {c.source}</span>}
           </span>
