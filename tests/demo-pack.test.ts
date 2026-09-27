@@ -22,7 +22,7 @@ import { matterRetrievalScope, searchDocuments } from "@/modules/ediscovery/serv
 import { createMember, setupWorkspace } from "@/modules/workspace/service";
 import { createMatter } from "@/modules/matters/service";
 import { listTeam } from "@/modules/workspace/service";
-import { ensureLibraryStructure } from "@/modules/library/service";
+import { ensureLibraryStructure, searchLibrary } from "@/modules/library/service";
 import { DEMO_MANIFEST_KEY, loadDemoPack, type DemoManifest } from "@/modules/demo";
 import { DEMO_MATTERS, DEMO_TEAM } from "@/modules/demo/ids";
 import { DEMO_FOLDERS } from "@/modules/demo/workspace";
@@ -143,6 +143,11 @@ describe("demo pack on an empty workspace", () => {
     expect(hits.length).toBeGreaterThan(0);
     const elsewhere = await hybridSearch(VECTOR_COLLECTIONS.edocs, "commission", { k: 5, scope: matterRetrievalScope(ownMatterId) });
     expect(elsewhere).toEqual([]);
+    // Library notes and office documents are searchable in the library as soon as the load returns.
+    const lib = await runWithPrincipal(devPrincipal(), () => searchLibrary("anti-steering"));
+    expect(lib.hits.some((h) => h.item.id.startsWith("demo_apl_lib_"))).toBe(true);
+    const office = await runWithPrincipal(devPrincipal(), () => searchLibrary("overcharge"));
+    expect(office.hits.some((h) => h.source === "office")).toBe(true);
   });
 
   it("reloads in place without duplicates", async () => {

@@ -108,9 +108,9 @@ export function MattersPage() {
 
   const columns = React.useMemo<DataTableColumn<MatterRow>[]>(() => [
     { id: "name", header: "Matter", width: 300, minWidth: 180, sortable: true, locked: true, accessor: (m) => m.shortName || m.name, render: (m) => (
-      <span className="flex min-w-0 flex-col leading-tight">
+      <span className="flex min-w-0 items-baseline gap-2" title={m.name}>
         <span className="truncate font-medium text-foreground">{m.shortName || m.name}</span>
-        {m.shortName && m.shortName !== m.name && <span className="truncate text-[11px] text-muted-foreground">{m.name}</span>}
+        {m.shortName && m.shortName !== m.name && <span className="min-w-0 truncate text-[11px] text-muted-foreground">{m.name}</span>}
       </span>
     ) },
     { id: "number", header: "Number", width: 120, sortable: true, accessor: (m) => m.number ?? "", render: (m) => <span className="font-mono text-[11.5px] text-muted-foreground">{m.number || "—"}</span> },

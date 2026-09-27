@@ -261,7 +261,7 @@ class Typesetter {
       let x = this.m.left;
       cells.forEach((_, i) => {
         this.page.drawRectangle({ x, y: top - h, width: colW[i], height: h, borderColor: rgb(0.45, 0.45, 0.45), borderWidth: 0.6 });
-        wrapped[i].forEach((line, li) => this.drawWords(tokenize(this.fonts, parseRuns(header ? `**${line}**` : line), size), x + pad, top - pad - size - li * lh, size));
+        wrapped[i].forEach((line, li) => this.drawWords(tokenize(this.fonts, (header ? parseRuns(line).map((r) => ({ ...r, bold: true })) : parseRuns(line)), size), x + pad, top - pad - size - li * lh, size));
         x += colW[i];
       });
       this.y = top - h;

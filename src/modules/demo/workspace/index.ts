@@ -12,7 +12,7 @@ import { buildDemoParties, buildDemoTeam, type DemoPerson } from "./people";
 
 export * from "./context";
 export { DEMO_FOLDERS } from "./library";
-export { DEMO_CASE_NUMBER, DEMO_CONSUMER_NUMBER, DEMO_DOJ_NUMBER, type DemoMatter } from "./matters";
+export { DEMO_CASE_NUMBER, DEMO_CONSUMER_NAME, DEMO_CONSUMER_NUMBER, DEMO_DOJ_NUMBER, type DemoMatter } from "./matters";
 export { DEMO_JUDGE, DEMO_OPPOSING_COUNSEL, DEMO_TEAM_PROFILES, type DemoPerson } from "./people";
 
 export interface DemoWorkspace {

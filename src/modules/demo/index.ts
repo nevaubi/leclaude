@@ -13,7 +13,9 @@ import "server-only";
 import { db } from "@/lib/db";
 import type { Principal } from "@/lib/auth/types";
 import type { EDocument, LibraryItem, OfficeDocument, OfficeKind } from "@/lib/types/domain";
-import { indexDocuments, removeDocument, VECTOR_COLLECTIONS } from "@/lib/ai/vector-store";
+import { configuredTenantId, indexDocuments, removeDocument, VECTOR_COLLECTIONS } from "@/lib/ai/vector-store";
+import { extractPlainText } from "@/lib/ai/toolkit/internal";
+import { indexTextFor as libraryIndexText } from "@/modules/library/data";
 import { audit } from "@/lib/integrity/audit";
 import { getWorkspace } from "@/lib/workspace";
 import { ensureLibraryStructure } from "@/modules/library/service";
@@ -270,9 +272,17 @@ export async function loadDemoPack({ principal }: { principal: Principal }): Pro
   }));
   put(C.library, officeRows);
 
-  // Keyword index for the demo e-discovery documents, scoped per matter (the path e-discovery ingest uses; no
-  // embeddings, so the load never waits on a model provider).
-  const vectors: Record<string, string[]> = { [VECTOR_COLLECTIONS.office]: officeDocs.map((x) => x.id) };
+  // Keyword indexes (no embeddings, so the load never waits on a model provider). E-discovery documents are indexed
+  // per matter through the path e-discovery ingest uses.
+  const vectors: Record<string, string[]> = {};
+  // Library notes/clauses/links and the office documents go into the tenant's library corpus (matter kept on each
+  // row), the same rows the library's own rebuild writes, so library search finds them immediately.
+  const libraryScope = { tenantId: principal.tenantId || configuredTenantId(), corpus: "library" as const };
+  const notes = w.libraryItems.filter((i) => i.type !== "folder");
+  await indexDocuments(VECTOR_COLLECTIONS.library, notes.map((i) => ({ id: i.id, text: libraryIndexText(i), matterId: i.matterId ?? null, meta: { type: i.type, matterId: i.matterId, practiceArea: i.practiceArea, parentId: i.parentId } })), { embed: false, scope: libraryScope });
+  vectors[VECTOR_COLLECTIONS.library] = notes.map((i) => i.id);
+  await indexDocuments(VECTOR_COLLECTIONS.office, officeDocs.map((doc) => ({ id: doc.id, text: `${doc.title}\n${extractPlainText(doc.content)}`, matterId: doc.matterId ?? null, meta: { kind: doc.kind, title: doc.title, matterId: doc.matterId } })), { embed: false, scope: libraryScope });
+  vectors[VECTOR_COLLECTIONS.office] = officeDocs.map((x) => x.id);
   const byMatter = new Map<string, EDocument[]>();
   for (const doc of edDocs) byMatter.set(doc.matterId, [...(byMatter.get(doc.matterId) ?? []), doc]);
   for (const [matterId, docs] of byMatter) {

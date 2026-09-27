@@ -16,10 +16,10 @@ import type { SheetOp } from "@/modules/office/sheet/ops";
 import type { Workbook } from "@/modules/office/sheet/model";
 import { deckFromOutline } from "@/modules/office/slides/templates";
 import type { DeckContent } from "@/modules/office/slides/model";
-import type { DocSpec } from "@/modules/office/pdf/generate";
+import type { Block, DocSpec } from "@/modules/office/pdf/generate";
 import { DEMO_ID_PREFIX } from "../ids";
 import { dayOffset, type DemoBuildContext } from "./context";
-import { DEMO_CASE_NUMBER } from "./matters";
+import { DEMO_CASE_NUMBER, DEMO_CONSUMER_NAME } from "./matters";
 import { DEMO_JUDGE_NAME, DEMO_OPPOSING_COUNSEL_NAME } from "./people";
 
 export const DEMO_OFFICE_IDS = {
@@ -34,6 +34,7 @@ export const DEMO_OUTLINE_BLOB = `${DEMO_ID_PREFIX}blob_reyes_outline`;
 
 const fmtDate = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 const clean = (s: string) => s.replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
 function firm(ctx: DemoBuildContext): FirmInfo {
   return { name: ctx.firmName, address1: "[Firm address]", address2: "[City, State ZIP]", phone: "[Telephone]", email: `[Email]` };
@@ -50,7 +51,7 @@ export function researchMemo(ctx: DemoBuildContext): PMNode {
     `**TO:** ${ctx.ownerName}`,
     "**FROM:** Nina Castell",
     `**DATE:** ${fmtDate(dayOffset(ctx.now, -5))}`,
-    `**RE:** Market definition and the anti-steering theory — In re Apple Smartphone Antitrust Litigation (Consumer Class), Case No. ${DEMO_CASE_NUMBER} (N.D. Cal.) (demo)`,
+    `**RE:** Market definition and the anti-steering theory — ${DEMO_CONSUMER_NAME}, Case No. ${DEMO_CASE_NUMBER} (N.D. Cal.)`,
     "## Questions presented",
     "1. Which relevant product market should the class prove for the Section 2 claims: all U.S. smartphones, a narrower performance-smartphone market, or an aftermarket for iOS app distribution?\n2. Can the anti-steering rules support classwide antitrust injury to consumers, given that the commission is charged to developers?",
     "## Short answers",
@@ -98,7 +99,7 @@ export function rfpDraft(ctx: DemoBuildContext): PMNode {
   const caption = captionBlock({
     court: "IN THE UNITED STATES DISTRICT COURT\nFOR THE NORTHERN DISTRICT OF CALIFORNIA",
     division: "SAN JOSE DIVISION",
-    plaintiff: "IN RE APPLE SMARTPHONE ANTITRUST LITIGATION (CONSUMER CLASS) — DEMO",
+    plaintiff: DEMO_CONSUMER_NAME.toUpperCase(),
     defendant: "",
     caseNo: `Case No. ${DEMO_CASE_NUMBER}`,
     judge: `${DEMO_JUDGE_NAME} (fictional)`,
@@ -198,7 +199,7 @@ export function keyDocRows(docs: EDocument[], limit = 6): KeyDocRow[] {
     .filter((d) => d.coding?.hot)
     .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0) || a.date.localeCompare(b.date))
     .slice(0, limit)
-    .map((d) => ({ bates: d.bates, date: d.date.slice(0, 10), subject: clean(d.subject).slice(0, 70), custodian: d.custodianName, issue: clean((d.coding.issues ?? d.aiIssues ?? []).slice(0, 2).join(", ")) || "—" }))
+    .map((d) => ({ bates: d.bates, date: d.date.slice(0, 10), subject: clip(clean(d.subject), 26), custodian: d.custodianName, issue: clean((d.coding.issues ?? d.aiIssues ?? []).slice(0, 2).join(", ")) || "—" }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -302,15 +303,15 @@ export function reyesOutlineSpec(ctx: DemoBuildContext, exhibits: EDocument[]): 
     subject: "Attorney work product — demonstration data",
     keywords: ["deposition", "outline", "NFC", "wallet", "demo"],
     caption: {
-      court: ["UNITED STATES DISTRICT COURT", "NORTHERN DISTRICT OF CALIFORNIA"],
-      left: ["IN RE APPLE SMARTPHONE ANTITRUST", "LITIGATION (CONSUMER CLASS) — DEMO"],
+      court: ["United States District Court", "Northern District of California", "San Jose Division"],
+      left: ["IN RE SMARTPHONE APP DISTRIBUTION", "ANTITRUST LITIGATION", "(CONSUMER CLASS) — DEMO"],
       right: [`Case No. ${DEMO_CASE_NUMBER}`, `${DEMO_JUDGE_NAME} (fictional)`],
       title: ["DEPOSITION OUTLINE: TOMAS REYES", "(PRODUCT LEAD, WALLET & NFC)"],
     },
     draftStamp: "WORK PRODUCT",
     blocks: [
       { type: "keyvalue", rows: [["Date", depoDate], ["Location", "Remote (videoconference)"], ["Examining", "Nina Castell"], ["Second chair", ctx.ownerName], ["Defending", `${DEMO_OPPOSING_COUNSEL_NAME} (Hartwell & Pryor LLP, fictional)`], ["Time", "7 hours on the record (FRCP 30(d)(1))"]] },
-      { type: "paragraph", text: "_Privileged and confidential attorney work product. Demonstration document: the witness, facts and exhibits are synthetic._", italic: true },
+      { type: "paragraph", text: "Privileged and confidential attorney work product. Demonstration document: the witness, facts and exhibits are synthetic.", italic: true },
       { type: "heading", text: "Goals", level: 1 },
       { type: "bullets", items: ["Establish the witness's role in decisions on third-party access to the NFC controller and tap-to-pay.", "Lock in the stated security rationale and test whether it was the contemporaneous reason.", "Connect wallet restrictions to switching costs and to fees charged to card issuers.", "Authenticate the exhibits below as business records."] },
       { type: "heading", text: "I. Background and role", level: 1 },
@@ -326,9 +327,10 @@ export function reyesOutlineSpec(ctx: DemoBuildContext, exhibits: EDocument[]): 
       { type: "heading", text: "IV. Switching costs", level: 1 },
       { type: "numbered", number: "8.", text: "Customer research on wallet use and device retention; whether wallet adoption was tracked as a retention metric." },
       { type: "heading", text: "Exhibits", level: 1 },
-      exRows.length
-        ? { type: "table", columns: ["Exh.", "Bates", "Date", "Description"], rows: exRows, widths: [50, 110, 80, 228] }
-        : { type: "paragraph", text: "Exhibit list pending: no wallet or NFC documents have been loaded for this matter yet." },
+      // Numbered entries rather than a table: the generator's table header currently prints literal emphasis markers.
+      ...(exRows.length
+        ? exRows.map(([exh, bates, date, desc]): Block => ({ type: "numbered", number: `${exh}`, text: `**${bates}** (${date}) — ${desc}`, indent: 54 }))
+        : [{ type: "paragraph", text: "Exhibit list pending: no wallet or NFC documents have been loaded for this matter yet." } satisfies Block]),
       { type: "paragraph", text: "Bates numbers are taken from the loaded production; confirm against the production index before marking.", italic: true, size: 9 },
     ],
     footer: { left: "Attorney work product — demo", right: "Reyes outline" },

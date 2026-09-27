@@ -14,6 +14,8 @@ export type DemoMatter = MatterRecord & { meta?: Record<string, unknown> };
 export const DEMO_CONSUMER_NUMBER = "DEMO-APL-001";
 export const DEMO_DOJ_NUMBER = "DEMO-APL-002";
 export const DEMO_CASE_NUMBER = "5:24-cv-0DEMO";
+/** Matter name; the e-discovery pack's coding protocol uses the same title. */
+export const DEMO_CONSUMER_NAME = "In re Smartphone App Distribution Antitrust Litigation (Consumer Class) — DEMO";
 
 export function buildDemoMatters(ctx: DemoBuildContext): DemoMatter[] {
   const at = ctx.now.toISOString();
@@ -24,7 +26,7 @@ export function buildDemoMatters(ctx: DemoBuildContext): DemoMatter[] {
       id: DEMO_MATTERS.consumer,
       slug: "demo-apple-smartphone-consumer-class",
       number: DEMO_CONSUMER_NUMBER,
-      name: "In re Apple Smartphone Antitrust Litigation (Consumer Class) — Demo",
+      name: DEMO_CONSUMER_NAME,
       shortName: "Apple Antitrust — Consumer Class",
       caption: `Case No. ${DEMO_CASE_NUMBER} (N.D. Cal.) · demonstration data`,
       client: "Putative class of U.S. iPhone purchasers (named plaintiffs fictional)",
