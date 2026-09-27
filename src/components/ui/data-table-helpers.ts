@@ -98,8 +98,16 @@ export function toggleSelected(selected: string[], id: string): string[] {
   return selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
 }
 
+/** English plural for table nouns: batch → batches, entry → entries, row → rows. */
+export function pluralNoun(noun: string, n: number): string {
+  if (n === 1) return noun;
+  if (/(s|x|z|ch|sh)$/i.test(noun)) return `${noun}es`;
+  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
+  return `${noun}s`;
+}
+
 export function selectionSummary(selectedCount: number, total: number, noun = "row"): string {
-  const plural = (n: number) => `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
+  const plural = (n: number) => `${n.toLocaleString()} ${pluralNoun(noun, n)}`;
   if (selectedCount <= 0) return plural(total);
   return `${selectedCount.toLocaleString()} of ${plural(total)} selected`;
 }

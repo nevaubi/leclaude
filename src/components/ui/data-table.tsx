@@ -10,8 +10,7 @@ import { Tip } from "./tooltip";
 import {
   ACTIONS_COLUMN_WIDTH, HEADER_HEIGHT, NAV_KEYS, ROW_HEIGHT, SELECT_COLUMN_WIDTH,
   applyRowClick, columnWidth, defaultHiddenColumns, keyboardNav, resizeColumn, selectionSummary, sortRows, toggleColumn, toggleSort, visibleColumns,
-  type Density, type SelectionMode, type SortState,
-} from "./data-table-helpers";
+  type Density, type SelectionMode, type SortState, pluralNoun } from "./data-table-helpers";
 
 export type { Density, SelectionMode, SortState } from "./data-table-helpers";
 
@@ -255,7 +254,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
     <div className={cn("flex min-w-0 flex-col", fill && "h-full min-h-0", props.className)} data-density={density}>
       {showStrip && (
         <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-[11.5px] text-muted-foreground">
-          <span className="tabular">{selectionMode !== "none" ? selectionSummary(selected.length, total, noun) : `${total.toLocaleString()} ${noun}${total === 1 ? "" : "s"}`}</span>
+          <span className="tabular">{selectionMode !== "none" ? selectionSummary(selected.length, total, noun) : `${total.toLocaleString()} ${pluralNoun(noun, total)}`}</span>
           {selectionMode === "multi" && selected.length > 0 && <Button variant="ghost" size="xs" className="h-6 px-1.5 text-[11px]" onClick={() => { setSelected([]); setAnchorId(null); }}>Clear</Button>}
           {props.loading && sorted.length > 0 && <Loader2 className="size-3 animate-spin" aria-label="Loading" />}
           <div className="flex-1" />
@@ -327,7 +326,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
             {Array.from({ length: 8 }).map((_, i) => <div key={i} className="mb-1 rounded bg-muted/60" style={{ height: rowH - 8, width: `${92 - (i % 4) * 8}%` }} />)}
           </div>
         ) : sorted.length === 0 ? (
-          props.empty ?? <StateRow title={`No ${noun}s`} />
+          props.empty ?? <StateRow title={`No ${pluralNoun(noun, 0)}`} />
         ) : virtualize ? (
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize(), minWidth: gridWidth }}>
             {items.map((v) => renderRow(sorted[v.index], v.index, { transform: `translateY(${v.start}px)` }))}
