@@ -27,6 +27,7 @@ import { commentPage, PdfSidebar } from "./sidebar";
 import { pageText } from "./snapshot";
 import { currentAnnotationAuthor, setAnnotationAuthor, usePdfStore, type SidebarTab, type Tool } from "./store";
 import { useWorkspaceUserName } from "../shared/use-workspace-user";
+import { OfficeAppIcon } from "../shared/office-app-icon";
 import { ThumbnailRail } from "./thumbnail-rail";
 import { PdfToolbar } from "./toolbar";
 import { VersionsDialog } from "./versions-dialog";
@@ -40,15 +41,15 @@ const SUGGESTIONS = {
 
 const TOOL_KEYS: Record<string, Tool> = { v: "select", h: "hand", "1": "highlight", "2": "underline", "3": "strikeout", n: "note", t: "text", r: "rect", e: "ellipse", p: "freehand", x: "redaction", l: "link" };
 
-export interface PdfEditorPageProps { id: string; templateId?: string | null; blobId?: string | null; matterId?: string | null; matters: Matter[] }
+export interface PdfEditorPageProps { id: string; templateId?: string | null; blobId?: string | null; blank?: boolean; matterId?: string | null; matters: Matter[] }
 
 export function PdfEditorPage(props: PdfEditorPageProps) {
-  if (props.id === "new" && !props.templateId) return <NewPdfView blobId={props.blobId ?? null} matterId={props.matterId ?? null} />;
+  if (props.id === "new" && !props.templateId) return <NewPdfView blobId={props.blobId ?? null} blank={Boolean(props.blank)} matterId={props.matterId ?? null} />;
   return <PdfEditor {...props} />;
 }
 
 // ---------------------------------------------------------------------------
-function NewPdfView({ blobId, matterId }: { blobId: string | null; matterId: string | null }) {
+function NewPdfView({ blobId, blank: startBlank, matterId }: { blobId: string | null; blank: boolean; matterId: string | null }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState<string | null>(blobId ? "Opening PDF…" : null);
   const [drag, setDrag] = React.useState(false);
@@ -59,6 +60,15 @@ function NewPdfView({ blobId, matterId }: { blobId: string | null; matterId: str
     if (!blobId) return;
     postJson<{ url: string }>("/api/office/pdf/from-blob", { blobId, matterId: matterId ?? undefined }).then((r) => router.replace(r.url)).catch((e) => { toast.error((e as Error).message); setBusy(null); });
   }, [blobId, matterId, router]);
+  const blank = async () => {
+    setBusy("Creating a blank PDF…");
+    try {
+      const r = await postJson<{ doc: { id: string } }>("/api/office/docs", { kind: "pdf", title: "Untitled PDF", content: emptyModel(), matterId: matterId ?? undefined });
+      router.replace(`/office/pdf/${r.doc.id}`);
+    } catch (e) { toast.error(`Could not create the PDF: ${(e as Error).message}`); setBusy(null); }
+  };
+  const blankStarted = React.useRef(false);
+  React.useEffect(() => { if (startBlank && !blobId && !blankStarted.current) { blankStarted.current = true; void blank(); } });
   const upload = async (file: File) => {
     if (!/\.pdf$/i.test(file.name)) { toast.error("Only PDF files can be opened here"); return; }
     setBusy(`Importing ${file.name}…`);
@@ -76,15 +86,15 @@ function NewPdfView({ blobId, matterId }: { blobId: string | null; matterId: str
       <TopbarSlot><Link href="/office?kind=pdf" className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[12.5px] text-muted-foreground hover:bg-accent hover:text-foreground"><ArrowLeft className="size-3.5" /> PDFs</Link><KindBadge kind="pdf" /><span className="text-[13px] font-semibold">New PDF</span></TopbarSlot>
       <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <div className="w-full max-w-2xl">
-          <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) void upload(f); }} onClick={() => !busy && inputRef.current?.click()} className={cn("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-background/80 p-12 text-center transition-colors hover:border-primary/60", drag && "border-primary bg-primary/5")}>
-            {busy ? <><Loader2 className="size-8 animate-spin text-primary" /><div className="text-sm font-medium">{busy}</div><div className="text-xs text-muted-foreground">Extracting text, outline and form fields</div></> : <><div className="flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive"><Upload className="size-5" /></div><div className="text-[15px] font-semibold">Drop a PDF to open it</div><div className="max-w-md text-[12.5px] text-muted-foreground">Productions, orders, exhibits, scanned letters — up to 60 MB. The file is stored in the library and opened with text extraction.</div><Button size="sm" className="mt-2" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}><Upload className="size-3.5" /> Choose a file</Button></>}
+          <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) void upload(f); }} onClick={() => !busy && inputRef.current?.click()} className={cn("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-background p-12 text-center transition-colors hover:border-foreground/30", drag && "border-primary bg-primary/5")}>
+            {busy ? <><Loader2 className="size-8 animate-spin text-primary" /><div className="text-sm font-medium">{busy}</div><div className="text-xs text-muted-foreground">Extracting text, outline and form fields</div></> : <><OfficeAppIcon kind="pdf" size={28} /><div className="text-[15px] font-semibold">Drop a PDF to open it</div><div className="max-w-md text-[12.5px] text-muted-foreground">Productions, orders, exhibits, scanned letters — up to 60 MB. The file is stored in the library and opened with text extraction.</div><div className="mt-2 flex items-center gap-2"><Button size="sm" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}><Upload className="size-3.5" /> Choose a file</Button><Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); void blank(); }}>Blank page</Button></div></>}
             <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }} />
           </div>
           {templates.length > 0 && (
             <div className="mt-6">
               <div className="mb-2 text-[12.5px] font-semibold">Or start from a template</div>
               <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                {templates.map((t) => <Link key={t.id} href={`/office/pdf/new?template=${t.id}${matterId ? `&matter=${matterId}` : ""}`} className="rounded-lg border bg-background p-3 text-left transition-colors hover:border-foreground/20"><div className="flex items-center gap-1.5 text-[13px] font-medium"><FileType className="size-3.5 text-destructive" /> {t.name}</div><div className="mt-1 line-clamp-2 text-[11.5px] text-muted-foreground">{t.description}</div></Link>)}
+                {templates.map((t) => <Link key={t.id} href={`/office/pdf/new?template=${t.id}${matterId ? `&matter=${matterId}` : ""}`} className="rounded-lg border bg-background p-3 text-left transition-colors hover:border-foreground/20"><div className="flex items-center gap-1.5 text-[13px] font-medium"><OfficeAppIcon kind="pdf" size={14} /> {t.name}</div><div className="mt-1 line-clamp-2 text-[11.5px] text-muted-foreground">{t.description}</div></Link>)}
               </div>
             </div>
           )}

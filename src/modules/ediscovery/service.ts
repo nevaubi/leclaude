@@ -13,7 +13,7 @@ import type { EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain
 import { batesInRange, compareBates, isEmptyQuery, makeSnippet, matchesQuery, parseQuery, type ParsedQuery, type QueryNode, type Searchable } from "./query";
 import { batches, redactions as redactionStore } from "./review-store";
 import { currentUser } from "@/lib/current-user";
-import { indexTextFor, isProducible, productionLoadFileCsv, productionSummary, templatePrivilegeDescription, toPrivilegeLogRow } from "./privilege";
+import { counselRoster, indexTextFor, isProducible, productionLoadFileCsv, productionSummary, templatePrivilegeDescription, toPrivilegeLogRow } from "./privilege";
 import { CODING_RULES_KEY, DEFAULT_CODING_RULES } from "./rules";
 import { audit } from "@/lib/integrity/audit";
 import { contentHash } from "@/lib/integrity/hash";
@@ -873,7 +873,8 @@ export function deletePrivilegeEntry(id: string) {
 /** Template-based generation (no AI). The AI variant lives in ai.ts and falls back to this. */
 export function generatePrivilegeLogTemplate(matterId: string, opts: { regenerate?: boolean } = {}) {
   const docs = opts.regenerate ? matterDocs(matterId).filter((d) => d.coding.privileged === true) : privilegedDocsWithoutEntry(matterId);
-  const entries = docs.map((d) => upsertPrivilegeEntry(d, templatePrivilegeDescription(d)));
+  const roster = counselRoster(matterId);
+  const entries = docs.map((d) => upsertPrivilegeEntry(d, templatePrivilegeDescription(d, roster)));
   // Remove entries for documents no longer coded privileged.
   const stale = db().privilegeLog.find((e) => e.matterId === matterId && db().edocs.get(e.docId)?.coding.privileged !== true);
   for (const e of stale) db().privilegeLog.delete(e.id);

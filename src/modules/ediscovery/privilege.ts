@@ -1,14 +1,34 @@
-import type { EDocument, PrivilegeLogEntry } from "@/lib/types/domain";
+import type { EDocument, Person, PrivilegeLogEntry } from "@/lib/types/domain";
 import type { PrivilegeLogRow, ProductionSummary } from "./types";
 import { parseBates } from "./query";
+import { matterPeople } from "./analysis/service";
 
 /**
- * Pure helpers shared by the seed, the service and tests (no server-only imports):
- * privilege-log templating, CSV/markdown export, production load file.
+ * Server-side helpers shared by the seed, the service and tests: privilege-log templating, CSV/markdown export,
+ * production load file.
+ *
+ * Who counts as counsel is data, not code: the roster is built from the matter's own people (attorneys, and anyone
+ * whose title names them as counsel), so a new matter never inherits another matter's lawyers.
  */
 
-const COUNSEL = new Set(["Robert Kaine", "Martin Suarez", "Daniel Okafor", "Thomas Ashby", "Elena Marsh", "Jordan Whitfield", "Priya Raman"]);
-const COUNSEL_TITLE: Record<string, string> = { "Robert Kaine": "Associate General Counsel", "Martin Suarez": "Regulatory Affairs Counsel", "Daniel Okafor": "outside counsel (Seeger Weiss LLP)", "Thomas Ashby": "outside counsel (Ashby Lowe LLP)" };
+/** Counsel in a matter: display name → role label ("Associate General Counsel", "counsel, Firm LLP"). */
+export type CounselRoster = ReadonlyMap<string, string>;
+
+const COUNSEL_TITLE_RE = /\b(counsel|attorney|lawyer|solicitor|barrister|esq)\b/i;
+
+export function counselRosterFromPeople(people: Person[]): CounselRoster {
+  const out = new Map<string, string>();
+  for (const p of people) {
+    if (p.title && COUNSEL_TITLE_RE.test(p.title)) out.set(p.name, p.title);
+    else if (p.role === "attorney") out.set(p.name, p.organization ? `counsel, ${p.organization}` : "counsel");
+  }
+  return out;
+}
+
+/** The roster for one matter, from its own people. */
+export function counselRoster(matterId: string): CounselRoster {
+  return counselRosterFromPeople(matterPeople(matterId));
+}
 
 function typeNoun(t: EDocument["type"]) {
   switch (t) {
@@ -25,8 +45,9 @@ function typeNoun(t: EDocument["type"]) {
   }
 }
 
-function withRole(name: string) {
-  return COUNSEL_TITLE[name] ? `${name} (${COUNSEL_TITLE[name]})` : COUNSEL.has(name) ? `${name} (counsel)` : name;
+function withRole(name: string, roster: CounselRoster) {
+  const role = roster.get(name);
+  return role ? `${name} (${role})` : name;
 }
 
 /** Topic phrase derived from issue codes, kept deliberately generic so the description does not reveal content. */
@@ -50,12 +71,12 @@ function topicFor(doc: EDocument) {
  * revealing the advice itself. Used when no OpenAI key is configured and as
  * the seed for reviewed entries.
  */
-export function templatePrivilegeDescription(doc: EDocument): string {
+export function templatePrivilegeDescription(doc: EDocument, roster: CounselRoster = counselRoster(doc.matterId)): string {
   const basis = doc.coding.privilegeBasis ?? "attorney-client";
-  const author = withRole(doc.from ?? doc.custodianName);
-  const authorIsCounsel = COUNSEL.has(doc.from ?? doc.custodianName);
-  const recipients = (doc.to ?? []).map(withRole);
-  const recipientCounsel = (doc.to ?? []).some((r) => COUNSEL.has(r)) || (doc.cc ?? []).some((r) => COUNSEL.has(r));
+  const author = withRole(doc.from ?? doc.custodianName, roster);
+  const authorIsCounsel = roster.has(doc.from ?? doc.custodianName);
+  const recipients = (doc.to ?? []).map((r) => withRole(r, roster));
+  const recipientCounsel = (doc.to ?? []).some((r) => roster.has(r)) || (doc.cc ?? []).some((r) => roster.has(r));
   const noun = typeNoun(doc.type);
   const topic = topicFor(doc);
   const to = recipients.length ? ` to ${recipients.join(", ")}` : "";
@@ -88,15 +109,24 @@ export function privilegeLogCsv(rows: PrivilegeLogRow[]): string {
   return [header.join(","), ...lines].join("\r\n");
 }
 
-export function privilegeLogMarkdown(rows: PrivilegeLogRow[], matterName: string, caption?: string): string {
+export function privilegeLogMarkdown(rows: PrivilegeLogRow[], matterName: string, caption?: string, roster?: CounselRoster): string {
   const head = `# Privilege Log\n\n**${matterName}**${caption ? ` · ${caption}` : ""}\n\nProduced pursuant to Fed. R. Civ. P. 26(b)(5)(A). ${rows.length} entr${rows.length === 1 ? "y" : "ies"}. Generated ${new Date().toISOString().slice(0, 10)}.\n\n`;
   const table = ["| No. | Bates | Date | Type | Author | Recipients | Basis | Description |", "| --- | --- | --- | --- | --- | --- | --- | --- |"];
   rows.forEach((r, i) => table.push(`| ${i + 1} | ${r.bates} | ${r.date} | ${r.docType} | ${r.author} | ${r.recipients.join("; ") || "—"} | ${r.basis} | ${r.description.replace(/\|/g, "/")} |`));
-  const legend = `\n\n## Legend\n\n- **Attorney-client**: confidential communication between client and counsel for the purpose of obtaining or providing legal advice.\n- **Work product**: material prepared by or at the direction of counsel in anticipation of litigation (Fed. R. Civ. P. 26(b)(3)).\n- Persons identified as counsel: Robert Kaine (Associate General Counsel); Martin Suarez (Regulatory Affairs Counsel); Thomas Ashby (Ashby Lowe LLP); Daniel Okafor (Seeger Weiss LLP).`;
+  const legend = `\n\n## Legend\n\n- **Attorney-client**: confidential communication between client and counsel for the purpose of obtaining or providing legal advice.\n- **Work product**: material prepared by or at the direction of counsel in anticipation of litigation (Fed. R. Civ. P. 26(b)(3)).${counselLegend(rows, roster)}`;
   return head + table.join("\n") + legend;
 }
 
 /** Documents that go out the door: responsive, not privileged, not exact duplicates. */
+/** "Persons identified as counsel" bullet: roster members who appear as an author or recipient in the log. */
+function counselLegend(rows: PrivilegeLogRow[], roster?: CounselRoster): string {
+  if (!roster?.size) return "";
+  const named = new Set<string>();
+  for (const r of rows) for (const n of [r.author, ...r.recipients.map((x) => x.replace(/\s*\(cc\)$/, ""))]) if (roster.has(n)) named.add(n);
+  if (!named.size) return "";
+  return `\n- Persons identified as counsel: ${[...named].sort().map((n) => `${n} (${roster.get(n)})`).join("; ")}.`;
+}
+
 export function isProducible(d: EDocument) {
   return d.coding.responsive === true && d.coding.privileged !== true && !d.isDuplicateOf;
 }

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/integrity/audit";
 import { matterFrom } from "@/modules/ediscovery/api-utils";
 import { listPrivilegeLog } from "@/modules/ediscovery/service";
-import { privilegeLogCsv, privilegeLogMarkdown } from "@/modules/ediscovery/privilege";
+import { counselRoster, privilegeLogCsv, privilegeLogMarkdown } from "@/modules/ediscovery/privilege";
 import { privilegeLogXlsx } from "@/modules/ediscovery/privilege-xlsx";
 
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return new Response(new Uint8Array(bytes), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="privilege-log-${matter.slug}-${stamp}.xlsx"`, "Content-Length": String(bytes.byteLength) } });
   }
   if (format === "markdown") {
-    return Response.json({ title: `Privilege Log — ${matter.shortName} — ${stamp}`, markdown: privilegeLogMarkdown(rows, matter.name, matter.caption), count: rows.length });
+    return Response.json({ title: `Privilege Log — ${matter.shortName} — ${stamp}`, markdown: privilegeLogMarkdown(rows, matter.name, matter.caption, counselRoster(matter.id)), count: rows.length });
   }
   return new Response(privilegeLogCsv(rows), {
     headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="privilege-log-${matter.slug}-${stamp}.csv"` },

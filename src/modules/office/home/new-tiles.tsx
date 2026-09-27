@@ -11,8 +11,9 @@ import type { OfficeKind } from "@/lib/types/domain";
 import { OfficeAppIcon } from "../shared/office-app-icon";
 import { KIND_META, OFFICE_KINDS, type OfficeTemplateSummary } from "./types";
 
-export function newHref(kind: OfficeKind, opts: { templateId?: string; matterId?: string | null } = {}) {
+export function newHref(kind: OfficeKind, opts: { templateId?: string; matterId?: string | null; blank?: boolean } = {}) {
   const sp = new URLSearchParams();
+  if (opts.blank && kind === "pdf") sp.set("blank", "1");
   if (opts.templateId) sp.set("template", opts.templateId);
   if (opts.matterId) sp.set("matter", opts.matterId);
   const qs = sp.toString();
@@ -47,7 +48,7 @@ function NewItem({ kind, initialTemplates, active, matterId }: { kind: OfficeKin
       <OfficeAppIcon kind={kind} size={22} />
       <span className={cn("min-w-0 truncate text-[13px] font-medium", active && "text-primary")}>{meta.label}</span>
       <span className="ml-auto flex shrink-0 items-center">
-        <Tip label={`New blank ${meta.lower}`} shortcut={active ? "N" : undefined}><Button size="xs" variant="ghost" asChild><Link href={newHref(kind, { matterId })} aria-label={`New blank ${meta.lower}`}>Blank</Link></Button></Tip>
+        <Tip label={`New blank ${meta.lower}`} shortcut={active ? "N" : undefined}><Button size="xs" variant="ghost" asChild><Link href={newHref(kind, { matterId, blank: true })} aria-label={`New blank ${meta.lower}`}>Blank</Link></Button></Tip>
         <DropdownMenu onOpenChange={(o) => { if (o) void loadTemplates(); }}>
           <DropdownMenuTrigger asChild><Button size="xs" variant="ghost" className="text-muted-foreground hover:text-foreground" aria-label={`New ${meta.lower} from a template`}>Template <ChevronDown className="size-3 opacity-60" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80 max-h-[60vh]">

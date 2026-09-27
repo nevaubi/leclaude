@@ -1,4 +1,5 @@
 "use client";
+import { OfficeAppIcon } from "./office-app-icon";
 /**
  * Shared chrome for the four office editors: the quiet header row (portaled
  * into the app shell's top bar), the decluttered toolbar primitives, the
@@ -38,11 +39,10 @@ export const KIND_CHROME: Record<OfficeKind, { badge: string; icon: LucideIcon; 
 
 export function KindBadge({ kind, className }: { kind: OfficeKind; className?: string }) {
   const meta = KIND_CHROME[kind];
-  const Icon = meta.icon;
+  // The application mark alone names the kind (Word, Excel, PowerPoint, PDF); no chip around it.
   return (
-    <span className={cn("inline-flex h-6 shrink-0 items-center gap-1 rounded-md border bg-background px-1.5 font-mono text-[10.5px] font-medium tracking-wide text-muted-foreground", className)} aria-label={`${meta.badge} ${meta.noun}`}>
-      <Icon className={cn("size-3", meta.color)} />
-      {meta.badge}
+    <span className={cn("inline-flex shrink-0 items-center", className)} role="img" aria-label={`${meta.badge} ${meta.noun}`} title={meta.noun}>
+      <OfficeAppIcon kind={kind} size={16} />
     </span>
   );
 }

@@ -142,7 +142,8 @@ export function useNow(active: boolean, intervalMs = 1000) {
 }
 
 export function InlineAlert({ tone = "warning", icon: Icon = AlertCircle, title, children, className, action }: { tone?: "warning" | "destructive" | "info" | "success"; icon?: LucideIcon; title?: React.ReactNode; children?: React.ReactNode; className?: string; action?: React.ReactNode }) {
-  const tones = { warning: "border-warning/50 bg-warning/10 text-warning-foreground dark:text-warning", destructive: "border-destructive/40 bg-destructive/8 text-destructive", info: "border-info/40 bg-info/8 text-info", success: "border-success/40 bg-success/8 text-success" };
+  // Quiet: hairline border on the page background; only the icon carries the tone (errors keep a red border).
+  const tones = { warning: "border-border text-warning-foreground dark:text-warning", destructive: "border-destructive/40 text-destructive", info: "border-border text-muted-foreground", success: "border-border text-success" };
   return (
     <div className={cn("flex items-start gap-2.5 rounded-md border px-3 py-2 text-xs", tones[tone], className)}>
       <Icon className="mt-0.5 size-3.5 shrink-0" />

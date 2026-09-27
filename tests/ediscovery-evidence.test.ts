@@ -9,6 +9,7 @@ import { resolveBatesInMatter, resolveCiteSourceId, resolveWitnessInMatter } fro
 import { resolvePersonName } from "@/modules/ediscovery/analysis/graph";
 import { matterPeople } from "@/modules/ediscovery/analysis/service";
 import { importTranscript } from "@/modules/ediscovery/analysis/transcript-import-server";
+import { counselRoster, privilegeLogMarkdown, templatePrivilegeDescription } from "@/modules/ediscovery/privilege";
 
 /**
  * Evidence contract regressions (constitution §23 / §44): unresolved sources stay unresolved, Bates numbers resolve
@@ -91,5 +92,20 @@ describe("person resolution is matter-scoped and unambiguous", () => {
     const afffDep = db().depositions.findOne((x) => x.matterId === AFFF)!;
     expect(() => importTranscript({ matterId: X, text, witnessName: "Ann Park", depositionId: afffDep.id, sourceKind: "paste" })).toThrow(/No deposition/);
     expect(db().depositions.get(afffDep.id)!.matterId).toBe(AFFF);
+  });
+});
+
+describe("privilege descriptions use the matter's own counsel", () => {
+  it("does not give another matter's lawyer a title in this matter", () => {
+    const doc: EDocument = { id: "ed_ev_x_priv", matterId: X, bates: "PKH-0000002", date: "2025-01-03", custodianId: "p_ev_mary_smith", custodianName: "Mary Smith", type: "Email", subject: "Question", from: "Mary Smith", to: ["Robert Kaine"], text: "Can you advise?", coding: { privileged: true, privilegeBasis: "attorney-client" } };
+    db().edocs.put(doc);
+    expect(counselRoster(X).has("Robert Kaine")).toBe(false);
+    const desc = templatePrivilegeDescription(doc);
+    expect(desc).not.toMatch(/General Counsel/);
+    expect(desc).toMatch(/^Email from Mary Smith to Robert Kaine/);
+    const md = privilegeLogMarkdown([], "Park v. Harbor");
+    expect(md).not.toMatch(/Persons identified as counsel/);
+    // The sample matter still resolves its own counsel from its people records.
+    expect(counselRoster(AFFF).get("Robert Kaine")).toBe("Associate General Counsel");
   });
 });

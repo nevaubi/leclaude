@@ -28,6 +28,7 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
   const contentRef = React.useRef<C | null>(null);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const idRef = React.useRef(opts.id);
+  const createRef = React.useRef<Promise<OfficeDocument> | null>(null);
   /** True once the document has been fetched/created. Nothing is saved before that, so a stray editor
    *  update during loading can never overwrite the stored document with an empty editor state. */
   const loadedRef = React.useRef(false);
@@ -44,9 +45,14 @@ export function useOfficeDoc<C>(opts: UseOfficeDocOptions<C>) {
       setError(null);
       try {
         if (opts.id === "new") {
-          const res = await fetch("/api/office/docs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: opts.kind, content: opts.templateId ? undefined : opts.emptyContent(), templateId: opts.templateId ?? undefined, matterId: opts.matterId ?? undefined }) });
-          if (!res.ok) throw new Error((await res.json().catch(() => ({ error: res.statusText }))).error);
-          const { doc } = (await res.json()) as { doc: OfficeDocument };
+          // One create per mount, even when the effect runs twice (React StrictMode, fast refresh): a second run
+          // awaits the same request instead of creating a second document.
+          createRef.current ??= (async () => {
+            const res = await fetch("/api/office/docs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: opts.kind, content: opts.templateId ? undefined : opts.emptyContent(), templateId: opts.templateId ?? undefined, matterId: opts.matterId ?? undefined }) });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({ error: res.statusText }))).error);
+            return ((await res.json()) as { doc: OfficeDocument }).doc;
+          })();
+          const doc = await createRef.current;
           if (cancelled) return;
           idRef.current = doc.id;
           contentRef.current = doc.content as C;

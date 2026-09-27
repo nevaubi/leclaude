@@ -38,7 +38,7 @@ beforeAll(() => {
 
 describe("library on an empty workspace", () => {
   it("has the system folders and no items", async () => {
-    const res = await treeRoute.GET(new NextRequest("http://localhost/api/library/tree"));
+    const res = await treeRoute.GET();
     expect(res.status).toBe(200);
     const tree = (await res.json()) as ReturnType<typeof treeResponse>;
     expect(tree.roots.map((r) => r.id).sort()).toEqual(Object.values(LIBRARY_FOLDERS).sort());

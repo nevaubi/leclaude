@@ -16,29 +16,34 @@ function finish(text: string, name: string | undefined, mime: string, method: st
   return { text: clean.slice(0, MAX_CHARS), name, mime, method, pages, truncated: clean.length > MAX_CHARS };
 }
 
+/** Office Open XML formats are zip packages whose MIME types contain "xml"; they must never be decoded as text. */
+function officeKind(ext: string, mime: string): "docx" | "xlsx" | "pptx" | null {
+  if (ext === "docx" || /wordprocessingml/.test(mime)) return "docx";
+  if (ext === "xlsx" || ext === "xls" || ext === "xlsm" || /spreadsheetml|ms-excel/.test(mime)) return "xlsx";
+  if (ext === "pptx" || /presentationml/.test(mime)) return "pptx";
+  return null;
+}
+
+/** Zip container (PK\x03\x04): binary, whatever the declared type says. */
+function isZip(bytes: Uint8Array) {
+  return bytes.length > 3 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+}
+
 export async function extractTextFromBytes(bytes: Uint8Array, name: string | undefined, mime: string): Promise<ExtractedText> {
   const ext = (name ?? "").toLowerCase().split(".").pop() ?? "";
-  const isText = /^text\/|json|xml|csv|markdown/.test(mime) || ["txt", "md", "csv", "json", "html", "htm"].includes(ext);
-  if (isText) {
-    let text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-    if (ext === "html" || ext === "htm" || /html/.test(mime)) {
-      const { htmlToText } = await import("@/lib/ai/toolkit/http");
-      text = htmlToText(text, { maxChars: MAX_CHARS }).text;
-    }
-    return finish(text, name, mime, "text");
-  }
-  if (ext === "docx" || /wordprocessingml/.test(mime)) {
+  const office = officeKind(ext, mime);
+  if (office === "docx") {
     const mammoth = (await import("mammoth")).default;
     const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
     return finish(result.value, name, mime, "mammoth");
   }
-  if (ext === "xlsx" || ext === "xls" || /spreadsheetml|ms-excel/.test(mime)) {
+  if (office === "xlsx") {
     const XLSX = await import("xlsx");
     const wb = XLSX.read(bytes, { type: "array" });
     const parts = wb.SheetNames.map((s) => `## ${s}\n${XLSX.utils.sheet_to_csv(wb.Sheets[s])}`);
     return finish(parts.join("\n\n"), name, mime, "sheetjs");
   }
-  if (ext === "pptx" || /presentationml/.test(mime)) {
+  if (office === "pptx") {
     const JSZip = (await import("jszip")).default;
     const zip = await JSZip.loadAsync(bytes);
     const slides = Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)).sort((a, b) => Number(a.match(/\d+/)?.[0]) - Number(b.match(/\d+/)?.[0]));
@@ -49,6 +54,15 @@ export async function extractTextFromBytes(bytes: Uint8Array, name: string | und
       parts.push(`## Slide ${i + 1}\n${text}`);
     }
     return finish(parts.join("\n\n"), name, mime, "pptx-xml", slides.length);
+  }
+  const isText = !isZip(bytes) && (/^text\/|json|xml|csv|markdown/.test(mime) || ["txt", "md", "csv", "json", "html", "htm", "xml"].includes(ext));
+  if (isText) {
+    let text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    if (ext === "html" || ext === "htm" || /html/.test(mime)) {
+      const { htmlToText } = await import("@/lib/ai/toolkit/http");
+      text = htmlToText(text, { maxChars: MAX_CHARS }).text;
+    }
+    return finish(text, name, mime, "text");
   }
   if (ext === "pdf" || /pdf/.test(mime)) {
     try {
