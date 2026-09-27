@@ -187,12 +187,29 @@ function renderMessages(req: InferenceRequest, platform: AnthropicPlatform, cita
   return out;
 }
 
+/**
+ * Evidence goes with the current question: the last user turn that is not a tool-result turn, so it stays in the same
+ * prefix position across tool rounds (stable cache, stable citation indexes) and never precedes `tool_result` blocks,
+ * which the API requires at the start of their message.
+ */
 function attachEvidence(messages: RenderedMessage[], evidence: SearchResultBlock[], asText: boolean): void {
   const blocks: unknown[] = asText ? [{ type: "text", text: `SOURCES (cite by number):\n${renderEvidenceAsText(evidence)}` }] : evidence.map((e) => renderSearchResult(e, true));
-  let last = -1;
-  for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "user") { last = i; break; }
-  if (last < 0) { messages.push({ role: "user", content: blocks }); return; }
-  messages[last] = { role: "user", content: [...blocks, ...messages[last].content] };
+  const isToolResult = (b: unknown) => (b as { type?: string })?.type === "tool_result";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role !== "user" || messages[i].content.some(isToolResult)) continue;
+    messages[i] = { role: "user", content: [...blocks, ...messages[i].content] };
+    return;
+  }
+  // Only tool-result turns (or nothing) to attach to: keep tool_result blocks first.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role !== "user") continue;
+    const content = messages[i].content;
+    const firstOther = content.findIndex((b) => !isToolResult(b));
+    const at = firstOther < 0 ? content.length : firstOther;
+    messages[i] = { role: "user", content: [...content.slice(0, at), ...blocks, ...content.slice(at)] };
+    return;
+  }
+  messages.push({ role: "user", content: blocks });
 }
 
 // ---------------- Request builder ----------------

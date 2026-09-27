@@ -2,14 +2,14 @@ import "server-only";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { aiConfig } from "@/lib/ai/config";
-import type { Workflow, WorkflowFrontend, WorkflowRun } from "@/lib/types/domain";
+import type { Workflow, WorkflowFrontend, WorkflowRunStep } from "@/lib/types/domain";
 import { intelSources } from "@/modules/intel/store";
 import { syncInputsFromFrontend } from "./frontend";
 import { validateWorkflow, type GraphIssue } from "./graph";
 import { nodeSpec } from "./registry";
 import { normalizeWorkflowGraph, type WorkflowUpsert } from "./schema";
 import { describeSchedule, nextRunAt, normalizeSchedule } from "./schedule";
-import { WORKFLOW_AGENTS, WORKFLOW_CURRENT_USER, type RunFilters, type WorkflowListItem, type WorkflowRunRecord, type WorkflowStats } from "./types";
+import { isTerminalStatus, stopReasonOf, terminalStateOf, WORKFLOW_AGENTS, WORKFLOW_CURRENT_USER, type RunFilters, type WorkflowListItem, type WorkflowRunRecord, type WorkflowStats } from "./types";
 
 export interface WorkflowRecord extends Workflow {
   sourceTemplateId?: string;
@@ -30,11 +30,13 @@ function normalizeFrontend(f: WorkflowFrontend | null | undefined): WorkflowFron
 }
 
 export interface RunSummary extends Omit<WorkflowRunRecord, "snapshot" | "steps" | "loopIterations"> {
-  stepCounts: Record<WorkflowRun["status"] | "pending" | "skipped", number>;
+  stepCounts: Record<WorkflowRunStep["status"], number>;
   stepTotal: number;
   matterName?: string;
   triggeredByName?: string;
   currentStep?: string;
+  /** Node where the run stopped (failed, cancelled or budget-exhausted), by label. */
+  stoppedAt?: string;
 }
 
 function ownerName(id?: string) { return id ? db().people.get(id)?.name : undefined; }
@@ -192,20 +194,26 @@ export function workflowForTemplate(templateId: string, opts: { ownerId?: string
 export function summarizeRun(run: WorkflowRunRecord): RunSummary {
   const { snapshot, steps, loopIterations, ...rest } = run;
   void snapshot; void loopIterations;
-  const stepCounts: RunSummary["stepCounts"] = { pending: 0, running: 0, succeeded: 0, failed: 0, skipped: 0, waiting_approval: 0, queued: 0, cancelled: 0 };
+  const stepCounts: RunSummary["stepCounts"] = { pending: 0, running: 0, succeeded: 0, failed: 0, skipped: 0, waiting_approval: 0, cancelled: 0 };
   for (const s of steps) stepCounts[s.status] = (stepCounts[s.status] ?? 0) + 1;
   const d = db();
   const current = steps.find((s) => s.status === "running" || s.status === "waiting_approval");
   const w = d.workflows.get(run.workflowId);
+  const nodes = run.snapshot?.nodes ?? w?.nodes ?? [];
+  const labelOf = (id: string | undefined) => (id ? nodes.find((n) => n.id === id)?.label ?? id : undefined);
   return {
     ...rest,
     workflowName: run.workflowName ?? w?.name ?? run.workflowId,
     workflowCategory: run.workflowCategory ?? w?.category,
+    // Records written before terminal states existed map through the explicit mapping (never guessed from prose).
+    terminalState: terminalStateOf(run) ?? undefined,
+    stopReason: stopReasonOf(run) ?? undefined,
     stepCounts,
     stepTotal: steps.length,
     matterName: run.matterId ? d.matters.get(run.matterId)?.shortName : undefined,
     triggeredByName: run.triggeredById ? d.people.get(run.triggeredById)?.name : undefined,
-    currentStep: current ? (run.snapshot?.nodes ?? w?.nodes ?? []).find((n) => n.id === current.nodeId)?.label ?? current.nodeId : undefined,
+    currentStep: current ? labelOf(current.nodeId) : undefined,
+    stoppedAt: labelOf(run.stoppedAtNodeId),
     artifacts: run.artifacts?.slice(0, 20),
   };
 }
@@ -213,9 +221,10 @@ export function summarizeRun(run: WorkflowRunRecord): RunSummary {
 export function listRuns(filters: RunFilters = {}): { runs: RunSummary[]; total: number } {
   const d = db();
   const q = filters.q?.trim().toLowerCase();
+  const statuses = filters.status ? new Set(filters.status.split(",").map((s) => s.trim()).filter(Boolean)) : null;
   let runs = (d.workflowRuns.all() as WorkflowRunRecord[])
     .filter((r) => (!filters.workflowId || r.workflowId === filters.workflowId))
-    .filter((r) => (!filters.status || r.status === filters.status))
+    .filter((r) => (!statuses || statuses.has(r.status) || (statuses.has("finished") && isTerminalStatus(r.status))))
     .filter((r) => (!filters.matterId || r.matterId === filters.matterId))
     .filter((r) => (!filters.triggeredBy || r.triggeredBy === filters.triggeredBy))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
@@ -242,7 +251,8 @@ export function workflowStats(): WorkflowStats {
   const runs = d.workflowRuns.all() as WorkflowRunRecord[];
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const thisWeek = runs.filter((r) => r.startedAt >= weekAgo);
-  const finished = runs.filter((r) => r.status === "succeeded" || r.status === "failed");
+  const finished = runs.filter((r) => isTerminalStatus(r.status) && r.status !== "cancelled");
+  const isFailed = (r: WorkflowRunRecord) => r.status === "failed" || r.status === "verification_failed" || r.status === "budget_exhausted";
   const byCategory: Record<string, number> = {};
   for (const w of workflows) byCategory[w.category] = (byCategory[w.category] ?? 0) + 1;
   type Next = { workflowId: string; name: string; at: string; system?: boolean };
@@ -264,7 +274,8 @@ export function workflowStats(): WorkflowStats {
     runs: runs.length,
     runsThisWeek: thisWeek.length,
     succeededThisWeek: thisWeek.filter((r) => r.status === "succeeded").length,
-    failedThisWeek: thisWeek.filter((r) => r.status === "failed").length,
+    partialThisWeek: thisWeek.filter((r) => r.status === "partial").length,
+    failedThisWeek: thisWeek.filter(isFailed).length,
     waitingApproval: runs.filter((r) => r.status === "waiting_approval").length,
     running: runs.filter((r) => r.status === "running" || r.status === "queued").length,
     successRate: finished.length ? Math.round((finished.filter((r) => r.status === "succeeded").length / finished.length) * 100) : 0,

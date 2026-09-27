@@ -17,7 +17,14 @@ import { getCached, putCached } from "./engine/cache";
 import { ALL_SOURCES, DEFAULT_SETTINGS, type CitationCheck, type ReadRef, type ReadResult, type SavedSearch, type SearchHit, type SearchRun, type SearchRunRequest, type SearchSettings, type SearchSource, type SourceError } from "./types";
 import { currentUser } from "@/lib/current-user";
 
-export const CURRENT_USER = currentUser();
+/**
+ * The identity that owns research records written on the caller's behalf. One call site
+ * so the auth worker's request-scoped principal replaces it in a single line
+ * (constitution §21: no hardcoded production user).
+ */
+export function researchPrincipalId(): string {
+  return currentUser().id;
+}
 
 export const savedSearches = () => db().collection<SavedSearch>("search_saved");
 export const searchRuns = () => db().collection<SearchRun>("search_runs");
@@ -59,7 +66,7 @@ export function createSavedSearch(input: { name?: string; query: string; setting
     name: (input.name ?? "").trim() || input.query.trim().slice(0, 80),
     query: input.query.trim(),
     settings,
-    ownerId: CURRENT_USER.id,
+    ownerId: researchPrincipalId(),
     createdAt: now,
     updatedAt: now,
     runCount: 0,
@@ -161,7 +168,7 @@ export function recordRun(input: { id: string; query: string; settings: SearchSe
     errors: input.outcome.errors.length ? input.outcome.errors : undefined,
     synthesis: input.synthesis ? input.synthesis.slice(0, 12_000) : undefined,
     topHits: topHits.slice(0, 12),
-    ownerId: CURRENT_USER.id,
+    ownerId: researchPrincipalId(),
     matterId: input.settings.matterId ?? null,
     savedSearchId: input.savedSearchId,
     aiStatus: input.aiStatus,
@@ -359,7 +366,7 @@ export function saveHitToLibrary(hit: SearchHit, opts: { matterId?: string | nul
   const d = db();
   const now = new Date().toISOString();
   if (!d.library.get(SAVED_RESEARCH_FOLDER_ID)) {
-    d.library.put({ id: SAVED_RESEARCH_FOLDER_ID, parentId: null, name: "Saved research", type: "folder", description: "Authorities saved from the Search agent", createdAt: now, updatedAt: now, ownerId: CURRENT_USER.id, sharedWith: ["firm"], tags: ["research"] });
+    d.library.put({ id: SAVED_RESEARCH_FOLDER_ID, parentId: null, name: "Saved research", type: "folder", description: "Authorities saved from the Search agent", createdAt: now, updatedAt: now, ownerId: researchPrincipalId(), sharedWith: ["firm"], tags: ["research"] });
   }
   const cite = formatBluebook(hit);
   const existing = d.library.findOne((l) => l.parentId === SAVED_RESEARCH_FOLDER_ID && l.name === cite);
@@ -375,7 +382,7 @@ export function saveHitToLibrary(hit: SearchHit, opts: { matterId?: string | nul
     url: isExternal ? hit.url : undefined,
     content: [cite, hit.subtitle, hit.snippet, opts.note ? `Note: ${opts.note}` : ""].filter(Boolean).join("\n\n"),
     tags: ["research", hit.source, hit.authority && hit.authority !== "n/a" ? hit.authority : ""].filter(Boolean),
-    ownerId: CURRENT_USER.id,
+    ownerId: researchPrincipalId(),
     sharedWith: ["firm"],
     createdAt: now,
     updatedAt: now,

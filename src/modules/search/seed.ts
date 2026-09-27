@@ -2,8 +2,11 @@ import "server-only";
 import type { Database } from "@/lib/db";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
 import { makeProvenance } from "@/lib/integrity/provenance";
+import type { RunMetrics } from "@/lib/ai/events";
 import { jurisdictionByKey } from "./jurisdictions";
+import { answerHash } from "./engine/binding";
 import { sourceFromHit, toProvenanceSources } from "./engine/sources";
+import { messageTrustState } from "./engine/trust";
 import type { ResearchMessage, ResearchSource, ResearchThread } from "./engine/types";
 import type { SavedSearch, SearchHit, SearchRun, SearchSettings } from "./types";
 
@@ -395,12 +398,26 @@ function threadFromRun(r: SearchRun, index: number): { thread: ResearchThread; r
   const verifyMarks = (r.synthesis?.match(/\[VERIFY/g) ?? []).length;
   const cited = Object.keys(citeMap).length;
   const hasAnswer = Boolean(r.synthesis);
-  const verification = hasAnswer ? { status: (verifyMarks ? "partially-verified" : "verified") as "verified" | "partially-verified", supported: cited + 2, unsupported: verifyMarks, contradicted: 0, score: Number(((cited + 2) / (cited + 2 + verifyMarks)).toFixed(2)), checkedAt: r.createdAt } : undefined;
+  const artifactHash = hasAnswer ? answerHash(r.synthesis ?? "") : undefined;
+  // Seeded verdicts bind to the seeded answer text, exactly as a live run's would (constitution §23).
+  const verification = hasAnswer ? { status: (verifyMarks ? "partially-verified" : "verified") as "verified" | "partially-verified", supported: cited + 2, unsupported: verifyMarks, contradicted: 0, score: Number(((cited + 2) / (cited + 2 + verifyMarks)).toFixed(2)), checkedAt: r.createdAt, artifactHash, pass: 1 } : undefined;
   const stats = { sources: sources.length, read: sources.length, rounds: 1, agents: hasAnswer ? 4 : 2, durationMs: r.durationMs };
-  const provenance = hasAnswer ? { ...makeProvenance({ surface: "research", sources: toProvenanceSources(sources.filter((s) => s.n != null)), confidence: verification?.score }), generatedAt: r.createdAt, verification: verification ? { ...verification, method: "claims" as const } : undefined } : undefined;
+  const provenance = hasAnswer ? { ...makeProvenance({ surface: "research", sources: toProvenanceSources(sources.filter((s) => s.n != null)), confidence: verification?.score }), generatedAt: r.createdAt, verification: verification ? { status: verification.status, checkedAt: verification.checkedAt, supported: verification.supported, unsupported: verification.unsupported, contradicted: verification.contradicted, method: "claims" as const } : undefined } : undefined;
   const j = jurisdictionByKey(r.settings.jurisdiction).label.split(" (")[0];
   const followUps = hasAnswer ? [`What is the strongest contrary authority in the ${j} on this question?`, r.matterId ? "How does the record in this matter (documents and depositions) bear on the analysis?" : "Which statutes or regulations change the analysis?", "What standard applies at the motion-to-dismiss versus summary-judgment stage?"] : [];
-  const answer: ResearchMessage = { id: `msg_seed_${index}_a`, role: "assistant", content: r.synthesis ?? "", createdAt: r.createdAt, runId: r.id, stats, verification: verification ? { ...verification, verdicts: [] } : undefined, provenance, banner: r.aiStatus === "no_api_key" ? "no-api-key" : null, followUps, citeMap, lanes: [{ id: SEED_LANE, name: "Controlling authority", kind: "controlling", status: "done", sources: sources.length, durationMs: r.durationMs, round: 1 }] };
+  const requestedAt = new Date(r.createdAt).getTime();
+  const metrics: RunMetrics = { requestedAt, acknowledgedMs: 12, firstEvidenceMs: Math.round(r.durationMs * 0.18), firstReadMs: Math.round(r.durationMs * 0.31), firstModelTokenMs: hasAnswer ? Math.round(r.durationMs * 0.52) : null, firstSourceBackedMs: hasAnswer ? Math.round(r.durationMs * 0.58) : null, finalAnswerMs: hasAnswer ? Math.round(r.durationMs * 0.93) : null, verifiedAnswerMs: hasAnswer ? Math.round(r.durationMs * 0.9) : null, totalMs: r.durationMs, toolTimeMs: Math.round(r.durationMs * 0.6), modelTimeMs: hasAnswer ? Math.round(r.durationMs * 0.7) : 0, toolCalls: sources.length + 2, modelCalls: hasAnswer ? 4 : 0, queueWaitMs: 0, tokens: { input: hasAnswer ? 18_400 + sources.length * 900 : 0, output: hasAnswer ? 2_100 : 0, total: hasAnswer ? 20_500 + sources.length * 900 : 0, reportedCalls: hasAnswer ? 4 : 0 } };
+  const answer: ResearchMessage = {
+    id: `msg_seed_${index}_a`, role: "assistant", content: r.synthesis ?? "", createdAt: r.createdAt, runId: r.id, stats, verification: verification ? { ...verification, verdicts: [] } : undefined, provenance, banner: r.aiStatus === "no_api_key" ? "no-api-key" : null, followUps, citeMap,
+    lanes: [{ id: SEED_LANE, name: "Controlling authority", kind: "controlling", status: "done", sources: sources.length, read: sources.length, durationMs: r.durationMs, round: 1 }],
+    artifactHash, artifactVersion: hasAnswer ? 1 : undefined, metrics, mode: r.settings.fast ? "fast" : "deep",
+    terminal: hasAnswer ? (verifyMarks ? "partial" : "succeeded") : "partial",
+    stop: hasAnswer ? "coverage_sufficient" : "hard_limit",
+    failure: hasAnswer ? undefined : "not_configured",
+    failureMessage: hasAnswer ? (verifyMarks ? `${verifyMarks} statement${verifyMarks === 1 ? "" : "s"} could not be matched to a source read in this run and ${verifyMarks === 1 ? "is" : "are"} marked [VERIFY]` : undefined) : "No model provider was configured when this run happened; the lanes retrieved and read sources but no answer was written",
+    coverage: hasAnswer ? { complete: !verifyMarks, reason: verifyMarks ? `${verifyMarks} claim${verifyMarks === 1 ? "" : "s"} marked [VERIFY] by the synthesis` : `coverage adequate: ${sources.length} sources, ${sources.length} read`, gaps: [] } : undefined,
+  };
+  answer.trust = hasAnswer ? messageTrustState(answer, sources) : "generated";
   const threadId = `thr_seed_${r.id.replace(/^run_seed_/, "")}`;
   const thread: ResearchThread = {
     id: threadId,
@@ -415,7 +432,7 @@ function threadFromRun(r: SearchRun, index: number): { thread: ResearchThread; r
     pins: [],
     runIds: [r.id],
   };
-  const run: SearchRun = { ...r, threadId, mode: "deep", stats, verification, provenance, banner: r.aiStatus === "no_api_key" ? undefined : undefined, followUps, sources };
+  const run: SearchRun = { ...r, threadId, mode: answer.mode, stats, verification: verification ? { status: verification.status, supported: verification.supported, unsupported: verification.unsupported, contradicted: verification.contradicted, score: verification.score, checkedAt: verification.checkedAt } : undefined, provenance, banner: r.aiStatus === "no_api_key" ? undefined : undefined, followUps, sources, terminal: answer.terminal, stop: answer.stop, failure: answer.failure, metrics, artifactHash, trust: answer.trust };
   return { thread, run };
 }
 

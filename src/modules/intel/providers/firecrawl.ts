@@ -1,5 +1,5 @@
 import "server-only";
-import { clip, envValue, ProviderClient, ProviderError, type ProviderFactoryOptions } from "./base";
+import { clip, envValue, ProviderClient, ProviderError, providerEgress, type ProviderFactoryOptions } from "./base";
 
 /** Firecrawl REST v1 (scrape, search, crawl). Requires FIRECRAWL_API_KEY. */
 const BASE = "https://api.firecrawl.dev/v1";
@@ -16,7 +16,7 @@ export interface FirecrawlPage {
 
 export function createFirecrawl(opts: ProviderFactoryOptions = {}) {
   const key = envValue(opts, "FIRECRAWL_API_KEY");
-  const client = new ProviderClient({ name: "firecrawl", rps: 1, burst: 3, timeoutMs: 60_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "firecrawl", egress: providerEgress("firecrawl"), rps: 1, burst: 3, timeoutMs: 60_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   const headers = () => ({ Authorization: `Bearer ${key}` });
   const require = () => { if (!key) throw new ProviderError("firecrawl", "not_configured", "firecrawl: FIRECRAWL_API_KEY is not configured", false); };
   const str = (v: unknown) => (typeof v === "string" ? v : undefined);

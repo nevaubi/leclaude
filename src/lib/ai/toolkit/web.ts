@@ -1,7 +1,9 @@
 import "server-only";
 import type { Tool } from "openai/resources/responses/responses";
+import { keyFor, sharedRateLimiter } from "@/lib/net/rate-limit";
+import { isSafeFetchError, validateEgressUrl } from "@/lib/net/safe-fetch";
 import { defineTool } from "../tools";
-import { fetchText, htmlToText } from "./http";
+import { fetchText, HttpError, htmlToText } from "./http";
 
 /** OpenAI built-in web search tool configuration. */
 export function webSearchTool(opts: { contextSize?: "low" | "medium" | "high"; allowedDomains?: string[] } = {}): Tool {
@@ -13,9 +15,12 @@ export function webSearchTool(opts: { contextSize?: "low" | "medium" | "high"; a
   };
 }
 
+/** Egress policy for model-directed fetches: open web, private targets blocked, 3 MB, 15 s; NET_* env rules apply on top. */
+const FETCH_URL_POLICY = { name: "tool:fetch_url", maxBytes: 3_000_000, timeoutMs: 15_000 } as const;
+
 export const fetchUrlTool = defineTool<{ url: string; max_chars?: number }>({
   name: "fetch_url",
-  description: "Fetch a public web page, PDF-less HTML document, JSON or plain-text URL and return its readable text. Use it to read a source you found via search, a statute or regulation page, a court website, or a client-provided link.",
+  description: "Fetch a public web page, PDF-less HTML document, JSON or plain-text URL and return its readable text. Use it to read a source you found via search, a statute or regulation page, a court website, or a client-provided link. Only public http(s) hosts are reachable; internal and private addresses are refused.",
   parameters: {
     type: "object",
     properties: {
@@ -26,13 +31,26 @@ export const fetchUrlTool = defineTool<{ url: string; max_chars?: number }>({
   },
   label: (a) => `Reading ${safeHost(a.url)}`,
   async execute({ url, max_chars }, ctx) {
-    if (!/^https?:\/\//i.test(url)) throw new Error("Only http(s) URLs are supported");
-    const { text, contentType, finalUrl } = await fetchText(url, { signal: ctx.signal });
-    if (/json/i.test(contentType)) return { url: finalUrl, contentType, text: text.slice(0, max_chars ?? 30_000) };
-    if (/text\/plain/i.test(contentType)) return { url: finalUrl, contentType, text: text.slice(0, max_chars ?? 30_000) };
-    const { title, text: body } = htmlToText(text, { maxChars: max_chars ?? 30_000 });
+    // Validate before spending a rate-limit token so a blocked URL fails fast with a deterministic error.
+    try { validateEgressUrl(url, FETCH_URL_POLICY); } catch (e) { if (isSafeFetchError(e)) throw new Error(`Cannot fetch ${safeHost(url)}: ${e.message}`); throw e; }
+    const principal = typeof ctx.state.principalId === "string" ? ctx.state.principalId : typeof ctx.state.userId === "string" ? ctx.state.userId : undefined;
+    const limit = await sharedRateLimiter().acquire(keyFor("tool", "fetch_url", principal), { maxWaitMs: 5_000, signal: ctx.signal });
+    if (!limit.ok) throw new Error(`fetch_url is rate limited; retry in ${Math.ceil(limit.retryAfterMs / 1000)}s`);
+    let page: Awaited<ReturnType<typeof fetchText>>;
+    try {
+      page = await fetchText(url, { signal: ctx.signal, egress: FETCH_URL_POLICY, maxBytes: FETCH_URL_POLICY.maxBytes, timeoutMs: FETCH_URL_POLICY.timeoutMs });
+    } catch (e) {
+      if (isSafeFetchError(e)) throw new Error(`Cannot fetch ${safeHost(url)}: ${e.message}`);
+      if (e instanceof HttpError) throw new Error(`Fetch of ${safeHost(url)} failed with HTTP ${e.status}`);
+      throw e;
+    }
+    const { text, contentType, finalUrl, truncated } = page;
+    const max = max_chars ?? 30_000;
+    if (/json/i.test(contentType)) return { url: finalUrl, contentType, text: text.slice(0, max), truncated };
+    if (/text\/plain/i.test(contentType)) return { url: finalUrl, contentType, text: text.slice(0, max), truncated };
+    const { title, text: body } = htmlToText(text, { maxChars: max });
     ctx.emit({ type: "citation", citation: { title: title || finalUrl, url: finalUrl, source: "web" } });
-    return { url: finalUrl, title, contentType, text: body };
+    return { url: finalUrl, title, contentType, text: body, truncated };
   },
 });
 

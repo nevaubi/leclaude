@@ -5,8 +5,9 @@ import { kv } from "@/lib/db/kv";
 import { sha256 } from "./hash";
 import type { AuditAction, AuditEvent } from "./types";
 
-const AUDIT = "audit_log";
 import { currentUser } from "@/lib/current-user";
+
+const AUDIT = "audit_log";
 
 /**
  * Append-only, hash-chained audit log. Every AI generation/application,
@@ -50,5 +51,6 @@ export function verifyAuditChain(): { ok: boolean; checked: number; brokenAt?: s
 function compact(meta?: Record<string, unknown>) {
   if (!meta) return undefined;
   const s = JSON.stringify(meta);
-  return s.length > 4000 ? { truncated: true, preview: s.slice(0, 4000) } : meta;
+  // Store a detached copy: callers may keep mutating their objects (run usage, step state), which would break the hash chain.
+  return s.length > 4000 ? { truncated: true, preview: s.slice(0, 4000) } : (JSON.parse(s) as Record<string, unknown>);
 }

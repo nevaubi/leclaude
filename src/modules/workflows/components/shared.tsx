@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import {
-  AlertCircle, AlignLeft, BellRing, BookOpenCheck, Briefcase, CalendarClock, CalendarPlus, ChartLine, Check, CheckCircle2, CircleDashed, ClipboardCheck, Clock, CopyMinus, Download, FileDown, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitFork, GitMerge, Globe, Layers, Library, ListChecks, ListTodo, Loader2, Mail, MessageSquareText, MinusCircle, Network, PauseCircle, PenLine, Play, Radar, Repeat, Scale, ScanSearch, ScanText, Send, ShieldAlert, ShieldCheck, Square, Stamp, Table, Tags, Timer, UserCheck, Workflow, XCircle, type LucideIcon,
+  AlertCircle, AlertTriangle, AlignLeft, BellRing, BookOpenCheck, Briefcase, CalendarClock, CalendarPlus, ChartLine, Check, CheckCircle2, CircleDashed, CircleSlash, ClipboardCheck, Clock, Coins, CopyMinus, Download, FileDown, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitFork, GitMerge, Globe, Layers, Library, ListChecks, ListTodo, Loader2, Mail, MessageSquareText, MinusCircle, Network, PauseCircle, PenLine, Play, Radar, Repeat, Scale, ScanSearch, ScanText, Send, ShieldAlert, ShieldCheck, ShieldX, Square, Stamp, Table, Tags, Timer, UserCheck, Workflow, XCircle, type LucideIcon,
 } from "lucide-react";
 import type { WorkflowRun, WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
@@ -60,16 +60,24 @@ export function CategoryBadge({ category, className }: { category: string; class
   return <span className={cn("text-[11px] text-muted-foreground", className)}>{CATEGORY_LABEL[category] ?? category}</span>;
 }
 
-const RUN_VARIANT: Record<WorkflowRun["status"], "success" | "destructive" | "warning" | "info" | "muted" | "secondary"> = { succeeded: "success", failed: "destructive", cancelled: "muted", waiting_approval: "warning", running: "info", queued: "secondary" };
+/**
+ * One tone per run status. `partial` and `budget_exhausted` are warnings (work
+ * exists but is incomplete), `verification_failed` is destructive: a green
+ * badge never implies more than the record supports (constitution §34).
+ */
+const RUN_VARIANT: Record<WorkflowRun["status"], "success" | "destructive" | "warning" | "info" | "muted" | "secondary"> = {
+  succeeded: "success", partial: "warning", failed: "destructive", verification_failed: "destructive", budget_exhausted: "warning", cancelled: "muted", waiting_approval: "warning", running: "info", queued: "secondary",
+};
+
+const RUN_ICON: Partial<Record<WorkflowRun["status"], LucideIcon>> = { succeeded: Check, partial: AlertTriangle, failed: XCircle, verification_failed: ShieldX, budget_exhausted: Coins, cancelled: CircleSlash, waiting_approval: PauseCircle };
 
 export function RunStatusBadge({ status, className }: { status: WorkflowRun["status"]; className?: string }) {
+  const variant = RUN_VARIANT[status] ?? "secondary";
+  const Icon = RUN_ICON[status];
   return (
-    <Badge variant={RUN_VARIANT[status]} className={cn("gap-1", className)}>
-      {status === "running" && <Loader2 className="size-3 animate-spin" />}
-      {status === "waiting_approval" && <PauseCircle className="size-3" />}
-      {status === "succeeded" && <Check className="size-3" />}
-      {status === "failed" && <XCircle className="size-3" />}
-      {RUN_STATUS_LABEL[status]}
+    <Badge variant={variant} className={cn("gap-1", className)}>
+      {status === "running" ? <Loader2 className="size-3 animate-spin" /> : Icon ? <Icon className="size-3" /> : null}
+      {RUN_STATUS_LABEL[status] ?? status}
     </Badge>
   );
 }
@@ -81,6 +89,7 @@ export function StepStatusIcon({ status, className }: { status: WorkflowRunStep[
     case "succeeded": return <CheckCircle2 className={cn(base, "text-success")} />;
     case "failed": return <XCircle className={cn(base, "text-destructive")} />;
     case "skipped": return <MinusCircle className={cn(base, "text-muted-foreground/60")} />;
+    case "cancelled": return <CircleSlash className={cn(base, "text-muted-foreground")} />;
     case "waiting_approval": return <PauseCircle className={cn(base, "text-warning")} />;
     default: return <CircleDashed className={cn(base, "text-muted-foreground/50")} />;
   }

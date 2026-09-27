@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
   process.env.LECLAUDE_DATA_DIR = `${process.env.TMPDIR || "/tmp"}/evidence-resolve-vitest-${process.pid}`;

@@ -125,6 +125,17 @@ describe("Anthropic request builder", () => {
     expect(structured.body.output_config).toEqual({ format: { type: "json_schema", schema: { type: "object", properties: { found: { type: "boolean" } }, required: ["found"], additionalProperties: false } }, effort: "medium" });
   });
 
+  it("keeps evidence on the question turn across tool rounds, never ahead of tool_result blocks", () => {
+    const evidence = [{ type: "search_result" as const, source: "matter://m1/document/d1/page/3", title: "Report p.3", content: ["Contamination confirmed."] }];
+    const { body } = buildAnthropicRequest({ ...toolLoop, evidence }, anthropicOpts());
+    const messages = body.messages as Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    expect(messages[0].content.map((b) => b.type)).toEqual(["search_result", "text"]);
+    expect(messages[2].content.map((b) => b.type)).toEqual(["tool_result", "tool_result"]);
+    // a lone tool-result turn still gets the evidence, after the tool_result blocks
+    const only = buildAnthropicRequest({ messages: [toolLoop.messages[2]], evidence }, anthropicOpts()).body.messages as Array<{ content: Array<Record<string, unknown>> }>;
+    expect(only[0].content.map((b) => b.type)).toEqual(["tool_result", "tool_result", "search_result"]);
+  });
+
   it("uses a forced tool for structured output on models without output_config.format, and refuses where forced tool use is gone", () => {
     const req: InferenceRequest = { messages: [{ role: "user", content: [{ type: "text", text: "classify" }] }], jsonSchema: { name: "classification", schema: { type: "object", properties: { label: { type: "string" } }, required: ["label"] } } };
     const old = buildAnthropicRequest(req, bedrockOpts("anthropic.claude-3-5-sonnet-20241022-v2:0"));

@@ -67,8 +67,11 @@ export function sweepCache(now = Date.now()): number {
 export interface ReadRegistry {
   /** Text already read in this run, by source id. */
   texts: Map<string, string>;
-  /** Read (or join the in-flight read of) a source; `fetch` runs at most once per key. */
-  read<T extends { text: string }>(key: string, fetch: () => Promise<T>): Promise<T & { shared: boolean }>;
+  /**
+   * Read (or join the in-flight read of) a source; `fetch` runs at most once per key
+   * unless the lane that started it was cancelled, in which case a live joiner fetches itself.
+   */
+  read<T extends { text: string }>(key: string, fetch: () => Promise<T>, signal?: AbortSignal): Promise<T & { shared: boolean }>;
   /** How many reads joined an in-flight fetch instead of fetching again. */
   sharedReads: () => number;
 }
@@ -76,14 +79,25 @@ export interface ReadRegistry {
 export function createReadRegistry(texts: Map<string, string> = new Map()): ReadRegistry {
   const inflight = new Map<string, Promise<{ text: string }>>();
   let shared = 0;
+  const startFetch = <T extends { text: string }>(key: string, fetch: () => Promise<T>): Promise<T> => {
+    const p = fetch().then((r) => { texts.set(key, r.text ?? ""); return r; }).finally(() => { if (inflight.get(key) === p) inflight.delete(key); });
+    inflight.set(key, p);
+    return p;
+  };
   return {
     texts,
-    async read(key, fetch) {
-      const existing = inflight.get(key);
-      if (existing) { shared++; return { ...(await existing), shared: true } as never; }
-      const p = fetch().then((r) => { texts.set(key, r.text ?? ""); return r; }).finally(() => inflight.delete(key));
-      inflight.set(key, p);
-      return { ...(await p), shared: false } as never;
+    async read(key, fetch, signal) {
+      const existing = inflight.get(key) as Promise<Awaited<ReturnType<typeof fetch>>> | undefined;
+      if (existing) {
+        shared++;
+        try {
+          return { ...(await existing), shared: true };
+        } catch (e) {
+          // The lane that owned the fetch was aborted (timeout/cancel); this lane is still live, so it reads for itself.
+          if ((e as Error)?.name !== "AbortError" || signal?.aborted) throw e;
+        }
+      }
+      return { ...(await startFetch(key, fetch)), shared: false };
     },
     sharedReads: () => shared,
   };

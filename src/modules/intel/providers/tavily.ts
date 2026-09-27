@@ -1,5 +1,5 @@
 import "server-only";
-import { clip, envValue, ProviderClient, ProviderError, type ProviderFactoryOptions } from "./base";
+import { clip, envValue, ProviderClient, ProviderError, providerEgress, type ProviderFactoryOptions } from "./base";
 
 /** Tavily search + extract. Requires TAVILY_API_KEY. */
 const BASE = "https://api.tavily.com";
@@ -15,7 +15,7 @@ export interface TavilyResult {
 
 export function createTavily(opts: ProviderFactoryOptions = {}) {
   const key = envValue(opts, "TAVILY_API_KEY");
-  const client = new ProviderClient({ name: "tavily", rps: 1, burst: 3, timeoutMs: 40_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "tavily", egress: providerEgress("tavily"), rps: 1, burst: 3, timeoutMs: 40_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   const require = () => { if (!key) throw new ProviderError("tavily", "not_configured", "tavily: TAVILY_API_KEY is not configured", false); };
   const str = (v: unknown) => (typeof v === "string" ? v : undefined);
   return {

@@ -53,8 +53,8 @@ export function decideCoverage(input: CoverageInput): CoverageDecision {
   if (v && v.unsupported + v.contradicted > MAX_UNSUPPORTED) reasons.push(`${v.unsupported + v.contradicted} unsupported or contradicted claims`);
 
   const thin = reasons.length > 0;
-  if (!thin) return { complete: true, reason: `coverage adequate: ${input.sources.length} sources, ${readCount} read${v ? `, ${(v.score * 100).toFixed(0)}% verified` : ""}`, refinements: {}, gaps: [] };
-  if (input.round >= input.maxRounds) return { complete: true, reason: `stopping after round ${input.round} (${reasons.join("; ")})`, refinements: {}, gaps };
+  if (!thin) return { complete: true, exhausted: false, reason: `coverage adequate: ${input.sources.length} sources, ${readCount} read${v ? `, ${(v.score * 100).toFixed(0)}% verified` : ""}`, refinements: {}, gaps: [] };
+  if (input.round >= input.maxRounds) return { complete: true, exhausted: true, reason: `stopping after round ${input.round} (${reasons.join("; ")})`, refinements: {}, gaps };
 
   // Build refinements: unsupported claims → queries for the lanes most likely to support them; empty lanes get a broadened query.
   const claimQueries = gaps.map(claimToQuery).filter((q) => q.split(" ").length >= 2).slice(0, 3);
@@ -70,7 +70,7 @@ export function decideCoverage(input: CoverageInput): CoverageDecision {
     const primary = input.lanes[0];
     if (primary) refinements[primary.kind] = [broaden(primary.queries[0] ?? "")].filter(Boolean);
   }
-  return { complete: false, reason: reasons.join("; "), refinements, gaps };
+  return { complete: false, exhausted: false, reason: reasons.join("; "), refinements, gaps };
 }
 
 /** Loosen a boolean query: drop NOT clauses, turn ANDs into ORs for the tail, strip proximity. */

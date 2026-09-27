@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import type { Workflow } from "@/lib/types/domain";
 import { bootstrap } from "@/modules/workflows/api-utils";
 import { startRun } from "@/modules/workflows/engine";
+import { StepError } from "@/modules/workflows/executors";
+import { validateUploadedFile } from "@/modules/workflows/output-files";
 
 export type InboundEventType = "document_added" | "docket_update" | "email";
 
@@ -26,6 +28,34 @@ function matches(type: InboundEventType, config: Record<string, unknown>, matter
 }
 
 /**
+ * Files an inbound event refers to (`blobId`, `files[].blobId`, `attachments[].blobId`)
+ * are validated against the blob store before any run starts: the blob must
+ * exist, stay within the size limit and match the type it claims. Rejected
+ * with a stable error code so the events route answers 400 (never a run).
+ */
+export function validateInboundFiles(payload: Record<string, unknown>): string[] {
+  const refs: { blobId: string; name?: string; mime?: string; path: string }[] = [];
+  const push = (v: unknown, path: string) => {
+    if (!v || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    if (typeof o.blobId === "string" && o.blobId) refs.push({ blobId: o.blobId, name: typeof o.name === "string" ? o.name : undefined, mime: typeof o.mime === "string" ? o.mime : undefined, path });
+  };
+  if (typeof payload.blobId === "string") push({ blobId: payload.blobId, name: payload.name ?? payload.filename, mime: payload.mime }, "payload");
+  for (const key of ["files", "attachments"]) {
+    const list = payload[key];
+    if (Array.isArray(list)) list.slice(0, 50).forEach((f, i) => push(f, `${key}[${i}]`));
+  }
+  const errors: string[] = [];
+  for (const ref of refs) {
+    const rec = db().blobs.get(ref.blobId);
+    if (!rec) { errors.push(`${ref.path}: uploaded file ${ref.blobId} was not found`); continue; }
+    const verdict = validateUploadedFile({ bytes: rec.bytes, name: ref.name ?? rec.name, mime: ref.mime ?? rec.mime });
+    if (!verdict.ok) errors.push(`${ref.path}: ${verdict.reason}`);
+  }
+  return errors;
+}
+
+/**
  * Inbound event bus: every active workflow whose trigger matches starts a run
  * with the payload. Called by POST /api/workflows/events and directly by other
  * modules (library uploads/imports, docket alerts, inbound mail).
@@ -34,6 +64,8 @@ export async function dispatchInboundEvent(event: InboundEvent): Promise<{ workf
   bootstrap();
   const { type, matterId } = event;
   const payload = event.payload ?? {};
+  const fileErrors = validateInboundFiles(payload);
+  if (fileErrors.length) throw new StepError(`Invalid upload${fileErrors.length > 1 ? "s" : ""}: ${fileErrors.join("; ")}`, "invalid_upload");
   const triggerType = TRIGGER_FOR[type];
   const started: { workflowId: string; runId: string }[] = [];
   for (const w of db().workflows.find((w) => !w.isTemplate && w.status === "active")) {

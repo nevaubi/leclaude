@@ -161,12 +161,12 @@ export function ReviewTab() {
       if (action.kind === "next-uncoded") { e.preventDefault(); void nextUncoded(); return; }
       const targets = st.selected.length ? st.selected : st.activeId ? [st.activeId] : [];
       if (!targets.length) return;
-      const row = hits.find((h) => h.id === (st.openDocId ?? targets[0]));
+      // The open document's draft (coding panel) owns the keys unless rows are selected in the grid; the viewer listens for the same keys.
+      if (inViewer || (st.openDocId && !st.selected.length)) return;
+      const row = hits.find((h) => h.id === targets[0]);
       const patch = applyCodingKey(row?.coding ?? {}, action, issueCodes.map((c) => c.code));
       if (!patch) return;
       e.preventDefault();
-      // In the viewer the coding panel owns the draft; it listens for the same keys, so only the grid acts here.
-      if (inViewer) return;
       void codeDocs(targets, patch);
     };
     window.addEventListener("keydown", onKey);
@@ -218,7 +218,7 @@ export function ReviewTab() {
           {!fullscreen && (
             <ResizablePanel defaultSize={s.openDocId ? "38" : "100"} minSize={300} className="flex min-w-0 flex-col">
               <SearchBox response={search.data} loading={search.loading} onSaveSearch={() => setSaveOpen(true)} onTermReport={() => setTermsOpen(true)} />
-              <BatchModeStrip onNext={() => void nextUncoded()} />
+              <BatchModeStrip onNext={() => void nextUncoded()} rows={hits} />
               <BulkBar hits={hits} onCode={requestBulk} onCreateBatch={() => setBatchOpen(true)} onCreateProduction={() => setProductionOpen(true)} />
               <DocTable hits={hits} loading={search.loading && !search.data} error={search.error?.message ?? null} total={search.data?.total ?? 0} totalWorkspace={search.data?.totalWorkspace ?? 0} tookMs={search.data?.tookMs} semantic={!!search.data?.semantic} onLoadMore={search.loadMore} loadingMore={search.loadingMore} />
             </ResizablePanel>

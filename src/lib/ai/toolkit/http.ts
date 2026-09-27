@@ -1,33 +1,70 @@
 import "server-only";
+import { keyFor, sharedRateLimiter } from "@/lib/net/rate-limit";
+import { safeFetch, type EgressPolicy, type SafeFetchInit } from "@/lib/net/safe-fetch";
 
+/**
+ * Every helper here goes through `safeFetch` (src/lib/net/safe-fetch.ts):
+ * HTTP/S only, private/loopback/link-local targets rejected, redirects
+ * validated hop by hop, byte limits, timeouts and cancellation, plus the
+ * NET_* environment allow/deny lists. Policy denials surface as
+ * `SafeFetchError` (never retried); HTTP errors as `HttpError`.
+ */
 export class HttpError extends Error {
   constructor(public status: number, message: string, public url: string) { super(message); this.name = "HttpError"; }
 }
 
 const UA = "LeClaude/1.0 (+internal legal research platform)";
+const ACCEPT_TEXT = "text/html,application/xhtml+xml,application/xml,text/plain,application/json;q=0.9,*/*;q=0.8";
 
-export async function fetchJSON<T = unknown>(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), init.timeoutMs ?? 20_000);
-  try {
-    const res = await fetch(url, { ...init, signal: init.signal ?? ctrl.signal, headers: { Accept: "application/json", "User-Agent": UA, ...(init.headers ?? {}) } });
-    if (!res.ok) throw new HttpError(res.status, `${res.status} ${res.statusText} from ${new URL(url).host}`, url);
-    return (await res.json()) as T;
-  } finally { clearTimeout(t); }
+export interface FetchOptions {
+  method?: string;
+  headers?: HeadersInit;
+  body?: SafeFetchInit["body"];
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  maxBytes?: number;
+  /** Egress policy for this call (host allowlist, byte limit, label); the NET_* environment rules always apply on top. */
+  egress?: EgressPolicy;
+  /** Injectable transport (tests, proxy-aware clients). */
+  fetchImpl?: typeof fetch;
+  /** How long to wait for the per-host token bucket (default 4 s; 0 fails immediately). */
+  rateLimitWaitMs?: number;
 }
 
-export async function fetchText(url: string, init: RequestInit & { timeoutMs?: number; maxBytes?: number } = {}): Promise<{ text: string; contentType: string; status: number; finalUrl: string }> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), init.timeoutMs ?? 20_000);
-  try {
-    const res = await fetch(url, { ...init, signal: init.signal ?? ctrl.signal, headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,application/xml,text/plain,application/json;q=0.9,*/*;q=0.8", ...(init.headers ?? {}) }, redirect: "follow" });
-    const contentType = res.headers.get("content-type") ?? "";
-    const buf = new Uint8Array(await res.arrayBuffer());
-    const max = init.maxBytes ?? 2_500_000;
-    const text = new TextDecoder("utf-8", { fatal: false }).decode(buf.subarray(0, max));
-    if (!res.ok) throw new HttpError(res.status, `${res.status} ${res.statusText} from ${new URL(url).host}`, url);
-    return { text, contentType, status: res.status, finalUrl: res.url || url };
-  } finally { clearTimeout(t); }
+function headersObject(h: HeadersInit | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!h) return out;
+  if (h instanceof Headers) { h.forEach((v, k) => { out[k] = v; }); return out; }
+  if (Array.isArray(h)) { for (const [k, v] of h) out[k] = v; return out; }
+  return { ...h };
+}
+
+/** Per-host token bucket shared by the generic helpers (providers carry their own buckets in ProviderClient). */
+async function throttleHost(url: string, waitMs: number, signal?: AbortSignal): Promise<void> {
+  let host = "";
+  try { host = new URL(url).host; } catch { return; }
+  const d = await sharedRateLimiter().acquire(keyFor("host", host), { maxWaitMs: waitMs, signal });
+  if (!d.ok) throw new HttpError(429, `Local rate limit reached for ${host}; retry in ${Math.ceil(d.retryAfterMs / 1000)}s`, url);
+}
+
+function policyFor(init: FetchOptions, defaults: { maxBytes: number; onLimit: EgressPolicy["onLimit"] }): EgressPolicy {
+  return { ...(init.egress ?? {}), timeoutMs: init.timeoutMs ?? init.egress?.timeoutMs ?? 20_000, maxBytes: init.maxBytes ?? init.egress?.maxBytes ?? defaults.maxBytes, onLimit: init.egress?.onLimit ?? defaults.onLimit };
+}
+
+/** JSON request through the egress policy. Throws HttpError on non-2xx and SafeFetchError on policy denials or transport failures. */
+export async function fetchJSON<T = unknown>(url: string, init: FetchOptions = {}): Promise<T> {
+  await throttleHost(url, init.rateLimitWaitMs ?? 4_000, init.signal);
+  const res = await safeFetch(url, { method: init.method, body: init.body, signal: init.signal, fetchImpl: init.fetchImpl, headers: { Accept: "application/json", "User-Agent": UA, ...headersObject(init.headers) } }, policyFor(init, { maxBytes: 8 * 1024 * 1024, onLimit: "abort" }));
+  if (!res.ok) throw new HttpError(res.status, `${res.status} ${res.statusText} from ${new URL(url).host}`, url);
+  return res.json<T>();
+}
+
+/** Text request through the egress policy; bodies above `maxBytes` (default 2.5 MB) are truncated and flagged. */
+export async function fetchText(url: string, init: FetchOptions = {}): Promise<{ text: string; contentType: string; status: number; finalUrl: string; truncated: boolean; bytes: number }> {
+  await throttleHost(url, init.rateLimitWaitMs ?? 4_000, init.signal);
+  const res = await safeFetch(url, { method: init.method, body: init.body, signal: init.signal, fetchImpl: init.fetchImpl, headers: { "User-Agent": UA, Accept: ACCEPT_TEXT, ...headersObject(init.headers) } }, policyFor(init, { maxBytes: 2_500_000, onLimit: "truncate" }));
+  if (!res.ok) throw new HttpError(res.status, `${res.status} ${res.statusText} from ${new URL(url).host}`, url);
+  return { text: res.text(), contentType: res.contentType, status: res.status, finalUrl: res.finalUrl, truncated: res.truncated, bytes: res.bytes };
 }
 
 /** Lightweight HTML → readable text (no DOM dependency). */
@@ -117,8 +154,13 @@ export function memoryHttpCache(max = 200): HttpCacheStore {
   };
 }
 
-export interface FetchCachedOptions extends Omit<RequestInit, "cache"> {
+export interface FetchCachedOptions {
+  method?: string;
+  headers?: HeadersInit;
+  body?: SafeFetchInit["body"];
+  signal?: AbortSignal;
   timeoutMs?: number;
+  /** Truncation limit for the decoded body (default 2.5 MB). */
   maxBytes?: number;
   /** 0 disables caching for this call. Default 24h. */
   ttlMs?: number;
@@ -127,14 +169,18 @@ export interface FetchCachedOptions extends Omit<RequestInit, "cache"> {
   fetchImpl?: typeof fetch;
   /** Cache even non-2xx responses (default: only 2xx). */
   cacheErrors?: boolean;
+  /** Provider egress policy (host allowlist, label). */
+  egress?: EgressPolicy;
 }
 
 /**
  * fetch with a response cache. Bodies are decoded as UTF-8 text (JSON, HTML,
- * XML, plain text); binary responses should use fetch directly. Never throws on
- * HTTP errors — callers inspect `status`.
+ * XML, plain text); binary responses use `safeFetch` directly. Never throws on
+ * HTTP errors — callers inspect `status`. Transport goes through `safeFetch`,
+ * so policy denials, DNS failures, timeouts and oversize bodies throw
+ * `SafeFetchError`.
  */
-export async function fetchCached(url: string, init: FetchCachedOptions = {}): Promise<CachedHttpResponse & { cached: boolean }> {
+export async function fetchCached(url: string, init: FetchCachedOptions = {}): Promise<CachedHttpResponse & { cached: boolean; truncated?: boolean; bytes?: number; hops?: number; durationMs?: number }> {
   const method = (init.method ?? "GET").toUpperCase();
   const bodyStr = typeof init.body === "string" ? init.body : init.body instanceof URLSearchParams ? init.body.toString() : undefined;
   const ttl = init.ttlMs ?? 24 * 3600_000;
@@ -143,28 +189,17 @@ export async function fetchCached(url: string, init: FetchCachedOptions = {}): P
     const hit = init.cache.get(key);
     if (hit) return { ...hit, cached: true };
   }
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), init.timeoutMs ?? 20_000);
-  const onAbort = () => ctrl.abort();
-  init.signal?.addEventListener("abort", onAbort, { once: true });
-  try {
-    const doFetch = init.fetchImpl ?? fetch;
-    const { timeoutMs: _t, maxBytes: _m, ttlMs: _l, cache: _c, fetchImpl: _f, cacheErrors: _e, ...rest } = init;
-    void _t; void _m; void _l; void _c; void _f; void _e;
-    const res = await doFetch(url, { ...rest, signal: ctrl.signal, redirect: "follow", headers: { "User-Agent": UA, Accept: "application/json,text/html,application/xhtml+xml,application/xml,text/plain;q=0.9,*/*;q=0.8", ...(rest.headers ?? {}) } });
-    const buf = new Uint8Array(await res.arrayBuffer());
-    const max = init.maxBytes ?? 2_500_000;
-    const body = new TextDecoder("utf-8", { fatal: false }).decode(buf.subarray(0, max));
-    const now = Date.now();
-    const headers: Record<string, string> = {};
-    for (const h of ["retry-after", "etag", "last-modified"]) { const v = res.headers.get(h); if (v) headers[h] = v; }
-    const out: CachedHttpResponse = { status: res.status, contentType: res.headers.get("content-type") ?? "", body, finalUrl: res.url || url, fetchedAt: new Date(now).toISOString(), expiresAt: new Date(now + ttl).toISOString(), headers: Object.keys(headers).length ? headers : undefined };
-    if (ttl > 0 && init.cache && (res.ok || init.cacheErrors)) init.cache.set(key, out);
-    return { ...out, cached: false };
-  } finally {
-    clearTimeout(t);
-    init.signal?.removeEventListener("abort", onAbort);
-  }
+  const res = await safeFetch(
+    url,
+    { method, body: init.body, signal: init.signal, fetchImpl: init.fetchImpl, headers: { "User-Agent": UA, Accept: "application/json,text/html,application/xhtml+xml,application/xml,text/plain;q=0.9,*/*;q=0.8", ...headersObject(init.headers) } },
+    { ...(init.egress ?? {}), timeoutMs: init.timeoutMs ?? init.egress?.timeoutMs ?? 20_000, maxBytes: init.maxBytes ?? init.egress?.maxBytes ?? 2_500_000, onLimit: init.egress?.onLimit ?? "truncate" },
+  );
+  const now = Date.now();
+  const headers: Record<string, string> = {};
+  for (const h of ["retry-after", "etag", "last-modified"]) { const v = res.headers.get(h); if (v) headers[h] = v; }
+  const out: CachedHttpResponse = { status: res.status, contentType: res.contentType, body: res.text(), finalUrl: res.finalUrl, fetchedAt: new Date(now).toISOString(), expiresAt: new Date(now + ttl).toISOString(), headers: Object.keys(headers).length ? headers : undefined };
+  if (ttl > 0 && init.cache && (res.ok || init.cacheErrors) && !res.truncated) init.cache.set(key, out);
+  return { ...out, cached: false, truncated: res.truncated, bytes: res.bytes, hops: res.hops, durationMs: res.durationMs };
 }
 
 /** Token bucket: `capacity` burst, refilled at `refillPerSecond`. */

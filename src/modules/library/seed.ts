@@ -2,8 +2,7 @@ import "server-only";
 import type { Database } from "@/lib/db";
 import type { LibraryItem, PracticeArea } from "@/lib/types/domain";
 import { MATTERS, PEOPLE } from "@/lib/seed/ids";
-import { indexDocuments } from "@/lib/ai/vector-store";
-import { VECTOR_COLLECTIONS } from "@/lib/ai/toolkit/internal";
+import { configuredTenantId, indexDocuments, VECTOR_COLLECTIONS } from "@/lib/ai/vector-store";
 import { LIBRARY_FOLDERS, matterFolderId } from "./ids";
 import type { ActivityEntry, ClauseMeta } from "./types";
 import { SEED_CLAUSES } from "./seed-clauses";
@@ -506,7 +505,8 @@ export function seedLibrary(db: Database) {
   db.collection<ClauseMeta>(LIBRARY_COLLECTIONS.clauseMeta).putMany(clauses.meta);
   db.collection<ActivityEntry>(LIBRARY_COLLECTIONS.activity).putMany(ACTIVITY);
   // Keyword index for every textual item (embeddings are added by POST /api/library/index when a key exists).
-  void indexDocuments(VECTOR_COLLECTIONS.library, items.filter((i) => i.type !== "folder").map((i) => ({ id: i.id, text: indexTextFor(i), meta: { type: i.type, matterId: i.matterId, practiceArea: i.practiceArea, parentId: i.parentId } })), { embed: false });
+  // The library is a tenant-wide corpus; matter work product keeps its matterId on the row (constitution §22).
+  void indexDocuments(VECTOR_COLLECTIONS.library, items.filter((i) => i.type !== "folder").map((i) => ({ id: i.id, text: indexTextFor(i), matterId: i.matterId ?? null, meta: { type: i.type, matterId: i.matterId, practiceArea: i.practiceArea, parentId: i.parentId } })), { embed: false, scope: { tenantId: configuredTenantId(), corpus: "library" } }).catch((e) => console.error("[seed:library] index", e));
 }
 
 export const LIBRARY_SEED_IDS = {

@@ -283,9 +283,15 @@ export function boundToolResult(result: unknown, maxChars: number = TOOL_DEFAULT
       (leaf.parent as Record<string | number, unknown>)[leaf.key] = trimmed;
     }
   }
-  const marker = truncationMarker(Math.max(0, full.length - maxChars));
-  const head = full.slice(0, Math.max(0, maxChars - marker.length));
-  return { value: head + marker, output: head + marker, truncated: true, fullChars: full.length };
+  // Hard cut with an exact remainder: head + remaining == full (the marker's digit count can shift the head by one).
+  let headLen = Math.max(0, maxChars - truncationMarker(full.length - maxChars).length);
+  let marker = truncationMarker(full.length - headLen);
+  for (let i = 0; i < 3 && headLen + marker.length !== maxChars && headLen > 0; i++) {
+    headLen = Math.max(0, maxChars - marker.length);
+    marker = truncationMarker(full.length - headLen);
+  }
+  const cut = full.slice(0, headLen) + marker;
+  return { value: cut, output: cut, truncated: true, fullChars: full.length };
 }
 
 /** Deterministic error shaping: known error classes map to codes; messages are sanitized; nothing is rethrown. */

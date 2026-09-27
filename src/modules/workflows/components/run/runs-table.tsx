@@ -11,10 +11,10 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { useApi, useWorkflowMeta } from "../../hooks";
 import type { RunSummary } from "../../service";
-import { RUN_STATUS_LABEL } from "../../types";
+import { RUN_STATUS_LABEL, STOP_REASON_LABEL } from "../../types";
 import { formatDuration, formatTokens, formatUsd, RunStatusBadge } from "../shared";
 
-const STATUSES = ["running", "waiting_approval", "succeeded", "failed", "cancelled", "queued"] as const;
+const STATUSES = ["running", "waiting_approval", "succeeded", "partial", "failed", "verification_failed", "budget_exhausted", "cancelled", "queued"] as const;
 
 function durationOf(r: RunSummary): number | null {
   return r.durationMs ?? (r.finishedAt ? new Date(r.finishedAt).getTime() - new Date(r.startedAt).getTime() : null);
@@ -26,13 +26,13 @@ export function runColumns(opts: { workflowId?: string; compact?: boolean }): Da
     { id: "status", header: "Status", width: 150, minWidth: 120, sortable: true, accessor: (r) => r.status, render: (r) => <RunStatusBadge status={r.status} /> },
   ];
   if (!opts.workflowId) cols.push({ id: "workflow", header: "Workflow", width: 220, minWidth: 140, sortable: true, accessor: (r) => r.workflowName ?? "", render: (r) => <span className="truncate font-medium" title={r.workflowName}>{r.workflowName}</span> });
-  cols.push({ id: "note", header: "Step · note", width: 220, minWidth: 120, accessor: (r) => r.currentStep ?? r.error ?? "", render: (r) => r.currentStep ? <span className="truncate text-muted-foreground" title={r.currentStep}>at {r.currentStep}</span> : r.error ? <span className="truncate text-destructive" title={r.error}>{r.error}</span> : <span className="text-muted-foreground">—</span> });
+  cols.push({ id: "note", header: "Step · note", width: 220, minWidth: 120, accessor: (r) => r.currentStep ?? r.error ?? "", render: (r) => r.currentStep ? <span className="truncate text-muted-foreground" title={r.currentStep}>at {r.currentStep}</span> : r.status === "succeeded" ? <span className="text-muted-foreground">—</span> : r.stopReason && r.stopReason !== "completed" ? <span className={cn("truncate", r.status === "failed" || r.status === "verification_failed" ? "text-destructive" : "text-muted-foreground")} title={r.error ?? STOP_REASON_LABEL[r.stopReason]}>{STOP_REASON_LABEL[r.stopReason]}{r.stoppedAt ? ` · ${r.stoppedAt}` : ""}</span> : r.error ? <span className="truncate text-destructive" title={r.error}>{r.error}</span> : <span className="text-muted-foreground">—</span> });
   cols.push({ id: "progress", header: "Progress", width: 150, minWidth: 120, accessor: (r) => r.stepCounts.succeeded, render: (r) => {
     const done = r.stepCounts.succeeded + r.stepCounts.failed + r.stepCounts.skipped;
     const pct = r.stepTotal ? Math.round((done / r.stepTotal) * 100) : 0;
     return (
       <span className="flex items-center gap-2">
-        <span className="h-1 w-16 overflow-hidden rounded-full bg-muted"><span className={cn("block h-full rounded-full", r.status === "failed" ? "bg-destructive" : r.status === "succeeded" ? "bg-success" : r.status === "waiting_approval" ? "bg-warning" : "bg-info")} style={{ width: `${pct}%` }} /></span>
+        <span className="h-1 w-16 overflow-hidden rounded-full bg-muted"><span className={cn("block h-full rounded-full", r.status === "failed" || r.status === "verification_failed" ? "bg-destructive" : r.status === "succeeded" ? "bg-success" : r.status === "waiting_approval" || r.status === "partial" || r.status === "budget_exhausted" ? "bg-warning" : r.status === "cancelled" ? "bg-muted-foreground/40" : "bg-info")} style={{ width: `${pct}%` }} /></span>
         <span className="tabular text-[11px] text-muted-foreground">{r.stepCounts.succeeded}/{r.stepTotal}{r.stepCounts.failed ? <span className="text-destructive"> · {r.stepCounts.failed} failed</span> : null}</span>
       </span>
     );

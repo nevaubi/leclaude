@@ -2,6 +2,7 @@ import "server-only";
 import { defineTool, type ToolDef } from "@/lib/ai/tools";
 import type { AgentEvent } from "@/lib/ai/agent";
 import { AIConfigError } from "@/lib/ai/config";
+import { classifyFailure, isAbortError, type FailureKind } from "@/lib/ai/events";
 import { matterContextTool } from "@/lib/ai/toolkit/internal";
 import type { Matter } from "@/lib/types/domain";
 import { FIRM_NAME, LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
@@ -9,31 +10,57 @@ import { jurisdictionByKey } from "../jurisdictions";
 import { formatBluebook, normalizeWebCitation } from "../normalize";
 import { providerMessage } from "../service";
 import { SOURCE_LABEL, type ReadRef, type SearchHit, type SearchSettings, type SearchSource } from "../types";
+import type { ReadRegistry } from "./cache";
 import type { EngineDeps } from "./deps";
+import { priorQueries } from "./planner";
+import { abortError, withRetry, type MetricsRecorder, type RunPolicy } from "./runtime";
 import { mergeSources, sourceFromHit, sourceKey } from "./sources";
-import type { LaneStatus, ResearchLane, ResearchSource, ResearchStreamEvent } from "./types";
+import type { LaneStatus, ResearchEventInput, ResearchLane, ResearchSource } from "./types";
 
 export interface LaneContext {
   question: string;
   settings: SearchSettings;
   matter: Matter | null;
   deps: EngineDeps;
-  send: (e: ResearchStreamEvent | AgentEvent) => void;
+  /** Typed event emitter (runId/at/seq are stamped by the run). */
+  emit: (e: ResearchEventInput) => void;
+  /** Lane-scoped signal: fires on run cancellation or on this lane's timeout. Every provider/model call receives it. */
   signal?: AbortSignal;
+  /** The run's own signal, to tell a cancellation from a lane timeout when classifying the outcome. */
+  runSignal?: AbortSignal;
+  /** True once this lane's timeout fired. */
+  timedOut?: () => boolean;
   /** Shared full-text store (source id → text) for the run. */
   texts: Map<string, string>;
+  /** Shared in-flight read registry so two lanes never fetch the same source twice. */
+  reads: ReadRegistry;
   /** Sources already known to the run/thread (for dedupe awareness). */
   known: ResearchSource[];
+  policy: RunPolicy;
+  metrics?: MetricsRecorder;
+  /** Results of the lanes this lane depends on (dependency-aware scheduling). */
+  priors: LaneResult[];
+}
+
+export interface LaneFailure {
+  name: string;
+  error: string;
+  failure: FailureKind;
 }
 
 export interface LaneResult {
   laneId: string;
   status: LaneStatus;
   sources: ResearchSource[];
+  read: number;
   note: string;
   agentRan: boolean;
   durationMs: number;
+  /** Set when the lane ended in error/timeout, or when it completed with provider/tool failures inside it. */
   error?: string;
+  failure?: FailureKind;
+  /** Provider/tool failures that did not stop the lane (partial failures the UI lists). */
+  failures: LaneFailure[];
 }
 
 const SEARCH_TOOL_FOR: Partial<Record<string, SearchSource>> = {
@@ -50,60 +77,89 @@ const SEARCH_TOOL_DESC: Record<string, string> = {
   search_ediscovery: "Search this matter's document collection and deposition transcripts (Bates-numbered).",
 };
 
-/** Run one lane: deterministic provider retrieval, then (with a key) a bounded fast-model agent that reads the best sources. */
-export async function runLane(lane: ResearchLane, ctx: LaneContext): Promise<LaneResult> {
+/** Run one lane: deterministic provider retrieval (with retry on transient failures), then (with a key) a bounded fast-model agent that reads the best sources. */
+export async function runLane(lane: ResearchLane, ctx: LaneContext, slot: { queuedMs?: number } = {}): Promise<LaneResult> {
   const t0 = Date.now();
-  const { deps, send, signal } = ctx;
+  const { deps, emit, signal, policy } = ctx;
   let sources: ResearchSource[] = [];
   const found = new Map<string, ResearchSource>();
   let reads = 0;
   let agentRan = false;
-  let step = 0;
   let note = "";
+  let toolSeq = 0;
+  const failures: LaneFailure[] = [];
+  const nextToolId = () => `${lane.id}:t${++toolSeq}`;
+  const retry = { retries: policy.retrievalRetries, baseMs: policy.retryBaseMs, maxMs: policy.retryMaxMs, signal };
 
-  const record = (incoming: ResearchSource[], emit = true) => {
+  const record = (incoming: ResearchSource[], announce = true) => {
     for (const s of incoming) {
       const prev = found.get(s.id);
       const merged = prev ? mergeSources([prev], [s])[0] : s;
       found.set(s.id, merged);
-      if (emit) send({ type: "lane.source", laneId: lane.id, source: merged });
+      if (announce) emit({ type: "source.found", laneId: lane.id, sourceId: merged.id, title: merged.title, cite: merged.cite, kind: merged.kind, source: merged });
     }
     sources = Array.from(found.values());
   };
-  const stepEvent = (label: string, status: LaneStatus) => send({ type: "lane.step", laneId: lane.id, step: ++step, label, status });
+  const readCount = () => sources.filter((s) => s.read).length;
 
-  send({ type: "lane.start", laneId: lane.id, round: lane.round });
+  emit({ type: "lane.started", laneId: lane.id, round: lane.round, queuedMs: slot.queuedMs ?? 0 });
   try {
-    // 1. Structured retrieval across the lane's providers (parallel), every hit becomes a "found" source.
-    stepEvent(`Searching ${lane.sources.map((s) => SOURCE_LABEL[s]).join(", ")}`, "retrieving");
-    await Promise.all(lane.sources.filter((s) => s !== "web").flatMap((source) => lane.queries.map(async (q) => {
+    // 1. Structured retrieval across the lane's providers (parallel); every hit becomes a "found" source.
+    //    Dependent lanes add queries built from what their dependencies read (e.g. authority that limits the leading cases).
+    const queries = Array.from(new Set([...lane.queries, ...priorQueries(lane, ctx.priors)])).slice(0, 4);
+    await Promise.all(lane.sources.filter((s) => s !== "web").flatMap((source) => queries.map(async (q) => {
+      const toolId = nextToolId();
+      const name = `search_${source}`;
+      const label = `Searching ${SOURCE_LABEL[source].toLowerCase()}: ${q}`;
+      const started = Date.now();
+      emit({ type: "tool.started", laneId: lane.id, toolId, name, label });
       try {
-        const { hits } = await deps.retrieve(source, q, ctx.settings, signal);
+        const { hits } = await withRetry(() => deps.retrieve(source, q, ctx.settings, signal), {
+          ...retry,
+          onRetry: ({ error, failure, delayMs }) => emit({ type: "tool.failed", laneId: lane.id, toolId, name, label, error: `${providerMessage(error)} Retrying in ${(delayMs / 1000).toFixed(1)}s.`, failure, durationMs: Date.now() - started, retrying: true }),
+        });
+        ctx.metrics?.addToolTime(Date.now() - started);
         record(hits.slice(0, 10).map((h) => sourceFromHit(h, lane.id)));
+        emit({ type: "tool.completed", laneId: lane.id, toolId, name, label, durationMs: Date.now() - started });
       } catch (e) {
-        if ((e as Error).name === "AbortError") throw e;
-        stepEvent(`${SOURCE_LABEL[source]}: ${providerMessage(e)}`, "error");
+        if (isAbortError(e)) throw e;
+        ctx.metrics?.addToolTime(Date.now() - started);
+        const failure = classifyFailure(e);
+        const error = `${SOURCE_LABEL[source]}: ${providerMessage(e)}`;
+        failures.push({ name, error, failure });
+        emit({ type: "tool.failed", laneId: lane.id, toolId, name, label, error, failure, durationMs: Date.now() - started, retrying: false });
       }
     })));
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    if (signal?.aborted) throw abortError();
 
     // 2. Reading. Fast lanes read the top hits deterministically; deep lanes hand the found list to a bounded agent.
     const readOne = async (s: ResearchSource, ref: ReadRef) => {
       if (reads >= lane.maxReads) throw new Error("Read cap reached for this lane; write the lane note from what you have already read.");
       reads++;
       const started = Date.now();
-      stepEvent(`Reading ${s.cite ?? s.title}`, "reading");
-      const r = await deps.read(ref, { title: s.title, signal });
+      emit({ type: "source.read_started", laneId: lane.id, sourceId: s.id, title: s.cite ?? s.title });
+      const r = await ctx.reads.read(s.id, () => withRetry(() => deps.read(ref, { title: s.title, signal }), retry), signal);
       const text = r.text ?? "";
-      ctx.texts.set(s.id, text);
-      record([{ ...s, read: true, chars: text.length, readMs: Date.now() - started, cached: r.cached, excerpt: text.slice(0, 600), title: s.title || r.title || s.title, url: s.url ?? r.url, cite: s.cite ?? r.cite }]);
+      const durationMs = Date.now() - started;
+      if (!r.shared) ctx.metrics?.addToolTime(durationMs);
+      record([{ ...s, read: true, chars: text.length, readMs: durationMs, cached: r.cached || r.shared, excerpt: text.slice(0, 600), title: s.title || r.title || s.title, url: s.url ?? r.url, cite: s.cite ?? r.cite }], false);
+      const merged = found.get(s.id)!;
+      emit({ type: "source.read", laneId: lane.id, sourceId: s.id, chars: text.length, cached: Boolean(r.cached || r.shared), durationMs, source: merged });
       return text;
     };
 
     if (lane.kind === "fast" || !deps.hasKey) {
       // Deterministic reads keep fast answers (and the no-key path) source-backed without an agent.
       const top = Array.from(found.values()).filter((s) => s.hit.readRef && s.kind !== "web").slice(0, lane.kind === "fast" ? 2 : Math.min(2, lane.maxReads));
-      for (const s of top) { try { await readOne(s, s.hit.readRef!); } catch (e) { if ((e as Error).name === "AbortError") throw e; stepEvent(`Could not read ${s.cite ?? s.title}: ${providerMessage(e)}`, "error"); } }
+      for (const s of top) {
+        try { await readOne(s, s.hit.readRef!); } catch (e) {
+          if (isAbortError(e)) throw e;
+          const failure = classifyFailure(e);
+          const error = `Could not read ${s.cite ?? s.title}: ${providerMessage(e)}`;
+          failures.push({ name: "read_source", error, failure });
+          emit({ type: "tool.failed", laneId: lane.id, toolId: nextToolId(), name: "read_source", label: `Reading ${s.cite ?? s.title}`, error, failure, durationMs: 0, retrying: false });
+        }
+      }
     } else {
       agentRan = true;
       const tools = buildLaneTools(lane, ctx, { found, record, readOne });
@@ -118,36 +174,57 @@ export async function runLane(lane: ResearchLane, ctx: LaneContext): Promise<Lan
         "OUTPUT: a lane note in markdown. One bullet per source you READ, in the form: `- <source id> — <cite> — holding or relevance in one or two sentences, with pin cite or § when available`. Then one line `Gaps:` naming what you could not find. Do not include sources you did not read. Keep it under 250 words.",
       ].join("\n\n");
       const list = Array.from(found.values()).slice(0, 25).map((s) => `${s.id} · ${formatBluebook(s.hit)}${s.authority && s.authority !== "n/a" ? ` (${s.authority})` : ""}${s.snippet ? ` — ${s.snippet.slice(0, 200)}` : ""}`).join("\n");
-      const input = `Research question: ${ctx.question}\n\nStructured results already found (${found.size}):\n${list || "(none — search first)"}`;
+      const priorNote = lane.kind === "contrary" && ctx.priors.length ? `\n\nLeading authority the controlling lane read (look for decisions that reject, distinguish or limit these):\n${ctx.priors.flatMap((p) => p.sources).filter((s) => s.read && s.kind === "caselaw").slice(0, 4).map((s) => `- ${formatBluebook(s.hit)}`).join("\n")}` : "";
+      const input = `Research question: ${ctx.question}\n\nStructured results already found (${found.size}):\n${list || "(none — search first)"}${priorNote}`;
+      let webSearchId: string | null = null;
       const onEvent = (e: AgentEvent) => {
-        if (e.type === "tool.call") stepEvent(e.label, "reading");
-        if (e.type === "web_search") stepEvent(e.status === "searching" ? "Searching the web" : e.query ? `Web search: ${e.query}` : "Web search complete", "retrieving");
+        if (e.type === "tool.call") emit({ type: "tool.started", laneId: lane.id, toolId: e.id, name: e.name, label: e.label });
+        if (e.type === "tool.result") {
+          ctx.metrics?.addToolTime(e.durationMs);
+          if (e.ok) emit({ type: "tool.completed", laneId: lane.id, toolId: e.id, name: e.name, label: e.name, durationMs: e.durationMs });
+          else emit({ type: "tool.failed", laneId: lane.id, toolId: e.id, name: e.name, label: e.name, error: e.error ?? "tool failed", failure: classifyFailure(e.error), durationMs: e.durationMs, retrying: false });
+        }
+        if (e.type === "web_search") {
+          if (e.status === "searching") { webSearchId = nextToolId(); emit({ type: "tool.started", laneId: lane.id, toolId: webSearchId, name: "web_search", label: "Searching the web" }); }
+          else { emit({ type: "tool.completed", laneId: lane.id, toolId: webSearchId ?? nextToolId(), name: "web_search", label: e.query ? `Web search: ${e.query}` : "Web search complete", durationMs: 0 }); webSearchId = null; }
+        }
         if (e.type === "citation" && e.citation.source === "web" && e.citation.url) {
           const hit = normalizeWebCitation({ title: e.citation.title, url: e.citation.url, snippet: e.citation.snippet }, found.size);
           record([sourceFromHit(hit, lane.id)]);
         }
       };
+      const agentStarted = Date.now();
       try {
         const res = await deps.laneAgent({ instructions, input, tools, web: lane.tools.includes("web_search"), maxSteps: lane.maxSteps, signal, onEvent });
+        ctx.metrics?.addModelTime(Date.now() - agentStarted, res.usage ?? null);
         note = res.text.trim();
-        if (note) send({ type: "lane.note", laneId: lane.id, note });
       } catch (e) {
-        if ((e as Error).name === "AbortError") throw e;
+        ctx.metrics?.addModelTime(Date.now() - agentStarted, null);
+        if (isAbortError(e)) throw e;
         if (e instanceof AIConfigError) agentRan = false;
-        else stepEvent(`Agent stopped: ${providerMessage(e)}`, "error");
+        else {
+          const failure = classifyFailure(e);
+          const error = `Lane agent stopped: ${providerMessage(e)}`;
+          failures.push({ name: "lane_agent", error, failure });
+          emit({ type: "tool.failed", laneId: lane.id, toolId: nextToolId(), name: "lane_agent", label: `${lane.name} agent`, error, failure, durationMs: Date.now() - agentStarted, retrying: false });
+        }
       }
     }
 
     const durationMs = Date.now() - t0;
-    send({ type: "lane.done", laneId: lane.id, status: "done", durationMs, sources: sources.length });
-    return { laneId: lane.id, status: "done", sources, note, agentRan, durationMs };
+    const error = failures.length ? failures.map((f) => f.error).join("; ") : undefined;
+    const failure = failures.length ? failures[0].failure : undefined;
+    emit({ type: "lane.completed", laneId: lane.id, status: "done", durationMs, sources: sources.length, read: readCount(), error, failure, note: note || undefined });
+    return { laneId: lane.id, status: "done", sources, read: readCount(), note, agentRan, durationMs, error, failure, failures };
   } catch (e) {
     const durationMs = Date.now() - t0;
-    const aborted = (e as Error).name === "AbortError";
-    const status: LaneStatus = aborted ? "stopped" : "error";
-    const error = aborted ? undefined : providerMessage(e);
-    send({ type: "lane.done", laneId: lane.id, status, durationMs, sources: sources.length, error });
-    return { laneId: lane.id, status, sources, note, agentRan, durationMs, error };
+    const laneAborted = Boolean(signal?.aborted) || isAbortError(e);
+    const runCancelled = Boolean(ctx.runSignal?.aborted);
+    const status: LaneStatus = laneAborted ? (runCancelled || !ctx.timedOut?.() ? "stopped" : "timeout") : "error";
+    const failure: FailureKind = status === "timeout" ? "timeout" : status === "stopped" ? "cancelled" : classifyFailure(e);
+    const error = status === "timeout" ? `Lane timed out after ${Math.round(durationMs / 1000)}s; ${sources.length} source${sources.length === 1 ? "" : "s"} kept` : status === "stopped" ? undefined : providerMessage(e);
+    emit({ type: "lane.completed", laneId: lane.id, status, durationMs, sources: sources.length, read: readCount(), error, failure, note: note || undefined });
+    return { laneId: lane.id, status, sources, read: readCount(), note, agentRan, durationMs, error, failure, failures };
   }
 }
 
@@ -171,7 +248,7 @@ export function buildLaneTools(lane: ResearchLane, ctx: LaneContext, hooks: Lane
         parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", description: "Default 8, max 12" } }, required: ["query"] },
         label: (a) => `Searching ${SOURCE_LABEL[source].toLowerCase()}: ${a.query}`,
         async execute(args) {
-          const { hits, total } = await ctx.deps.retrieve(source, args.query, { ...ctx.settings, limit: Math.min(args.limit ?? 8, 12) }, ctx.signal);
+          const { hits, total } = await withRetry(() => ctx.deps.retrieve(source, args.query, { ...ctx.settings, limit: Math.min(args.limit ?? 8, 12) }, ctx.signal), { retries: ctx.policy.retrievalRetries, baseMs: ctx.policy.retryBaseMs, maxMs: ctx.policy.retryMaxMs, signal: ctx.signal });
           const incoming = hits.slice(0, 10).map((h) => sourceFromHit(h, lane.id));
           hooks.record(incoming);
           return { total, results: incoming.map((s) => compact(hooks.found.get(s.id) ?? s)) };

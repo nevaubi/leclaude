@@ -1,5 +1,50 @@
-/** Schedule math for intel sources. Client-safe (no node imports). */
-import type { IntelEvery, IntelSchedule, IntelSource } from "./types";
+/** Schedule math for intel sources and the periodic-job registry. Client-safe (no node imports). */
+import type { IntelEvery, IntelJobKind, IntelSchedule, IntelSource } from "./types";
+
+// ---------------------------------------------------------------------------
+// Periodic jobs (CLAUDE.md §39): every recurring background task is a job spec
+// that the single tick (src/modules/intel/jobs.ts `tick`) enqueues by cadence.
+// Nothing critical depends on a setInterval: the cron driver and the dev loop
+// both call the same tick, and the cadence timestamp lives in the database.
+// ---------------------------------------------------------------------------
+
+export interface PeriodicJobSpec {
+  /** Stable id; also the housekeeping key (`intel:hk:<id>`). */
+  id: string;
+  kind: IntelJobKind;
+  everyMs: number;
+  /** 1 (highest) – 9. */
+  priority: number;
+  maxAttempts?: number;
+  payload?: Record<string, unknown>;
+  /** Dedupe key while queued/running (default: the kind). */
+  dedupeKey?: string;
+  /** Evaluated at enqueue time; false skips this cadence without advancing it. */
+  enabled?: () => boolean;
+  description?: string;
+}
+
+type PeriodicGlobal = typeof globalThis & { __leclaudePeriodicJobs?: Map<string, PeriodicJobSpec> };
+
+function periodicRegistry(): Map<string, PeriodicJobSpec> {
+  const g = globalThis as PeriodicGlobal;
+  if (!g.__leclaudePeriodicJobs) g.__leclaudePeriodicJobs = new Map();
+  return g.__leclaudePeriodicJobs;
+}
+
+/** Register (or replace, by id) a periodic job. Modules call this at load time; jobs.ts registers the built-ins. */
+export function registerPeriodicJob(spec: PeriodicJobSpec): PeriodicJobSpec {
+  periodicRegistry().set(spec.id, spec);
+  return spec;
+}
+
+export function periodicJobs(): PeriodicJobSpec[] {
+  return Array.from(periodicRegistry().values());
+}
+
+export function getPeriodicJob(id: string): PeriodicJobSpec | undefined {
+  return periodicRegistry().get(id);
+}
 
 export const EVERY_MS: Record<Exclude<IntelEvery, "manual" | "daily" | "weekly">, number> = { "10m": 10 * 60_000, "1h": 3600_000, "6h": 6 * 3600_000 };
 

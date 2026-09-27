@@ -306,7 +306,8 @@ describe("engine", () => {
     expect(run.durationMs).toBeGreaterThanOrEqual(0);
     expect(db().workflows.get(w.id)?.runsCount).toBe(1);
     const recent = recentRunEvents(run.id).map((e) => e.type);
-    expect(recent).toContain("step.status");
+    expect(recent).toContain("node.completed");
+    expect(recent).toContain("run.completed");
     expect(recent[recent.length - 1]).toBe("run.done");
     const summary = summarizeRun(getRun(run.id)!);
     expect(summary.stepCounts.succeeded).toBe(8);

@@ -2,8 +2,10 @@ import "server-only";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import type { LibraryItem, LibraryItemType, OfficeDocument, PracticeArea } from "@/lib/types/domain";
-import { hybridSearch, indexDocument, indexDocuments, indexStats, removeDocument } from "@/lib/ai/vector-store";
-import { VECTOR_COLLECTIONS, extractPlainText } from "@/lib/ai/toolkit/internal";
+import { configuredTenantId, hybridSearch, indexDocument, indexDocuments, indexStats, removeDocument, VECTOR_COLLECTIONS, type CorpusRetrievalScope } from "@/lib/ai/vector-store";
+import { extractPlainText } from "@/lib/ai/toolkit/internal";
+import { currentPrincipal } from "@/lib/auth/context";
+import { accessibleMatterIds } from "@/lib/auth/scope";
 import { aiConfig } from "@/lib/ai/config";
 import { generateJSON, generateText } from "@/lib/ai/agent";
 import { FIRM_NAME, LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
@@ -24,6 +26,26 @@ import { CLAUSE_CATEGORIES, OFFICE_KIND_BY_TYPE, PRACTICE_AREAS, TYPE_BY_OFFICE_
 
 const OFFICE_VECTORS = "office_documents";
 const now = () => new Date().toISOString();
+
+// ---------------------------------------------------------------------------
+// Retrieval scope (constitution §22): the library is a tenant-wide corpus; matter work product keeps its matter on
+// the indexed row, and a search only reaches the matters the principal may touch. Outside a request in header/jwt
+// mode there is no principal, so the search runs unscoped and the vector store records it (strict mode throws).
+// ---------------------------------------------------------------------------
+function safePrincipal() {
+  try { return currentPrincipal(); } catch { return null; }
+}
+
+/** Index-time scope: every library/office row belongs to the "library" corpus of the current tenant. */
+function libraryIndexScope(): CorpusRetrievalScope {
+  return { tenantId: safePrincipal()?.tenantId ?? configuredTenantId(), corpus: "library" };
+}
+
+/** Query-time scope: the library corpus narrowed to the principal's accessible matters; undefined without a principal. */
+function librarySearchScope(): CorpusRetrievalScope | undefined {
+  const p = safePrincipal();
+  return p ? { tenantId: p.tenantId, corpus: "library", matterIds: accessibleMatterIds(p) } : undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Office-document sync (merge editor-created docs into the tree at read time)
@@ -149,7 +171,7 @@ export function getVersion(itemId: string, version: number) {
 async function reindexItem(item: LibraryItem) {
   if (item.type === "folder") { removeDocument(VECTOR_COLLECTIONS.library, item.id); return; }
   try {
-    await indexDocument(VECTOR_COLLECTIONS.library, item.id, indexTextFor(item), { type: item.type, matterId: item.matterId, practiceArea: item.practiceArea, parentId: item.parentId }, { embed: aiConfig().hasKey });
+    await indexDocument(VECTOR_COLLECTIONS.library, item.id, indexTextFor(item), { type: item.type, matterId: item.matterId, practiceArea: item.practiceArea, parentId: item.parentId }, { embed: aiConfig().hasKey, scope: libraryIndexScope() });
   } catch (e) { console.warn("[library] reindex failed", (e as Error).message); }
 }
 
@@ -162,11 +184,12 @@ export function indexStatus() {
 export async function rebuildIndex(opts: { embed?: boolean; includeOffice?: boolean } = {}) {
   const embed = opts.embed ?? aiConfig().hasKey;
   const items = liveItems().filter((i) => i.type !== "folder" && !i.officeDocId);
-  const lib = await indexDocuments(VECTOR_COLLECTIONS.library, items.map((i) => ({ id: i.id, text: indexTextFor(i), meta: { type: i.type, matterId: i.matterId, practiceArea: i.practiceArea, parentId: i.parentId } })), { embed });
+  const scope = libraryIndexScope();
+  const lib = await indexDocuments(VECTOR_COLLECTIONS.library, items.map((i) => ({ id: i.id, text: indexTextFor(i), matterId: i.matterId ?? null, meta: { type: i.type, matterId: i.matterId, practiceArea: i.practiceArea, parentId: i.parentId } })), { embed, scope });
   let office = { docs: 0, chunks: 0, embedded: 0 };
   if (opts.includeOffice !== false) {
     const docs = db().officeDocs.all();
-    office = await indexDocuments(OFFICE_VECTORS, docs.map((doc) => ({ id: doc.id, text: `${doc.title}\n${extractPlainText(doc.content)}`, meta: { kind: doc.kind, title: doc.title, matterId: doc.matterId } })), { embed });
+    office = await indexDocuments(OFFICE_VECTORS, docs.map((doc) => ({ id: doc.id, text: `${doc.title}\n${extractPlainText(doc.content)}`, matterId: doc.matterId ?? null, meta: { kind: doc.kind, title: doc.title, matterId: doc.matterId } })), { embed, scope });
   }
   return { embed, library: lib, office, status: indexStatus() };
 }
@@ -523,13 +546,15 @@ export async function searchLibrary(query: string, f: LibraryFilters = {}, k = 3
   const ctx = viewCtx(items);
   if (!q) return { hits: [], query: q, took: 0, mode: "keyword" };
   const scopeIds = f.folder ? new Set(descendantIds(items, f.folder)) : null;
-  const inScope = (i: LibraryItem) => i.type !== "folder" && (!scopeIds || scopeIds.has(i.id)) && matchesFilters(i, { ...f, q: undefined, folder: undefined });
+  const scope = librarySearchScope();
+  const matterAllowed = (i: LibraryItem) => !i.matterId || !scope?.matterIds || scope.matterIds.includes(i.matterId);
+  const inScope = (i: LibraryItem) => i.type !== "folder" && matterAllowed(i) && (!scopeIds || scopeIds.has(i.id)) && matchesFilters(i, { ...f, q: undefined, folder: undefined });
   const byDoc = new Map<string, LibraryItem>();
   for (const i of items) if (i.officeDocId) byDoc.set(i.officeDocId, i);
 
   const [libHits, officeHits] = await Promise.all([
-    hybridSearch(VECTOR_COLLECTIONS.library, q, { k, perDoc: 1, filter: (_m, id) => { const it = ctx.items.get(id); return !!it && !it.officeDocId && inScope(it); } }),
-    hybridSearch(OFFICE_VECTORS, q, { k, perDoc: 1, filter: (_m, docId) => { const it = byDoc.get(docId); return !!it && inScope(it); } }),
+    hybridSearch(VECTOR_COLLECTIONS.library, q, { scope, k, perDoc: 1, filter: (_m, id) => { const it = ctx.items.get(id); return !!it && !it.officeDocId && inScope(it); } }),
+    hybridSearch(OFFICE_VECTORS, q, { scope, k, perDoc: 1, filter: (_m, docId) => { const it = byDoc.get(docId); return !!it && inScope(it); } }),
   ]);
   const hits: LibrarySearchHit[] = [];
   for (const h of libHits) { const it = ctx.items.get(h.docId); if (it) hits.push({ item: toView(it, ctx), score: h.score, passage: passageAround(h.text, q), source: "library", semantic: h.semantic, keyword: h.keyword }); }

@@ -34,6 +34,8 @@ afterEach(() => { for (const k of ENV_KEYS) delete process.env[k]; });
 beforeAll(() => { resetSqlite(); db(); });
 
 const json = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, unknown> });
+/** Routes declared without a request parameter still receive one from Next; call them the way Next does. */
+const call = (h: unknown, ...args: unknown[]) => (h as (...a: unknown[]) => Promise<Response>)(...args);
 const nreq = (path: string, init?: RequestInit) => new NextRequest(`http://localhost${path}`, init as ConstructorParameters<typeof NextRequest>[1]);
 const headerFor = (p: Partial<Principal>) => ({ [AUTH_HEADER_USER]: JSON.stringify({ id: "u_test", name: "Test", roles: ["associate"], matterIds: [MATTERS.afff], ...p }) });
 
@@ -48,8 +50,8 @@ describe("withAuth in dev mode", () => {
   });
   it("audits writes and denials but not plain reads unless AUTH_AUDIT_READS is set", async () => {
     const before = auditCount();
-    const read = withAuth(async () => Response.json({ ok: true }), { action: "read", resource: () => ({ kind: "task" }) });
-    const write = withAuth(async () => Response.json({ ok: true }), { action: "write", resource: () => ({ kind: "task", matterId: MATTERS.afff }) });
+    const read = withAuth(async (req: Request) => Response.json({ ok: true, via: req.url }), { action: "read", resource: () => ({ kind: "task" }) });
+    const write = withAuth(async (req: Request) => Response.json({ ok: true, via: req.url }), { action: "write", resource: () => ({ kind: "task", matterId: MATTERS.afff }) });
     await read(nreq("/api/tasks"));
     expect(auditCount()).toBe(before);
     await write(nreq("/api/tasks", { method: "POST" }));
@@ -63,36 +65,38 @@ describe("withAuth in dev mode", () => {
   });
   it("maps AuthError thrown inside the handler to the same 401/403 shapes and audits the denial", async () => {
     const before = auditCount();
-    const handler = withAuth(async () => { throw AuthError.forbidden("deep service said no"); }, { action: "read", resource: () => ({ kind: "task" }) });
+    const handler = withAuth(async (req: Request) => { throw AuthError.forbidden(`deep service said no to ${req.method}`); }, { action: "read", resource: () => ({ kind: "task" }) });
     const r = await json(await handler(nreq("/api/deep")));
     expect(r.status).toBe(403);
-    expect(r.body).toMatchObject({ error: "Forbidden", code: "forbidden", reason: "deep service said no" });
+    expect(r.body).toMatchObject({ error: "Forbidden", code: "forbidden", reason: "deep service said no to GET" });
     expect(auditCount()).toBe(before + 1);
-    expect(recentAudit({ limit: 1 })[0]).toMatchObject({ decision: "deny", reason: "deep service said no" });
-    const h401 = withAuth(async () => { throw AuthError.unauthenticated("session gone"); }, { action: "read", resource: () => ({ kind: "task" }) });
+    expect(recentAudit({ limit: 1 })[0]).toMatchObject({ decision: "deny", reason: "deep service said no to GET" });
+    const h401 = withAuth(async (req: Request) => { throw AuthError.unauthenticated(`session gone for ${req.method}`); }, { action: "read", resource: () => ({ kind: "task" }) });
     expect((await json(await h401(nreq("/api/deep")))).body).toMatchObject({ code: "unauthenticated" });
   });
   it("returns 400 when the resource cannot be determined and never runs the handler", async () => {
     let ran = false;
-    const handler = withAuth(async () => { ran = true; return Response.json({}); }, { action: "read", resource: () => { throw new Error("boom"); } });
+    const handler = withAuth(async (req: Request) => { ran = true; return Response.json({ via: req.url }); }, { action: "read", resource: () => { throw new Error("boom"); } });
     expect((await handler(nreq("/api/x"))).status).toBe(400);
     expect(ran).toBe(false);
   });
   it("wrapped real routes still answer 200 for the demo partner", async () => {
-    expect((await libraryTree(nreq("/api/library/tree"))).status).toBe(200);
-    expect((await settingsProviders(nreq("/api/settings/providers"))).status).toBe(200);
-    expect((await homeMatters(nreq("/api/home/matters"))).status).toBe(200);
-    expect((await workflowsList(nreq("/api/workflows"))).status).toBe(200);
+    expect((await call(libraryTree, nreq("/api/library/tree"))).status).toBe(200);
+    expect((await call(settingsProviders, nreq("/api/settings/providers"))).status).toBe(200);
+    expect((await call(homeMatters, nreq("/api/home/matters"))).status).toBe(200);
+    expect((await call(workflowsList, nreq("/api/workflows"))).status).toBe(200);
+    // Next may also invoke a handler that declares no parameters with none; the wrapper authorizes it as an anonymous GET.
+    expect((await call(libraryTree)).status).toBe(200);
     const missing = await libraryItem(nreq("/api/library/items/nope"), { params: Promise.resolve({ id: "nope" }) });
     expect(missing.status).toBe(404);
   });
   it("applies the role matrix to dev personas: a paralegal cannot administer settings", async () => {
     process.env.LECLAUDE_USER_ID = PEOPLE.mariaLopez;
-    const r = await json(await settingsProviders(nreq("/api/settings/providers")));
+    const r = await json(await call(settingsProviders, nreq("/api/settings/providers")));
     expect(r.status).toBe(403);
     expect(r.body).toMatchObject({ error: "Forbidden", code: "forbidden" });
     expect(String(r.body.reason)).toMatch(/paralegal/);
-    expect((await libraryTree(nreq("/api/library/tree"))).status).toBe(200);
+    expect((await call(libraryTree, nreq("/api/library/tree"))).status).toBe(200);
   });
   it("keeps the tick route's own CRON_SECRET check and lets the cron token through as a service principal", async () => {
     process.env.CRON_SECRET = "cron-1";
@@ -107,7 +111,7 @@ describe("withAuth in header mode", () => {
   it("returns 401 without a trusted assertion and one 403 shape without reasons when the policy denies", async () => {
     process.env.AUTH_MODE = "header";
     process.env.AUTH_TRUST_HEADER = "true";
-    const exportRoute = withAuth(async () => Response.json({ ok: true }), { action: "export", resource: () => ({ kind: "document", id: "ed_x", matterId: MATTERS.afff }) });
+    const exportRoute = withAuth(async (req: Request) => Response.json({ ok: true, via: req.url }), { action: "export", resource: () => ({ kind: "document", id: "ed_x", matterId: MATTERS.afff }) });
     const missing = await json(await exportRoute(nreq("/api/export")));
     expect(missing).toEqual({ status: 401, body: { error: `Missing ${AUTH_HEADER_USER} header`, code: "unauthenticated" } });
     const denied = await json(await exportRoute(nreq("/api/export", { headers: headerFor({ roles: ["paralegal"] }) })));
@@ -123,7 +127,7 @@ describe("withAuth in header mode", () => {
     process.env.AUTH_MODE = "header";
     process.env.AUTH_TRUST_HEADER = "true";
     const anyDoc = db().edocs.findOne((d) => d.matterId === MATTERS.northgate)!;
-    const route = withAuth(async () => Response.json({ leaked: true }), { action: "read", resource: (_req, { id }) => refs.edoc(id) });
+    const route = withAuth(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => Response.json({ leaked: (await params).id }), { action: "read", resource: (_req, { id }) => refs.edoc(id) });
     const r = await json(await route(nreq(`/api/docs/${anyDoc.id}`, { headers: headerFor({ matterIds: [MATTERS.afff] }) }), { params: Promise.resolve({ id: anyDoc.id }) }));
     expect(r).toEqual({ status: 403, body: { error: "Forbidden", code: "forbidden" } });
   });

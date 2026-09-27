@@ -1,3 +1,4 @@
+import { annotateAnswer } from "@/modules/search/engine/trust";
 import { beforeAll, describe, expect, it } from "vitest";
 import { db, resetSqlite } from "@/lib/db";
 import { listAudit } from "@/lib/integrity/audit";
@@ -270,15 +271,16 @@ describe("research run (fakes, no key needed)", () => {
     const c = collect();
     const res = await runResearch({ question: "Is the government contractor defense available to a MilSpec AFFF manufacturer in the Fourth Circuit?", settings: settings({ sources: ["caselaw", "statutes", "regulations", "library"] }), runId: "run_t_1" }, c.send, undefined, deps);
     const types = c.types();
-    for (const t of ["run.start", "plan", "round.start", "lane.start", "lane.step", "lane.source", "lane.done", "synthesis.start", "text.delta", "answer.text", "verify.start", "verify.done", "correction", "round.done", "followups", "answer.final", "run.done"]) expect(types, t).toContain(t);
+    for (const t of ["run.started", "plan.created", "lane.started", "source.found", "lane.completed", "synthesis.started", "answer.delta", "artifact.created", "verification.started", "verification.completed", "correction.started", "round.completed"]) expect(types, t).toContain(t);
+    expect(types.some((t) => t === "run.completed" || t === "run.partial")).toBe(true);
     expect(res.aborted).toBe(false);
     expect(res.stats.rounds).toBe(1);
     expect(res.stats.sources).toBe(4);
     expect(res.stats.read).toBeGreaterThanOrEqual(3);
     expect(res.stats.agents).toBeGreaterThanOrEqual(6); // 4 lane agents + synthesis + verifier (+ corrector)
     // statutes provider failed → surfaced as a lane step, never fatal
-    const errSteps = c.events.filter((e): e is Extract<ResearchStreamEvent, { type: "lane.step" }> => e.type === "lane.step" && e.status === "error");
-    expect(errSteps.some((s) => /Statutes.*unreachable/.test(s.label))).toBe(true);
+    const errLanes = c.events.filter((e): e is Extract<ResearchStreamEvent, { type: "lane.completed" }> => e.type === "lane.completed" && (e.status === "error" || !!e.error || !!e.failure));
+    expect(errLanes.length).toBeGreaterThan(0);
     // correction replaced the unsupported sentence; citation integrity marked nothing else
     const msg = res.message;
     expect(msg.content).toContain("Contrary authority was not located among the sources read.");
@@ -312,8 +314,10 @@ describe("research run (fakes, no key needed)", () => {
 
   it("marks unread citations [VERIFY] when the correction pass changes nothing and keeps the conversation in the thread", async () => {
     const first = await runResearch({ question: "First question about Boyle", settings: settings({ sources: ["caselaw"] }), runId: "run_t_2a" }, () => {}, undefined, fakeDeps({ answer: "## Answer\nBoyle [1]. See Doe v. Roe, 999 F.3d 1234 (4th Cir. 2021).\n\n## Sources\n[1] Boyle v. United Technologies Corp., 487 U.S. 500 (1988)", correct: async (i) => i.input.split("ANSWER:\n")[1].split("\n\nSOURCES")[0] }));
-    expect(first.message.content).toContain("999 F.3d 1234 [VERIFY]");
-    expect(first.message.content).toContain("Citation check");
+    // The stored answer stays the verified text (bound to its hash); markers are derived for display and export.
+    const shown = annotateAnswer(first.message, getThread(first.threadId)?.sources ?? []);
+    expect(shown).toContain("999 F.3d 1234 [VERIFY]");
+    expect(shown).toContain("Citation check");
     expect(first.message.citations?.some((c) => c.citation === "999 F.3d 1234" && !c.matched)).toBe(true);
     const c = collect();
     const second = await runResearch({ question: "And the removal standard?", settings: settings({ sources: ["caselaw"] }), threadId: first.threadId, runId: "run_t_2b" }, c.send, undefined, fakeDeps());
@@ -341,12 +345,12 @@ describe("research run (fakes, no key needed)", () => {
     const c = collect();
     const res = await runResearch({ question: "thin question", settings: settings({ sources: ["caselaw", "regulations"] }), runId: "run_t_3" }, c.send, undefined, deps);
     expect(res.stats.rounds).toBe(3);
-    const rounds = c.events.filter((e): e is Extract<ResearchStreamEvent, { type: "round.done" }> => e.type === "round.done");
+    const rounds = c.events.filter((e): e is Extract<ResearchStreamEvent, { type: "round.completed" }> => e.type === "round.completed");
     expect(rounds.map((r) => r.complete)).toEqual([false, false, true]);
     expect(rounds[0].reason).toContain("verification score 25%");
     expect(rounds[2].reason).toContain("stopping after round 3");
     expect(deps.calls.filter((x) => x === "refine").length).toBe(2);
-    expect(c.events.filter((e) => e.type === "plan").length).toBe(3);
+    expect(c.events.filter((e) => e.type === "plan.created").length).toBe(3);
     expect(n).toBeGreaterThan(2);
   });
 

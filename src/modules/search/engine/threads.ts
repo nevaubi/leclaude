@@ -1,12 +1,11 @@
 import "server-only";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
+import { researchPrincipalId } from "../service";
 import type { SearchSettings } from "../types";
 import { compactSource, mergeSources } from "./sources";
 import type { ResearchMessage, ResearchPin, ResearchSource, ResearchThread } from "./types";
-import { currentUser } from "@/lib/current-user";
 
-const CURRENT_USER = currentUser();
 const MAX_THREADS = 200;
 const MAX_SOURCES_PER_THREAD = 120;
 
@@ -32,7 +31,7 @@ export function getThread(id: string): ResearchThread | null {
 
 export function createThread(input: { id?: string; question: string; settings: SearchSettings; createdAt?: string }): ResearchThread {
   const now = input.createdAt ?? new Date().toISOString();
-  const t: ResearchThread = { id: input.id ?? `thr_${nanoid(10)}`, title: threadTitle(input.question), matterId: input.settings.matterId ?? null, settings: input.settings, ownerId: CURRENT_USER.id, createdAt: now, updatedAt: now, messages: [], sources: [], pins: [], runIds: [] };
+  const t: ResearchThread = { id: input.id ?? `thr_${nanoid(10)}`, title: threadTitle(input.question), matterId: input.settings.matterId ?? null, settings: input.settings, ownerId: researchPrincipalId(), createdAt: now, updatedAt: now, messages: [], sources: [], pins: [], runIds: [] };
   threads().put(t);
   trimThreads();
   return t;
@@ -66,6 +65,13 @@ export function renameThread(id: string, title: string): ResearchThread | null {
 }
 
 export function deleteThread(id: string): boolean {
+  return threads().delete(id);
+}
+
+/** Remove a thread that a cancelled or failed run created but never wrote a message to. */
+export function deleteThreadIfEmpty(id: string): boolean {
+  const t = threads().get(id);
+  if (!t || t.messages.length || t.pins.length) return false;
   return threads().delete(id);
 }
 

@@ -1,8 +1,14 @@
 import "server-only";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
-import { hybridSearch, indexDocuments, indexStats } from "@/lib/ai/vector-store";
+import { hybridSearch, indexDocuments, indexStats, type MatterRetrievalScope } from "@/lib/ai/vector-store";
 import { VECTOR_COLLECTIONS } from "@/lib/ai/toolkit/internal";
+import { tenantId } from "@/lib/auth/principal";
+
+/** Retrieval scope for one matter: e-discovery reads and indexes never widen past the matter (constitution §22). */
+export function matterRetrievalScope(matterId: string): MatterRetrievalScope {
+  return { tenantId: tenantId(), matterIds: [matterId] };
+}
 import type { EDocument, IssueCode, PrivilegeLogEntry } from "@/lib/types/domain";
 import { batesInRange, compareBates, isEmptyQuery, makeSnippet, matchesQuery, parseQuery, type ParsedQuery, type QueryNode, type Searchable } from "./query";
 import { batches, redactions as redactionStore } from "./review-store";
@@ -317,7 +323,7 @@ export async function searchDocuments(req: SearchRequest): Promise<SearchRespons
   if (useSemantic) {
     // Hybrid (keyword BM25 + embeddings when available) over the vector index, restricted to this matter.
     // Capped to the top SEMANTIC_K by fused rank so the result set is a ranked shortlist, not the whole corpus.
-    const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, req.q!, { k: SEMANTIC_K, perDoc: 1, filter: (meta) => meta.matterId === req.matterId });
+    const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, req.q!, { k: SEMANTIC_K, perDoc: 1, scope: matterRetrievalScope(req.matterId), filter: (meta) => meta.matterId === req.matterId });
     const scoreById = new Map<string, { score: number; passage: string }>();
     for (const h of hits) if (!scoreById.has(h.docId)) scoreById.set(h.docId, { score: h.score, passage: h.text });
     // Structured parts of the query (fields, Bates, dates, NOT) still apply as hard filters.
@@ -686,7 +692,7 @@ export async function similarDocuments(id: string, k = 10): Promise<SimilarDoc[]
   for (const q of [terms.join(" "), terms.slice(0, 4).join(" ")]) {
     if (out.length >= k || !q) break;
     try {
-      const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, q, { k: k + seen.size + 2, perDoc: 1, filter: (meta) => meta.matterId === doc.matterId });
+      const hits = await hybridSearch(VECTOR_COLLECTIONS.edocs, q, { k: k + seen.size + 2, perDoc: 1, scope: matterRetrievalScope(doc.matterId), filter: (meta) => meta.matterId === doc.matterId });
       for (const h of hits) {
         if (seen.has(h.docId)) continue;
         const other = db().edocs.get(h.docId);
@@ -729,7 +735,7 @@ export function distinctiveTerms(doc: EDocument, corpus: EDocument[], n = 10): s
 
 export async function rebuildIndex(matterId: string, opts: { embed?: boolean } = {}) {
   const docs = matterDocs(matterId);
-  const res = await indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((d) => ({ id: d.id, text: indexTextFor(d), meta: { matterId: d.matterId, custodianId: d.custodianId, type: d.type, date: d.date, bates: d.bates } })), { embed: opts.embed ?? true });
+  const res = await indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((d) => ({ id: d.id, text: indexTextFor(d), meta: { matterId: d.matterId, custodianId: d.custodianId, type: d.type, date: d.date, bates: d.bates } })), { embed: opts.embed ?? true, scope: matterRetrievalScope(matterId) });
   return { matterId, ...res };
 }
 

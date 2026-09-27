@@ -328,7 +328,8 @@ describe("review.auto (steward)", () => {
       N("steward", "review.auto", { steps: "", fixes: ["retry", "narrow"], maxFixes: 3, escalate: true, reviewerId: PEOPLE.aishaKhan, stopOnEscalate: false }),
     ], [E("start", "fetch"), E("start", "url"), E("start", "ok"), E("fetch", "steward"), E("url", "steward"), E("ok", "steward")]);
     const run = await startRun(w, { inputs: {}, wait: true });
-    expect(run.status, run.error).toBe("succeeded");
+    // Two steps stayed broken and were escalated: the run is partial, never reported as a clean success.
+    expect(run.status, run.error).toBe("partial");
     expect(stepOf(run, "ok").status).toBe("succeeded");
     const s = out(run, "steward") as { checked: number; fixed: number; escalated: number; notes: string[]; failures: { nodeId: string; code: string; action: string; ok: boolean }[] };
     expect(s.checked).toBe(2);

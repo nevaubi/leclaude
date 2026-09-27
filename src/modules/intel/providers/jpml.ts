@@ -1,6 +1,6 @@
 import "server-only";
 import { decodeEntities } from "@/lib/ai/toolkit/http";
-import { ProviderClient, ProviderError, type ProviderFactoryOptions } from "./base";
+import { ProviderClient, ProviderError, providerEgress, type ProviderFactoryOptions } from "./base";
 
 /**
  * Judicial Panel on Multidistrict Litigation — pending MDL dockets. The JPML
@@ -81,7 +81,7 @@ export function parseJpmlTable(html: string): JpmlMdl[] {
 }
 
 export function createJpml(opts: ProviderFactoryOptions & { url?: string } = {}) {
-  const client = new ProviderClient({ name: "jpml", rps: 0.5, burst: 2, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "jpml", egress: providerEgress("jpml"), rps: 0.5, burst: 2, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   const url = opts.url ?? JPML_PENDING_URL;
   return {
     name: "jpml" as const,

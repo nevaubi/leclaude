@@ -63,6 +63,115 @@ export interface RenderedFile {
   libraryFolderId?: string;
 }
 
+// ─────────────────────────── Upload validation (constitution §41) ───────────────────────────
+//
+// Local implementation of the upload guard; swap for `validateUpload()` from
+// src/lib/net/upload-guard.ts once that module lands (same contract: bytes,
+// name, declared mime → ok | reason).
+
+export const UPLOAD_MAX_BYTES = 60 * 1024 * 1024;
+
+type SignatureFamily = "pdf" | "zip" | "ole" | "png" | "jpeg" | "gif" | "webp" | "tiff" | "text";
+
+/** Declared MIME types a workflow upload may carry and the byte signature each must match. */
+const UPLOAD_MIME_FAMILY: Record<string, SignatureFamily[]> = {
+  "application/pdf": ["pdf"],
+  "application/zip": ["zip"],
+  "application/x-zip-compressed": ["zip"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["zip"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["zip"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ["zip"],
+  "application/msword": ["ole", "zip"],
+  "application/vnd.ms-excel": ["ole", "zip", "text"],
+  "application/vnd.ms-powerpoint": ["ole", "zip"],
+  "application/vnd.ms-outlook": ["ole"],
+  "image/png": ["png"],
+  "image/jpeg": ["jpeg"],
+  "image/gif": ["gif"],
+  "image/webp": ["webp"],
+  "image/tiff": ["tiff"],
+  "application/json": ["text"],
+  "application/xml": ["text"],
+  "application/rtf": ["text"],
+  "text/rtf": ["text"],
+  "message/rfc822": ["text"],
+};
+
+const EXT_FAMILY: Record<string, SignatureFamily> = {
+  pdf: "pdf", docx: "zip", xlsx: "zip", pptx: "zip", zip: "zip", doc: "ole", xls: "ole", ppt: "ole", msg: "ole",
+  png: "png", jpg: "jpeg", jpeg: "jpeg", gif: "gif", webp: "webp", tif: "tiff", tiff: "tiff",
+  txt: "text", md: "text", markdown: "text", csv: "text", tsv: "text", json: "text", xml: "text", html: "text", htm: "text", rtf: "text", eml: "text", log: "text", yaml: "text", yml: "text",
+};
+
+function startsWith(bytes: Uint8Array, sig: number[], offset = 0) {
+  if (bytes.byteLength < offset + sig.length) return false;
+  for (let i = 0; i < sig.length; i++) if (bytes[offset + i] !== sig[i]) return false;
+  return true;
+}
+
+function looksLikeText(bytes: Uint8Array): boolean {
+  const n = Math.min(bytes.byteLength, 8192);
+  let suspicious = 0;
+  for (let i = 0; i < n; i++) {
+    const b = bytes[i];
+    if (b === 0) return false;
+    if (b < 32 && b !== 9 && b !== 10 && b !== 13 && b !== 12 && b !== 27) suspicious++;
+  }
+  if (suspicious > n * 0.02) return false;
+  try { new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, n - (n === bytes.byteLength ? 0 : 4))); return true; } catch { /* fall through: latin-1 style text still counts when control bytes are rare */ }
+  return suspicious === 0;
+}
+
+/** Byte-signature family of an upload (magic bytes, never the declared type). */
+export function sniffSignature(bytes: Uint8Array): SignatureFamily | null {
+  if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "pdf"; // %PDF-
+  if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04]) || startsWith(bytes, [0x50, 0x4b, 0x05, 0x06]) || startsWith(bytes, [0x50, 0x4b, 0x07, 0x08])) return "zip";
+  if (startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) return "ole";
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "png";
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "jpeg";
+  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) || startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61])) return "gif";
+  if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes, [0x57, 0x45, 0x42, 0x50], 8)) return "webp";
+  if (startsWith(bytes, [0x49, 0x49, 0x2a, 0x00]) || startsWith(bytes, [0x4d, 0x4d, 0x00, 0x2a])) return "tiff";
+  if (looksLikeText(bytes)) return "text";
+  return null;
+}
+
+/** File names are labels, never paths: no separators, traversal, control characters or over-long names. */
+export function safeUploadName(name: string | undefined): { ok: true; name: string } | { ok: false; reason: string } {
+  const n = (name ?? "").trim();
+  if (!n) return { ok: false, reason: "file name is empty" };
+  if (n.length > 255) return { ok: false, reason: "file name is longer than 255 characters" };
+  if (/[\\/\0]/.test(n) || n.includes("..")) return { ok: false, reason: `file name "${n.slice(0, 60)}" contains a path` };
+  if (/[\x00-\x1f\x7f]/.test(n)) return { ok: false, reason: "file name contains control characters" };
+  return { ok: true, name: n };
+}
+
+export type UploadVerdict = { ok: true; family: SignatureFamily; ext: string; mime: string; name: string } | { ok: false; reason: string };
+
+/**
+ * Validate an uploaded file before a workflow uses it: size limit, allowed
+ * declared type, magic bytes consistent with that type, and a name that
+ * cannot traverse paths. `application/octet-stream` (a browser that could not
+ * classify the file) is resolved through the extension and must still match
+ * the bytes.
+ */
+export function validateUploadedFile(file: { bytes: Uint8Array; name?: string; mime?: string; maxBytes?: number }): UploadVerdict {
+  const named = safeUploadName(file.name);
+  if (!named.ok) return named;
+  const max = file.maxBytes ?? UPLOAD_MAX_BYTES;
+  if (!file.bytes.byteLength) return { ok: false, reason: `${named.name}: empty file` };
+  if (file.bytes.byteLength > max) return { ok: false, reason: `${named.name}: exceeds ${Math.round(max / (1024 * 1024))} MB` };
+  const ext = named.name.toLowerCase().split(".").pop() ?? "";
+  const mime = (file.mime ?? "").split(";")[0].trim().toLowerCase() || "application/octet-stream";
+  let expected: SignatureFamily[] | undefined = UPLOAD_MIME_FAMILY[mime];
+  if (!expected && mime.startsWith("text/")) expected = ["text"];
+  if (!expected && mime === "application/octet-stream" && EXT_FAMILY[ext]) expected = [EXT_FAMILY[ext]];
+  if (!expected) return { ok: false, reason: `${named.name}: file type "${mime}" is not accepted` };
+  const actual = sniffSignature(file.bytes);
+  if (!actual || !expected.includes(actual)) return { ok: false, reason: `${named.name}: content does not match its declared type (${mime})` };
+  return { ok: true, family: actual, ext, mime, name: named.name };
+}
+
 /** Excel sheet names cannot contain : \ / ? * [ ] and are capped at 31 characters. */
 export function safeSheetName(name: string): string {
   const clean = name.replace(/[:\\/?*[\]]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 31).trim();

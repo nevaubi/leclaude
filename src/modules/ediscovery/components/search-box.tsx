@@ -107,11 +107,15 @@ export function SearchBox({ response, loading, onSaveSearch, onTermReport }: { r
  * Batch review mode strip: which batch is open, what is left, next-uncoded (x),
  * QC-sample mode for batches with a sample, and the way out.
  */
-export function BatchModeStrip({ onNext }: { onNext: () => void }) {
+export function BatchModeStrip({ onNext, rows }: { onNext: () => void; rows: unknown[] }) {
   const batchId = useReviewStore((s) => s.batchId);
   const qcMode = useReviewStore((s) => s.qcMode);
   const setBatch = useReviewStore((s) => s.setBatch);
   const batch = useBatch(batchId);
+  const refresh = batch.refresh;
+  // Progress follows the grid: every coding change patches the rows, so re-read the batch then.
+  const first = React.useRef(true);
+  React.useEffect(() => { if (first.current) { first.current = false; return; } if (batchId) refresh(); }, [rows, batchId, refresh]);
   const b = batch.data?.batch;
   if (!batchId) return null;
   const remaining = qcMode ? Math.max(0, (b?.progress.qcSampled ?? 0) - (b?.progress.qcDone ?? 0)) : b?.progress.remaining ?? 0;

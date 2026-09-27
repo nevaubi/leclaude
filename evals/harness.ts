@@ -70,13 +70,14 @@ function modelAvailable(): boolean {
 
 /** Fixed-rubric model grader: reasoning first, then exactly one verdict tag. */
 export async function llmGrade(rubric: string, question: string, output: string, signal?: AbortSignal): Promise<{ correct: boolean; reasoning: string }> {
-  const text = await generateText({
+  const graded = await generateText({
     instructions: "You grade an AI legal assistant's answer against a fixed rubric. Think through the rubric point by point first, quoting the answer where relevant. Then output exactly one final tag on its own line: <result>correct</result> or <result>incorrect</result>. Never output more than one tag.",
     input: `## Rubric\n${rubric}\n\n## Question\n${question}\n\n## Answer under review\n${output}`,
     fast: true,
     maxOutputTokens: 800,
     signal,
   });
+  const text = graded.text ?? "";
   const m = /<result>\s*(correct|incorrect)\s*<\/result>/i.exec(text);
   return { correct: m?.[1]?.toLowerCase() === "correct", reasoning: text.trim() };
 }
@@ -152,12 +153,13 @@ const EXECUTORS: Record<string, Executor> = {
     k.check("trust state is never 'verified' for that verdict", deriveTrustState({ artifactHash: "eval-no-answer", sourceCount: 2, verification: v }) !== "verified", deriveTrustState({ artifactHash: "eval-no-answer", sourceCount: 2, verification: v }));
     if (!modelAvailable()) { k.skip("[model] rubric-graded answer says the record does not establish this"); return; }
     const sources = c.input.sources as { cite: string; text: string }[];
-    const answer = await generateText({
+    const generated = await generateText({
       instructions: "You answer questions about a litigation record using ONLY the excerpts provided. If the excerpts do not establish the answer, say that the record does not establish it. Never guess.",
       input: `## Question\n${c.input.question}\n\n## Record excerpts\n${sources.map((x) => `[${x.cite}] ${x.text}`).join("\n")}`,
       fast: true,
       maxOutputTokens: 400,
     });
+    const answer = generated.text ?? "";
     const grade = await llmGrade(c.input.rubric as string, c.input.question as string, answer);
     k.check("[model] rubric-graded answer says the record does not establish this", grade.correct, { answer: answer.slice(0, 300), grader: grade.reasoning.slice(-200) });
   },

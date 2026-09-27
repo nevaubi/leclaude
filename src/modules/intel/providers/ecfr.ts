@@ -1,6 +1,6 @@
 import "server-only";
 import { stripXml } from "@/lib/ai/toolkit/http";
-import { clip, ProviderClient, ProviderError, type ProviderFactoryOptions } from "./base";
+import { clip, ProviderClient, ProviderError, providerEgress, type ProviderFactoryOptions } from "./base";
 
 /** eCFR search + versioner APIs (public, no key). */
 const SEARCH = "https://www.ecfr.gov/api/search/v1";
@@ -58,7 +58,7 @@ export function cfrCite(title: number | string, section?: string, part?: string)
 }
 
 export function createEcfr(opts: ProviderFactoryOptions = {}) {
-  const client = new ProviderClient({ name: "ecfr", rps: 2, burst: 6, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "ecfr", egress: providerEgress("ecfr"), rps: 2, burst: 6, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   return {
     name: "ecfr" as const,
     client,

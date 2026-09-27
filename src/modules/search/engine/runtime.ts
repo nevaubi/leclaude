@@ -230,6 +230,11 @@ export class MetricsRecorder {
     const key = `${name}Ms` as const;
     this.m[key] = Math.max(0, this.now() - this.m.requestedAt);
   }
+  /** Set a milestone from a wall-clock time captured earlier (e.g. when the last current verification completed). */
+  markAt(name: MetricMark, epochMs: number): void {
+    const key = `${name}Ms` as const;
+    this.m[key] = Math.max(0, epochMs - this.m.requestedAt);
+  }
   has(name: MetricMark): boolean {
     return this.m[`${name}Ms` as const] != null;
   }

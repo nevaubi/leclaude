@@ -1,6 +1,6 @@
 import "server-only";
 import { htmlToText, stripXml } from "@/lib/ai/toolkit/http";
-import { clip, ProviderClient, ProviderError, type ProviderFactoryOptions } from "./base";
+import { clip, ProviderClient, ProviderError, providerEgress, type ProviderFactoryOptions } from "./base";
 
 /** Federal Register API v1 (public, no key). */
 const BASE = "https://www.federalregister.gov/api/v1";
@@ -50,7 +50,7 @@ function mapDoc(r: Record<string, unknown>): FRDocument {
 }
 
 export function createFederalRegister(opts: ProviderFactoryOptions = {}) {
-  const client = new ProviderClient({ name: "federal-register", rps: 2, burst: 6, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "federal-register", egress: providerEgress("federal-register"), rps: 2, burst: 6, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   return {
     name: "federal-register" as const,
     client,

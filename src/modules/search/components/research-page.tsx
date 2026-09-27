@@ -15,6 +15,7 @@ import { formatBluebook } from "../normalize";
 import { extractTerms } from "../query-builder";
 import type { SavedSearch, SearchHit, SearchRun, SearchSettings } from "../types";
 import type { ResearchSource, ResearchThread } from "../engine/types";
+import { annotateAnswer } from "../engine/trust";
 import { useSearchStore } from "./store";
 import { useResearch } from "./use-research";
 import { ResearchProvider, type ResearchActions } from "./research-context";
@@ -106,8 +107,8 @@ export function ResearchPage(props: ResearchPageProps) {
 
   const research = useResearch({
     // Once a run has a thread, the URL points at the thread so a reload reopens it instead of re-running the question.
-    onRunDone: (r) => { setUrl({ thread: r.threadId }); void refresh(); },
-    onError: (m) => { if (!/OPENAI_API_KEY/i.test(m)) toast.error("Research run failed", { description: m }); },
+    // Failures render inline as a proper state (no toast); the terminal state is on the turn itself.
+    onRunDone: (r) => { if (r.threadId) setUrl({ thread: r.threadId }); void refresh(); },
   });
   const { state, sourceList } = research;
   const streaming = research.streaming;
@@ -140,7 +141,16 @@ export function ResearchPage(props: ResearchPageProps) {
   const openThread = React.useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/search/threads/${id}`);
-      if (!res.ok) throw new Error(res.statusText);
+      if (res.status === 403 || res.status === 401) {
+        // Permission denied is a state of the page, not a toast: the server refused this thread.
+        let msg = "You do not have access to this thread.";
+        try { const j = (await res.json()) as { error?: string }; if (j.error) msg = j.error; } catch { /* keep default */ }
+        research.deny(msg, res.status);
+        setTool("research");
+        setUrl({ thread: id });
+        return;
+      }
+      if (!res.ok) throw new Error(res.status === 404 ? "This thread no longer exists." : res.statusText);
       const { thread } = (await res.json()) as { thread: ResearchThread };
       replaceSettings(thread.settings);
       replacePins(thread.pins ?? []);
@@ -228,15 +238,20 @@ export function ResearchPage(props: ResearchPageProps) {
   const terms = React.useMemo(() => extractTerms(lastQuestion || query), [lastQuestion, query]);
   const pinnedIds = React.useMemo(() => new Set(pins.filter((p) => p.kind === "source").map((p) => p.sourceId)), [pins]);
   const lanes = React.useMemo(() => state.laneOrder.map((id) => state.lanes[id]).filter(Boolean), [state.laneOrder, state.lanes]);
+  const shownAnswer = React.useMemo(() => (lastAssistant ? annotateAnswer(lastAssistant, sourceList) : ""), [lastAssistant, sourceList]);
+  const trustContext = React.useMemo(() => (state.pending ? { artifactHash: state.pending.artifactHash, verification: state.pending.verification } : { artifactHash: lastAssistant?.artifactHash, verification: lastAssistant?.verification }), [state.pending, lastAssistant]);
+  const retry = React.useCallback((q?: string) => { const text = (q ?? state.lastQuestion ?? "").trim(); if (text) ask(text); }, [ask, state.lastQuestion]);
 
   const actions: ResearchActions = React.useMemo(() => ({
     sources: state.sources,
+    trustContext,
+    retry,
     sourceByN: (n) => sourceList.find((s) => s.n === n),
     hoverN, setHoverN, hoverSourceId, setHoverSourceId,
     openSource, copyCite, pinSource: pinSourceAction, pinPassage: pinPassageAction, saveToLibrary,
     isPinned: (id) => pinnedIds.has(id),
     askFollowUp: (q) => ask(q),
-  }), [state.sources, sourceList, hoverN, hoverSourceId, openSource, copyCite, pinSourceAction, pinPassageAction, saveToLibrary, pinnedIds, ask]);
+  }), [state.sources, trustContext, retry, sourceList, hoverN, hoverSourceId, openSource, copyCite, pinSourceAction, pinPassageAction, saveToLibrary, pinnedIds, ask]);
 
   const hasConversation = state.messages.length > 0 || state.pending != null;
 
@@ -284,7 +299,7 @@ export function ResearchPage(props: ResearchPageProps) {
           <div className="min-w-0 flex-1"><CiteChecker matterId={settings.matterId} /></div>
         ) : (
           <div className="flex min-w-0 flex-1 flex-col">
-            <Conversation state={state} sources={sourceList} userName={props.userName} matter={currentMatter} aiConfigured={props.aiConfigured} onSaveSearch={saveSearch} emptyState={emptyState} />
+            <Conversation state={state} sources={sourceList} userName={props.userName} matter={currentMatter} aiConfigured={props.aiConfigured} onSaveSearch={saveSearch} onStop={research.stop} onRetry={(q) => retry(q)} onNewThread={newThread} emptyState={emptyState} />
             <div className="shrink-0 px-4 pb-4 pt-2">
               <div className="mx-auto w-full max-w-[760px]">
                 <ResearchComposer
@@ -304,8 +319,8 @@ export function ResearchPage(props: ResearchPageProps) {
                   placeholder={hasConversation ? "Ask a follow-up in this thread…" : undefined}
                 />
                 <div className="mt-1.5 flex items-center justify-between px-1 text-[10.5px] text-muted-foreground">
-                  <span>Enter to ask · Shift+Enter for a new line · / focuses · [ threads · ] panel</span>
-                  <span className="hidden sm:inline">Answers cite only sources the lanes read; anything else is marked VERIFY.</span>
+                  <span>Enter to ask · Shift+Enter for a new line · / focuses · [ threads · ] panel · Esc stops</span>
+                  <span className="hidden sm:inline">{settings.fast ? "Fast mode: one pass, up to two sources read — an orientation, not a reviewed answer." : "Answers cite only sources the lanes read; unresolved citations stay marked VERIFY."}</span>
                 </div>
               </div>
             </div>
@@ -314,7 +329,7 @@ export function ResearchPage(props: ResearchPageProps) {
 
         {hydrated && panelOpen && tool === "research" && (
           <div className="hidden w-[380px] shrink-0 border-l md:block xl:w-[420px]">
-            <RightPanel lanes={lanes} sources={sourceList} sourceMap={state.sources} verdicts={verdicts} streaming={streaming} question={lastQuestion} answer={lastAssistant?.content ?? ""} jurisdictionLabel={jurisdictionLabel} matter={currentMatter ? { id: currentMatter.id, name: currentMatter.name, caption: currentMatter.caption } : null} userName={props.userName} onClose={() => setPanelOpen(false)} />
+            <RightPanel lanes={lanes} sources={sourceList} sourceMap={state.sources} verdicts={verdicts} streaming={streaming} question={lastQuestion} answer={shownAnswer} jurisdictionLabel={jurisdictionLabel} matter={currentMatter ? { id: currentMatter.id, name: currentMatter.name, caption: currentMatter.caption } : null} userName={props.userName} onClose={() => setPanelOpen(false)} />
           </div>
         )}
 

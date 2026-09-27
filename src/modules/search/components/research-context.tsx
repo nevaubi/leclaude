@@ -2,10 +2,15 @@
 import * as React from "react";
 import type { SearchHit } from "../types";
 import type { ResearchSource } from "../engine/types";
+import type { SourceTrustContext } from "../engine/trust";
 
 /** Shared page-level actions so the answer, the panels and the map stay in sync (hover a source anywhere → the cited sentence lights up). */
 export interface ResearchActions {
   sources: Record<string, ResearchSource>;
+  /** The answer hash and verdicts the source states are judged against (the pending turn, else the last answer). */
+  trustContext: SourceTrustContext;
+  /** Re-ask the last (or given) question in the current thread. */
+  retry: (question?: string) => void;
   sourceByN: (n: number) => ResearchSource | undefined;
   hoverN: number | null;
   setHoverN: (n: number | null) => void;

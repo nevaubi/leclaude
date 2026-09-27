@@ -3,6 +3,7 @@ import type { Database } from "@/lib/db";
 import type { EDocument, IssueCode, Person, PrivilegeLogEntry } from "@/lib/types/domain";
 import { indexDocuments } from "@/lib/ai/vector-store";
 import { VECTOR_COLLECTIONS } from "@/lib/ai/toolkit/internal";
+import { tenantId } from "@/lib/auth/principal";
 import { AFFF, NORTHGATE, buildDocs } from "./seed-helpers";
 import { AFFF_DOCS_A } from "./seed-docs-afff-a";
 import { AFFF_DOCS_B } from "./seed-docs-afff-b";
@@ -80,8 +81,9 @@ export function seedEdiscovery(db: Database) {
   for (const matterId of [AFFF, NORTHGATE]) {
     if (db.kv.get<string>(CODING_RULES_KEY(matterId)) == null) db.kv.set(CODING_RULES_KEY(matterId), DEFAULT_CODING_RULES[matterId] ?? DEFAULT_CODING_RULES.default);
   }
-  // Keyword index (no embeddings without a key); synchronous when embed:false.
-  void indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((d) => ({ id: d.id, text: indexTextFor(d), meta: { matterId: d.matterId, custodianId: d.custodianId, type: d.type, date: d.date, bates: d.bates } })), { embed: false }).catch((e) => console.error("[seed:ediscovery] index", e));
+  // Keyword index (no embeddings without a key); synchronous when embed:false. Scoped to the two seeded matters; every
+  // document declares its matterId in meta so the index never binds a row to a matter it did not come from.
+  void indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((d) => ({ id: d.id, text: indexTextFor(d), meta: { matterId: d.matterId, custodianId: d.custodianId, type: d.type, date: d.date, bates: d.bates } })), { embed: false, scope: { tenantId: tenantId(), matterIds: [AFFF, NORTHGATE] } }).catch((e) => console.error("[seed:ediscovery] index", e));
   seedAnalysis(db);
   seedNearDuplicates(db, docs);
   seedReview(db);

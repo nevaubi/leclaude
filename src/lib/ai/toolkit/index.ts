@@ -25,3 +25,5 @@ export function researchToolset(opts: ResearchToolsetOptions = {}): { tools: Too
 export { fetchUrlTool, webSearchTool, LEGAL_TOOLS, INTERNAL_TOOLS };
 export * from "./legal";
 export * from "./internal";
+export { runTool, toProviderToolSpec, boundToolResult, shapeToolError, ToolExecutionError, isToolErrorResult, truncationMarker, TOOL_DEFAULT_TIMEOUT_MS, TOOL_DEFAULT_MAX_RESULT_CHARS } from "../tools";
+export type { ToolRunResult, ToolErrorShape, ToolErrorCode, EvidenceProvenance, ToolTrace } from "../tools";

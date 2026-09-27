@@ -1,5 +1,5 @@
 import "server-only";
-import { envValue, ProviderClient, ProviderError, type ProviderFactoryOptions } from "./base";
+import { envValue, ProviderClient, ProviderError, providerEgress, type ProviderFactoryOptions } from "./base";
 
 /**
  * openFDA: enforcement (recalls), drug labels and device adverse events.
@@ -83,7 +83,7 @@ export function fdaSearchClause(terms: string[], field?: string): string {
 
 export function createOpenFda(opts: ProviderFactoryOptions = {}) {
   const key = envValue(opts, "OPENFDA_API_KEY");
-  const client = new ProviderClient({ name: "openfda", rps: key ? 6 : 3, burst: 10, timeoutMs: 25_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "openfda", egress: providerEgress("openfda"), rps: key ? 6 : 3, burst: 10, timeoutMs: 25_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   const build = (path: string, params: Record<string, string | number | undefined>) => {
     const qs = Object.entries(params).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `${k}=${encodeURIComponent(String(v)).replace(/%2B/g, "+").replace(/%3A/g, ":").replace(/%5B/g, "[").replace(/%5D/g, "]").replace(/%22/g, '"').replace(/%28/g, "(").replace(/%29/g, ")")}`);
     if (key) qs.push(`api_key=${encodeURIComponent(key)}`);

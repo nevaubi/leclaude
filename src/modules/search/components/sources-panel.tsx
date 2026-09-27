@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tip } from "@/components/ui/tooltip";
+import { TrustStateBadge } from "@/components/ai/trust-badge";
 import { courtAbbreviation } from "../jurisdictions";
 import { ALL_SOURCES, SOURCE_LABEL, type SearchSource } from "../types";
 import type { ResearchSource } from "../engine/types";
+import { sourceTrustState } from "../engine/trust";
 import { AuthorityBadge, SOURCE_ICON } from "./result-card";
 import { useResearchActions } from "./research-context";
 
@@ -60,14 +62,16 @@ export function SourceRow({ s, compact }: { s: ResearchSource; compact?: boolean
   const [copied, setCopied] = React.useState(false);
   const pinned = a.isPinned(s.id);
   const hover = a.hoverN != null && a.hoverN === s.n;
-  const meta = [s.court ? courtAbbreviation(s.court, s.hit.court) : null, s.date ? formatDate(s.date) : null, s.read ? `read ${((s.chars ?? 0) / 1000).toFixed(1)}k` : "excerpt only"].filter(Boolean).join(" · ");
+  const meta = [s.court ? courtAbbreviation(s.court, s.hit.court) : null, s.date ? formatDate(s.date) : null, s.read ? `${((s.chars ?? 0) / 1000).toFixed(1)}k chars read` : null].filter(Boolean).join(" · ");
+  const state = sourceTrustState(s, a.trustContext);
   return (
-    <li className={cn("group px-3 py-2 transition-colors", hover && "bg-primary/5")} onMouseEnter={() => a.setHoverN(s.n ?? null)} onMouseLeave={() => a.setHoverN(null)}>
+    <li className={cn("group px-3 py-2 transition-colors", hover && "bg-primary/5")} onMouseEnter={() => a.setHoverN(s.n ?? null)} onMouseLeave={() => a.setHoverN(null)} data-source-state={state}>
       <div className="flex items-start gap-2">
         <span className={cn("mt-0.5 inline-flex h-[18px] min-w-[22px] shrink-0 items-center justify-center rounded px-1 text-[10.5px] font-semibold tabular", s.n != null ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{s.n != null ? s.n : "·"}</span>
         <div className="min-w-0 flex-1">
           <button onClick={() => a.openSource(s)} className="block w-full text-left text-[12.5px] font-medium leading-snug text-foreground hover:text-primary cursor-pointer">{s.title}</button>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10.5px] text-muted-foreground">
+            <TrustStateBadge state={state} size="xs" />
             {s.cite && <span className="font-mono text-foreground/80">{s.cite}</span>}
             {meta && <span>{meta}</span>}
             <AuthorityBadge authority={s.authority} />

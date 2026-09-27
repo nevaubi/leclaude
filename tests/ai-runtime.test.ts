@@ -135,7 +135,8 @@ describe("agent boundary", () => {
     expect(seen[1].messages.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
     expect(seen[1].messages[1].raw?.content[0]).toEqual({ type: "thinking", thinking: "…", signature: "s" });
     expect(seen[1].messages[2].content).toEqual([{ type: "tool_result", callId: "toolu_1", content: JSON.stringify({ count: 2 }) }]);
-    const types = events.map((e) => e.type);
+    // tools.ts's runTool additionally emits `trace` events around each execution; they are pass-through here.
+    const types = events.map((e) => e.type).filter((t) => t !== "trace");
     expect(types).toEqual(["start", "step", "tool.call", "tool.result", "step", "text.delta", "text.done", "done"]);
     expect(events.find((e) => e.type === "tool.call")).toMatchObject({ name: "lookup", args: { q: "pfas" }, label: "lookup" });
   });

@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRightLeft, ArrowUpRight, BellRing, Calendar, Check, ChevronRight, Coins, Download, ExternalLink, FileText, KeyRound, Library, ListChecks, ListTodo, Loader2, Paperclip, RotateCcw, ShieldAlert, SkipForward, Square, Stamp, ThumbsDown, ThumbsUp, Unlock, X } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, BellRing, Calendar, Check, ChevronRight, Coins, Download, ExternalLink, FileText, KeyRound, Library, ListChecks, ListTodo, Loader2, Paperclip, Play, RotateCcw, ShieldAlert, SkipForward, Square, Stamp, ThumbsDown, ThumbsUp, Unlock, X } from "lucide-react";
 import { toast } from "sonner";
 import type { WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
@@ -15,11 +15,11 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { executionPlan } from "../../graph";
 import { nodeSpec } from "../../registry";
 import { apiJson, ApiError, useRunStream } from "../../hooks";
-import type { RunArtifact, RunOutput, WorkflowRunRecord } from "../../types";
+import { FAILURE_KIND_LABEL, isTerminalStatus, SKIP_REASON_LABEL, STOP_REASON_LABEL, stopReasonOf, type RunArtifact, type RunOutput, type WorkflowRunRecord } from "../../types";
 import { OUTPUT_FORMAT_LABEL, type OutputFormat } from "../../frontend";
 import { formatDuration, formatTokens, formatUsd, InlineAlert, NodeTypeIcon, RunStatusBadge, SectionLabel, StepStatusIcon, stepDuration, useNow } from "../shared";
 import { CopyButton, OutputViewer } from "./step-output";
-import { artifactProvenance, outputWithoutProvenance, stepDotTone, stepProvenance, stepSummary } from "./timeline-helpers";
+import { artifactProvenance, outcomeSummary, outputWithoutProvenance, stepDotTone, stepFailureLine, stepProvenance, stepSummary } from "./timeline-helpers";
 import { approvalVerbs, isTrustGate } from "./approval-helpers";
 
 export interface RunPanelProps {
@@ -36,14 +36,16 @@ export interface RunPanelProps {
 }
 
 const ARTIFACT_ICON: Record<RunArtifact["kind"], React.ComponentType<{ className?: string }>> = { task: ListTodo, event: Calendar, document: FileText, library: Library, file: Paperclip, notification: BellRing, coding: Stamp };
+const STEP_LABELS = { failure: FAILURE_KIND_LABEL as Record<string, string>, skip: SKIP_REASON_LABEL as Record<string, string> };
 
 export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, detailLink = true, className, wide }: RunPanelProps) {
-  const { run, connected, error, noApiKey, progress, loading, resting, reconnect } = useRunStream(runId, initialRun);
+  const { run, connected, error, noApiKey, progress, retrying, budgetWarnings, loading, resting, terminal, reconnect } = useRunStream(runId, initialRun);
   const now = useNow(Boolean(run && (run.status === "running" || run.status === "queued")));
   // Live durations depend on the clock, which differs between the server render and hydration; show them only after mount.
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [usageOpen, setUsageOpen] = React.useState(false);
   const pendingApprovalRef = React.useRef<Pick<Approval, "kind" | "reasons"> | null>(null);
 
   React.useEffect(() => {
@@ -55,13 +57,24 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
   const nodeMap = React.useMemo(() => new Map((run?.snapshot?.nodes ?? []).map((n) => [n.id, n])), [run?.snapshot]);
   const stepMap = React.useMemo(() => new Map((run?.steps ?? []).map((s) => [s.nodeId, s])), [run?.steps]);
 
-  const cancel = async () => {
-    setBusy("cancel");
-    try { await apiJson(`/api/workflows/runs/${runId}/cancel`, { method: "POST" }); toast.success("Run cancelled"); } catch (e) { toast.error((e as Error).message); } finally { setBusy(null); }
+  const stop = async () => {
+    setBusy("stop");
+    try { await apiJson(`/api/workflows/runs/${runId}/cancel`, { method: "POST" }); toast.success("Stop requested — running steps are being cancelled"); } catch (e) { toast.error((e as Error).message); } finally { setBusy(null); }
   };
-  const rerun = async () => {
-    setBusy("rerun");
-    try { const r = await apiJson<{ run: { id: string } }>(`/api/workflows/runs/${runId}/rerun`, { method: "POST" }); toast.success("Re-run started"); onRerun?.(r.run.id); } catch (e) { toast.error(e instanceof ApiError ? e.message : "Could not re-run"); } finally { setBusy(null); }
+  /** Retry: the engine resumes from the failed step when the graph allows, otherwise from the start (a new run either way). */
+  const retry = async () => {
+    setBusy("retry");
+    try { const r = await apiJson<{ run: { id: string } }>(`/api/workflows/runs/${runId}/rerun`, { method: "POST" }); toast.success("Retry started"); onRerun?.(r.run.id); } catch (e) { toast.error(e instanceof ApiError ? e.message : "Could not retry"); } finally { setBusy(null); }
+  };
+  /** Run again: a fresh run from the start with the same inputs. */
+  const runAgain = async () => {
+    if (!run) return;
+    setBusy("again");
+    try {
+      const inputs = Object.fromEntries(Object.entries(run.inputs ?? {}).filter(([k]) => k !== "__event"));
+      const r = await apiJson<{ run: { id: string } }>(`/api/workflows/${run.workflowId}/run`, { method: "POST", body: JSON.stringify({ inputs, matterId: run.matterId ?? null }) });
+      toast.success("Run started"); onRerun?.(r.run.id);
+    } catch (e) { toast.error(e instanceof ApiError ? e.message : "Could not start the run"); } finally { setBusy(null); }
   };
   const decide = async (approved: boolean, comment: string) => {
     setBusy("approve");
@@ -84,6 +97,13 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
   const pendingApproval = run.status === "waiting_approval" ? (run.approvals ?? []).find((a) => a.decidedAt == null) : undefined;
   pendingApprovalRef.current = pendingApproval ?? null;
   const steps = plan ? orderedRows(plan, run) : run.steps.map((s) => ({ id: s.nodeId, depth: 0, loopId: null as string | null }));
+  const stopReason = stopReasonOf(run);
+  const stoppedAt = run.stoppedAtNodeId ? nodeMap.get(run.stoppedAtNodeId)?.label ?? run.stoppedAtNodeId : undefined;
+  const retryable = terminal && run.status !== "succeeded";
+  const stoppable = run.status === "running" || run.status === "queued" || run.status === "waiting_approval";
+  const outcome = outcomeSummary(run.outcome);
+  const usage = run.usage;
+  const stepTelemetry = run.steps.filter((s) => s.telemetry && s.telemetry.total > 0);
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
@@ -92,8 +112,9 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
           <RunStatusBadge status={run.status} />
           {connected && !resting && <span className="flex items-center gap-1 text-[10.5px] text-muted-foreground"><span className="size-1.5 animate-pulse rounded-full bg-info" /> live</span>}
           <span className="ml-auto flex items-center gap-1">
-            {(run.status === "running" || run.status === "queued" || run.status === "waiting_approval") && <Button variant="outline" size="xs" onClick={cancel} disabled={busy === "cancel"}><Square className="size-3" /> Cancel</Button>}
-            {resting && <Button variant="outline" size="xs" onClick={rerun} disabled={busy === "rerun"}>{busy === "rerun" ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />} Re-run</Button>}
+            {stoppable && <Button variant="outline" size="xs" onClick={stop} disabled={busy === "stop"} aria-label="Stop run">{busy === "stop" ? <Loader2 className="size-3 animate-spin" /> : <Square className="size-3" />} Stop</Button>}
+            {retryable && <Button variant="outline" size="xs" onClick={retry} disabled={busy === "retry"} title="Re-run from the failed step when the graph allows, otherwise from the start">{busy === "retry" ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />} Retry</Button>}
+            {terminal && <Button variant="ghost" size="xs" onClick={runAgain} disabled={busy === "again"} title="Start a new run from the beginning with the same inputs">{busy === "again" ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />} Run again</Button>}
             {detailLink && <Button variant="ghost" size="icon-xs" asChild><Link href={`/workflows/runs/${run.id}`} aria-label="Open run page"><ArrowUpRight className="size-3.5" /></Link></Button>}
             {onClose && <Button variant="ghost" size="icon-xs" onClick={onClose} aria-label="Close run panel"><X className="size-3.5" /></Button>}
           </span>
@@ -102,16 +123,31 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
           <span>Started <RelativeTime value={run.startedAt} /></span>
           <span className="tabular">{formatDuration(durationMs)}</span>
           <span className="capitalize">{run.triggeredBy}</span>
-          {run.usage && run.usage.total > 0 && <span className="inline-flex items-center gap-1 tabular"><Coins className="size-3" />{formatTokens(run.usage.total)} tokens · {formatUsd(run.usage.costUsd)}</span>}
+          {usage && (usage.total > 0 || usage.calls > 0) && (
+            <button type="button" onClick={() => setUsageOpen((o) => !o)} className="inline-flex items-center gap-1 rounded px-0.5 tabular hover:text-foreground cursor-pointer" aria-expanded={usageOpen} aria-controls={`usage-${run.id}`}>
+              <Coins className="size-3" />{formatTokens(usage.total)} tokens · {formatUsd(usage.costUsd)}
+              <ChevronRight className={cn("size-3 transition-transform", usageOpen && "rotate-90")} />
+            </button>
+          )}
+          {run.retryOf && <Link href={`/workflows/runs/${run.retryOf}`} className="hover:underline">retry of <span className="font-mono text-[10px]">{run.retryOf}</span></Link>}
           <span className="font-mono text-[10px]">{run.id}</span>
         </div>
+        {usageOpen && usage && <UsageDetails id={`usage-${run.id}`} run={run} steps={stepTelemetry} nodeMap={nodeMap} warnings={budgetWarnings} />}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {noApiKey || run.errorCode === "no_api_key" ? (
-          <div className="p-3 pb-0"><InlineAlert tone="warning" icon={KeyRound} title="OpenAI key required" action={<Button variant="outline" size="xs" asChild><Link href="/settings#ai">Settings</Link></Button>}>Add OPENAI_API_KEY to .env.local and restart to run AI steps. Data and action steps ran normally.</InlineAlert></div>
-        ) : run.error && run.status !== "waiting_approval" ? (
-          <div className="p-3 pb-0"><InlineAlert tone={run.status === "cancelled" ? "info" : "destructive"} title={run.status === "cancelled" ? "Run cancelled" : "Run failed"}>{run.error}</InlineAlert></div>
+          <div className="p-3 pb-0"><InlineAlert tone="warning" icon={KeyRound} title="Model provider not configured" action={<Button variant="outline" size="xs" asChild><Link href="/settings#ai">Settings</Link></Button>}>Add a model provider key (OPENAI_API_KEY, ANTHROPIC_API_KEY or Bedrock credentials) and restart to run AI steps. Data and action steps ran normally.</InlineAlert></div>
+        ) : terminal && run.status !== "succeeded" && stopReason ? (
+          <div className="p-3 pb-0">
+            <InlineAlert tone={run.status === "cancelled" ? "info" : run.status === "partial" || run.status === "budget_exhausted" ? "warning" : "destructive"} title={<span>{STOP_REASON_LABEL[stopReason]}{stoppedAt && stopReason !== "completed_with_failures" ? <span className="font-normal text-muted-foreground"> · at {stoppedAt}</span> : null}</span>}>
+              {run.error && run.error !== STOP_REASON_LABEL[stopReason] ? <div>{run.error}</div> : null}
+              {outcome && <div className="mt-0.5 tabular">{outcome}</div>}
+              {run.recovery && <div className="mt-0.5">{run.recovery.action === "resumed" ? "Resumed after a restart" : "Interrupted by a restart"}: {run.recovery.reason}</div>}
+            </InlineAlert>
+          </div>
+        ) : run.recovery?.action === "resumed" && !terminal ? (
+          <div className="p-3 pb-0"><InlineAlert tone="info" title="Resumed after a restart">{run.recovery.reason}</InlineAlert></div>
         ) : null}
 
         {pendingApproval && <ApprovalCard approval={pendingApproval} onDecide={decide} busy={busy === "approve"} nodeMap={nodeMap} />}
@@ -122,7 +158,7 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
             {steps.map((row) => {
               const step = stepMap.get(row.id) ?? { nodeId: row.id, status: "pending" as const };
               const node = nodeMap.get(row.id);
-              return <StepRow key={row.id} step={step} label={node?.label ?? row.id} type={node?.type ?? ""} depth={row.depth} progress={progress[row.id]} now={now} iterations={node?.type === "logic.loop" ? run.loopIterations?.[row.id] : undefined} nodeMap={nodeMap} wide={wide} />;
+              return <StepRow key={row.id} step={step} label={node?.label ?? row.id} type={node?.type ?? ""} depth={row.depth} progress={progress[row.id]} retrying={retrying[row.id]} now={now} iterations={node?.type === "logic.loop" ? run.loopIterations?.[row.id] : undefined} nodeMap={nodeMap} wide={wide} />;
             })}
           </ol>
         </div>
@@ -198,7 +234,7 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
           </div>
         )}
 
-        {run.status === "succeeded" && run.outputs && Object.keys(run.outputs).length > 0 && (
+        {(run.status === "succeeded" || run.status === "partial") && run.outputs && Object.keys(run.outputs).length > 0 && (
           <div className="border-t p-3 space-y-1.5">
             <SectionLabel right={<CopyButton value={run.outputs} />}>Outputs</SectionLabel>
             <OutputViewer value={run.outputs} defaultDepth={0} />
@@ -211,6 +247,62 @@ export function RunPanel({ runId, initialRun, onClose, onRerun, onStepStatuses, 
             <OutputViewer value={Object.fromEntries(Object.entries(run.inputs).filter(([k]) => k !== "__event"))} defaultDepth={1} />
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cost telemetry (constitution §36, §42), one compact row per model-calling
+ * step with the run's budget underneath. Collapsed behind the tokens · cost
+ * summary in the header so the panel stays quiet.
+ */
+function UsageDetails({ id, run, steps, nodeMap, warnings }: { id: string; run: WorkflowRunRecord; steps: WorkflowRunStep[]; nodeMap: Map<string, { label: string }>; warnings: Record<string, { used: number; limit: number }> }) {
+  const usage = run.usage!;
+  const budget = run.budget;
+  const active = usage.activeMs ?? run.durationMs;
+  const pct = (used: number, limit?: number) => (limit ? Math.min(100, Math.round((used / limit) * 100)) : null);
+  const line = (label: string, used: string, limit: string | null, p: number | null, key: string) => (
+    <span className={cn("inline-flex items-center gap-1", warnings[key] && "text-warning-foreground dark:text-warning")}>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="tabular">{used}{limit ? ` / ${limit}` : ""}</span>
+      {p != null && <span className="tabular text-muted-foreground">({p}%)</span>}
+    </span>
+  );
+  return (
+    <div id={id} className="mt-2 space-y-1.5 rounded-md border bg-background/60 p-2 text-[11px]">
+      {steps.length > 0 ? (
+        <table className="w-full border-collapse text-[10.5px]">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <th className="pb-1 font-medium">Step</th><th className="pb-1 font-medium">Model</th><th className="pb-1 text-right font-medium">In</th><th className="pb-1 text-right font-medium">Out</th><th className="pb-1 text-right font-medium">Cache</th><th className="pb-1 text-right font-medium">Latency</th><th className="pb-1 text-right font-medium">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {steps.map((s) => {
+              const t = s.telemetry!;
+              return (
+                <tr key={s.nodeId} className="border-t border-line-quiet">
+                  <td className="max-w-[160px] truncate py-0.5 pr-2 font-medium" title={nodeMap.get(s.nodeId)?.label ?? s.nodeId}>{nodeMap.get(s.nodeId)?.label ?? s.nodeId}</td>
+                  <td className="truncate py-0.5 pr-2 text-muted-foreground" title={[t.provider, t.model].filter(Boolean).join(" · ")}>{t.model ?? "—"}{t.provider ? <span className="text-[10px]"> · {t.provider}</span> : null}</td>
+                  <td className="py-0.5 pr-2 text-right tabular">{formatTokens(t.input)}</td>
+                  <td className="py-0.5 pr-2 text-right tabular">{formatTokens(t.output)}</td>
+                  <td className="py-0.5 pr-2 text-right tabular text-muted-foreground">{t.cacheRead ? formatTokens(t.cacheRead) : "—"}</td>
+                  <td className="py-0.5 pr-2 text-right tabular text-muted-foreground">{formatDuration(t.latencyMs)}</td>
+                  <td className="py-0.5 text-right tabular">{formatUsd(t.costUsd)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <div className="text-muted-foreground">No model calls recorded yet.</div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-line-quiet pt-1.5">
+        {line("Tokens", formatTokens(usage.total), budget ? formatTokens(budget.maxTokens) : null, pct(usage.total, budget?.maxTokens), "tokens")}
+        {line("Cost", formatUsd(usage.costUsd), budget ? formatUsd(budget.maxCostUsd) : null, pct(usage.costUsd, budget?.maxCostUsd), "cost")}
+        {line("Active", formatDuration(active), budget ? formatDuration(budget.maxDurationMs) : null, active != null ? pct(active, budget?.maxDurationMs) : null, "time")}
+        <span className="text-muted-foreground tabular">{usage.calls} call{usage.calls === 1 ? "" : "s"}{usage.cacheRead ? ` · ${formatTokens(usage.cacheRead)} cached` : ""}</span>
       </div>
     </div>
   );
@@ -230,7 +322,7 @@ function DeliverablesSection({ outputs }: { outputs: RunOutput[] }) {
               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium" title={o.title}>{o.title}</span>
-                <span className="block truncate text-[10.5px] text-muted-foreground">{fmt}{o.size ? ` · ${(o.size / 1024).toFixed(o.size < 10_240 ? 1 : 0)} KB` : ""}{o.libraryItemId ? " · in library" : ""}</span>
+                <span className="block truncate text-[10.5px] text-muted-foreground">{fmt}{o.size ? ` · ${(o.size / 1024).toFixed(o.size < 10_240 ? 1 : 0)} KB` : ""}{o.libraryItemId ? " · in library" : ""}{o.meta?.carriedFromRunId ? " · from the retried run" : ""}</span>
               </span>
               {prov && <TrustBadge provenance={prov} compact />}
               {o.href && <Button variant="ghost" size="xs" asChild><Link href={o.href}>{o.kind === "insight" ? "View" : o.libraryItemId && !o.docId ? "Library" : "Open"}</Link></Button>}
@@ -259,7 +351,7 @@ function orderedRows(plan: ReturnType<typeof executionPlan>, run: WorkflowRunRec
   return rows;
 }
 
-function StepRow({ step, label, type, depth, progress, now, iterations, nodeMap, wide }: { step: WorkflowRunStep; label: string; type: string; depth: number; progress?: string; now: number; iterations?: NonNullable<WorkflowRunRecord["loopIterations"]>[string]; nodeMap: Map<string, { label: string; type: string }>; wide?: boolean }) {
+function StepRow({ step, label, type, depth, progress, retrying, now, iterations, nodeMap, wide }: { step: WorkflowRunStep; label: string; type: string; depth: number; progress?: string; retrying?: { attempt: number; nextAttempt: number; delayMs: number; message: string }; now: number; iterations?: NonNullable<WorkflowRunRecord["loopIterations"]>[string]; nodeMap: Map<string, { label: string; type: string }>; wide?: boolean }) {
   const [open, setOpen] = React.useState(step.status === "failed");
   React.useEffect(() => { if (step.status === "failed") setOpen(true); }, [step.status]);
   const dur = stepDuration(step, now);
@@ -269,24 +361,28 @@ function StepRow({ step, label, type, depth, progress, now, iterations, nodeMap,
   // AI executors put provenance on the output (`_provenance`); verify steps under `provenance`; older records on the step itself.
   const stepProv = stepProvenance(step as { output?: unknown; meta?: Record<string, unknown>; provenance?: unknown });
   const shownOutput = outputWithoutProvenance(step.output);
+  const failureLine = stepFailureLine(step, STEP_LABELS);
+  const secondary = step.status === "running" && retrying ? `Attempt ${retrying.attempt} failed · retrying (attempt ${retrying.nextAttempt}) in ${Math.round(retrying.delayMs / 1000)}s` : step.status === "running" && progress ? progress : failureLine ?? spec?.short ?? type;
+  const t = step.telemetry;
   return (
     <li className="relative pl-6" style={{ marginLeft: depth * 16 }}>
       <span className="absolute left-[3px] top-[13px] flex size-3.5 items-center justify-center rounded-full bg-card"><StatusDot tone={dot.tone} pulse={dot.pulse} label={dot.label} /></span>
-      <div className={cn("rounded-md border bg-card transition-colors", step.status === "running" && "border-info/50", step.status === "failed" && "border-destructive/50", step.status === "waiting_approval" && "border-warning/60")}>
+      <div className={cn("rounded-md border bg-card transition-colors", step.status === "running" && "border-info/50", step.status === "failed" && "border-destructive/50", step.status === "waiting_approval" && "border-warning/60", step.status === "cancelled" && "border-dashed")}>
         <button type="button" onClick={() => hasBody && setOpen((o) => !o)} className={cn("flex w-full items-center gap-2 px-2 py-1.5 text-left", hasBody && "cursor-pointer hover:bg-accent/40")}>
           <NodeTypeIcon type={type} size="xs" />
           <span className="min-w-0 flex-1">
-            <span className={cn("block truncate text-xs font-medium", step.status === "skipped" && "text-muted-foreground")}>{label}</span>
-            <span className="block truncate text-[10.5px] text-muted-foreground">{step.status === "running" && progress ? progress : step.error ? step.error : spec?.short ?? type}</span>
+            <span className={cn("block truncate text-xs font-medium", (step.status === "skipped" || step.status === "cancelled") && "text-muted-foreground")}>{label}</span>
+            <span className={cn("block truncate text-[10.5px] text-muted-foreground", step.status === "failed" && "text-destructive")}>{secondary}</span>
           </span>
           {stepProv && <TrustBadge provenance={stepProv} compact />}
-          {step.tokens ? <span className="tabular text-[10px] text-muted-foreground">{formatTokens(step.tokens)} tok</span> : null}
+          {step.attempt && step.attempt > 1 && step.status !== "running" ? <span className="tabular text-[10px] text-muted-foreground" title={`${step.attempt} attempts`}>×{step.attempt}</span> : null}
+          {t && t.total > 0 ? <span className="tabular text-[10px] text-muted-foreground" title={`${formatTokens(t.input)} in · ${formatTokens(t.output)} out${t.cacheRead ? ` · ${formatTokens(t.cacheRead)} cached` : ""} · ${formatUsd(t.costUsd)}${t.model ? ` · ${t.model}` : ""}`}>{formatTokens(t.total)} tok</span> : step.tokens ? <span className="tabular text-[10px] text-muted-foreground">{formatTokens(step.tokens)} tok</span> : null}
           {dur != null && <span className="tabular text-[10.5px] text-muted-foreground">{formatDuration(dur)}</span>}
           {hasBody && <ChevronRight className={cn("size-3.5 text-muted-foreground transition-transform", open && "rotate-90")} />}
         </button>
         {open && hasBody && (
           <div className="space-y-2 border-t px-2 py-2">
-            {step.error && <div className="rounded-md border border-destructive/40 bg-destructive/8 px-2 py-1.5 text-[11px] text-destructive">{step.error}</div>}
+            {step.error && <div className={cn("rounded-md border px-2 py-1.5 text-[11px]", step.status === "cancelled" ? "border-border bg-muted/40 text-muted-foreground" : "border-destructive/40 bg-destructive/8 text-destructive")}>{step.failureKind && step.status !== "cancelled" ? <span className="font-medium">{FAILURE_KIND_LABEL[step.failureKind]} · </span> : null}{step.error}</div>}
             {step.logs && step.logs.length > 0 && (
               <div>
                 <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Log</div>
@@ -324,7 +420,7 @@ function StepRow({ step, label, type, depth, progress, now, iterations, nodeMap,
 function IterationRow({ iteration, nodeMap }: { iteration: NonNullable<WorkflowRunRecord["loopIterations"]>[string][number]; nodeMap: Map<string, { label: string }> }) {
   const [open, setOpen] = React.useState(false);
   const stepsArr = Object.values(iteration.steps ?? {});
-  const failed = stepsArr.some((s) => s.status === "failed") || Boolean(iteration.error);
+  const failed = stepsArr.some((s) => s.status === "failed" || s.status === "cancelled") || Boolean(iteration.error);
   const itemLabel = typeof iteration.item === "object" && iteration.item ? String((iteration.item as Record<string, unknown>).subject ?? (iteration.item as Record<string, unknown>).title ?? (iteration.item as Record<string, unknown>).case_name ?? (iteration.item as Record<string, unknown>).bates ?? (iteration.item as Record<string, unknown>).section ?? JSON.stringify(iteration.item).slice(0, 60)) : String(iteration.item ?? "");
   return (
     <div className="rounded border bg-background/60">
@@ -411,3 +507,5 @@ function ApprovalCard({ approval, onDecide, busy, nodeMap }: { approval: Approva
     </div>
   );
 }
+
+export { isTerminalStatus };

@@ -1,6 +1,6 @@
 import "server-only";
 import { htmlToText } from "@/lib/ai/toolkit/http";
-import { clip, envValue, ProviderClient, ProviderError, type ProviderFactoryOptions } from "./base";
+import { clip, envValue, ProviderClient, ProviderError, providerEgress, type ProviderFactoryOptions } from "./base";
 
 /** GovInfo search + content (DEMO_KEY works with a small daily quota). */
 const BASE = "https://api.govinfo.gov";
@@ -20,7 +20,7 @@ export interface GovInfoHit {
 
 export function createGovInfo(opts: ProviderFactoryOptions = {}) {
   const key = envValue(opts, "GOVINFO_API_KEY") ?? "DEMO_KEY";
-  const client = new ProviderClient({ name: "govinfo", rps: key === "DEMO_KEY" ? 0.5 : 2, burst: 3, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "govinfo", egress: providerEgress("govinfo"), rps: key === "DEMO_KEY" ? 0.5 : 2, burst: 3, timeoutMs: 30_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   const withKey = (url: string) => `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(key)}`;
   return {
     name: "govinfo" as const,

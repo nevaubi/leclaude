@@ -1,26 +1,32 @@
 import "server-only";
 import { fetchCached, memoryHttpCache, rateLimiter, TokenBucket, type HttpCacheStore } from "@/lib/ai/toolkit/http";
+import { redactSecrets } from "@/lib/net/redact";
+import { isSafeFetchError, safeFetch, type EgressPolicy } from "@/lib/net/safe-fetch";
 import type { IntelErrorCode } from "../types";
 
 /**
  * Shared plumbing for every intelligence provider: a 24h response cache, a
- * per-provider token bucket, request timeouts and structured errors. Provider
- * methods only ever throw ProviderError; raw fetch/JSON errors are mapped.
+ * per-provider token bucket, request timeouts, structured errors and a
+ * per-provider egress policy (host allowlist) enforced by `safeFetch`.
+ * Provider methods only ever throw ProviderError; raw fetch/JSON errors are
+ * mapped, and URLs recorded on errors are redacted (query-string keys).
  */
 export type ProviderErrorCode = "not_configured" | "rate_limited" | "network" | "parse" | "http" | "timeout";
 
 export class ProviderError extends Error {
   readonly name = "ProviderError";
+  readonly url?: string;
   constructor(
     public readonly provider: string,
     public readonly code: ProviderErrorCode,
     message: string,
     public readonly retryable: boolean,
     public readonly status?: number,
-    public readonly url?: string,
+    url?: string,
     public readonly retryAfterMs?: number,
   ) {
-    super(message);
+    super(redactSecrets(message));
+    this.url = url ? redactSecrets(url) : undefined;
   }
   toJSON() {
     return { provider: this.provider, code: this.code, message: this.message, retryable: this.retryable, status: this.status, url: this.url, retryAfterMs: this.retryAfterMs };
@@ -34,11 +40,18 @@ export function isProviderError(e: unknown): e is ProviderError {
 /** ProviderError code → the job/steward error code. */
 export function toIntelErrorCode(e: unknown): IntelErrorCode {
   if (isProviderError(e)) return e.code === "http" ? "network" : e.code;
+  if (isSafeFetchError(e)) {
+    if (e.code === "timeout") return "timeout";
+    if (e.code === "network" || e.code === "dns") return "network";
+    if (e.code === "aborted") return "cancelled";
+    if (e.code === "body_too_large" || e.code === "bad_redirect" || e.code === "too_many_redirects" || e.code === "invalid_url") return "parse";
+    return "not_configured"; // egress policy denial: needs an allowlist change, never a retry
+  }
   const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
   if (/AbortError|timed? ?out|ETIMEDOUT/i.test(msg)) return "timeout";
   if (/429|rate.?limit|too many requests/i.test(msg)) return "rate_limited";
   if (/ENOTFOUND|ECONNRESET|ECONNREFUSED|EAI_AGAIN|fetch failed|network|socket hang up/i.test(msg)) return "network";
-  if (/not configured|API key|missing key/i.test(msg)) return "not_configured";
+  if (/not configured|API key|missing key|egress policy|blocked/i.test(msg)) return "not_configured";
   if (/JSON|Unexpected token|parse/i.test(msg)) return "parse";
   return "unknown";
 }
@@ -46,6 +59,20 @@ export function toIntelErrorCode(e: unknown): IntelErrorCode {
 /** Wrap any thrown value as a ProviderError (never lets raw errors escape). */
 export function asProviderError(provider: string, e: unknown, url?: string): ProviderError {
   if (isProviderError(e)) return e;
+  if (isSafeFetchError(e)) {
+    const at = e.url ?? url;
+    switch (e.code) {
+      case "timeout": return new ProviderError(provider, "timeout", `${provider}: request timed out`, true, undefined, at);
+      case "aborted": return new ProviderError(provider, "timeout", `${provider}: request aborted`, true, undefined, at);
+      case "network":
+      case "dns": return new ProviderError(provider, "network", `${provider}: ${e.message}`, e.retryable, undefined, at);
+      case "body_too_large":
+      case "too_many_redirects":
+      case "bad_redirect":
+      case "invalid_url": return new ProviderError(provider, "parse", `${provider}: ${e.message}`, false, undefined, at);
+      default: return new ProviderError(provider, "not_configured", `${provider}: outbound request blocked by the egress policy (${e.message})`, false, undefined, at);
+    }
+  }
   const err = e as { name?: string; message?: string; cause?: { code?: string; message?: string } };
   const msg = err?.message ?? String(e);
   if (err?.name === "AbortError" || /aborted|timed? ?out/i.test(msg)) return new ProviderError(provider, "timeout", `${provider}: request timed out`, true, undefined, url);
@@ -53,6 +80,29 @@ export function asProviderError(provider: string, e: unknown, url?: string): Pro
   if (/fetch failed|ENOTFOUND|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket|network/i.test(`${msg} ${cause}`)) return new ProviderError(provider, "network", `${provider}: ${msg}${cause ? ` (${cause})` : ""}`, true, undefined, url);
   if (/JSON|Unexpected token|Unexpected end/i.test(msg)) return new ProviderError(provider, "parse", `${provider}: could not parse response (${msg})`, false, undefined, url);
   return new ProviderError(provider, "network", `${provider}: ${msg}`, true, undefined, url);
+}
+
+// ---------------------------------------------------------------------------
+// Egress policies (CLAUDE.md §41, §53.1): each provider may only talk to its own hosts.
+// The open-web provider has no host allowlist but still gets the private-address, redirect,
+// byte and timeout rules; NET_ALLOW_HOSTS / NET_DENY_HOSTS narrow everything further.
+// ---------------------------------------------------------------------------
+
+export const PROVIDER_EGRESS: Record<string, EgressPolicy> = {
+  courtlistener: { name: "courtlistener", allowHosts: ["courtlistener.com"] },
+  ecfr: { name: "ecfr", allowHosts: ["ecfr.gov"] },
+  "federal-register": { name: "federal-register", allowHosts: ["federalregister.gov", "govinfo.gov"] },
+  govinfo: { name: "govinfo", allowHosts: ["govinfo.gov"] },
+  openfda: { name: "openfda", allowHosts: ["fda.gov"] },
+  firecrawl: { name: "firecrawl", allowHosts: ["firecrawl.dev"] },
+  tavily: { name: "tavily", allowHosts: ["tavily.com"] },
+  jpml: { name: "jpml", allowHosts: ["uscourts.gov"] },
+  web: { name: "web" },
+};
+
+/** The egress policy for a provider name (an unknown name gets an open policy labelled with the name). */
+export function providerEgress(name: string, extra: Partial<EgressPolicy> = {}): EgressPolicy {
+  return { ...(PROVIDER_EGRESS[name] ?? { name }), ...extra };
 }
 
 export interface ProviderClientOptions {
@@ -70,6 +120,8 @@ export interface ProviderClientOptions {
   sleep?: (ms: number) => Promise<void>;
   limiter?: TokenBucket;
   offline?: boolean;
+  /** Egress policy; defaults to `providerEgress(name)`. */
+  egress?: EgressPolicy;
 }
 
 export interface RequestOptions {
@@ -82,7 +134,7 @@ export interface RequestOptions {
   retryableStatuses?: number[];
 }
 
-export interface TextResponse { text: string; status: number; contentType: string; finalUrl: string; cached: boolean; fetchedAt: string }
+export interface TextResponse { text: string; status: number; contentType: string; finalUrl: string; cached: boolean; fetchedAt: string; truncated?: boolean }
 
 /**
  * A rate-limited, cached HTTP client for one provider. `getJSON`/`postJSON`
@@ -91,15 +143,16 @@ export interface TextResponse { text: string; status: number; contentType: strin
 export class ProviderClient {
   readonly name: string;
   readonly limiter: TokenBucket;
+  readonly egress: EgressPolicy;
+  readonly fetchImpl?: typeof fetch;
+  readonly offline: boolean;
   private readonly cache: HttpCacheStore;
-  private readonly fetchImpl?: typeof fetch;
   private readonly timeoutMs: number;
   private readonly ttlMs: number;
   private readonly maxWaitMs: number;
   private readonly sleep?: (ms: number) => Promise<void>;
-  private readonly offline: boolean;
   /** Counters for diagnostics/tests. */
-  readonly stats = { requests: 0, cached: 0, errors: 0, rateLimited: 0 };
+  readonly stats = { requests: 0, cached: 0, errors: 0, rateLimited: 0, blocked: 0 };
 
   constructor(opts: ProviderClientOptions) {
     this.name = opts.name;
@@ -111,9 +164,11 @@ export class ProviderClient {
     this.maxWaitMs = opts.maxWaitMs ?? 8_000;
     this.sleep = opts.sleep;
     this.offline = opts.offline ?? false;
+    this.egress = opts.egress ?? providerEgress(opts.name);
   }
 
-  private async acquire(url: string) {
+  /** Take a rate-limit token or fail with rate_limited (exposed for callers that fetch binary bodies themselves). */
+  async acquire(url: string) {
     const ok = await this.limiter.take(this.maxWaitMs, this.sleep);
     if (!ok) {
       this.stats.rateLimited++;
@@ -130,6 +185,12 @@ export class ProviderClient {
     if (status === 401 || status === 403) return new ProviderError(this.name, "not_configured", `${this.name}: authentication failed (${status}); check the API key`, false, status, url);
     const retry = retryable ? retryable.includes(status) : status >= 500 || status === 408;
     return new ProviderError(this.name, "http", `${this.name}: HTTP ${status}${status === 404 ? " (not found)" : ""}`, retry, status, url);
+  }
+
+  /** Map a thrown value to a ProviderError for this provider (counts policy denials). */
+  wrapError(e: unknown, url?: string): ProviderError {
+    if (isSafeFetchError(e) && e.code !== "timeout" && e.code !== "aborted" && e.code !== "network" && e.code !== "dns") this.stats.blocked++;
+    return asProviderError(this.name, e, url);
   }
 
   async request(url: string, init: { method?: string; body?: string; headers?: Record<string, string> } = {}, opts: RequestOptions = {}): Promise<TextResponse> {
@@ -151,13 +212,14 @@ export class ProviderClient {
         timeoutMs: opts.timeoutMs ?? this.timeoutMs,
         maxBytes: opts.maxBytes,
         signal: opts.signal,
+        egress: this.egress,
       });
       const err = this.mapStatus(res.status, url, opts.retryableStatuses, res.headers?.["retry-after"]);
       if (err) { this.stats.errors++; throw err; }
-      return { text: res.body, status: res.status, contentType: res.contentType, finalUrl: res.finalUrl, cached: res.cached, fetchedAt: res.fetchedAt };
+      return { text: res.body, status: res.status, contentType: res.contentType, finalUrl: res.finalUrl, cached: res.cached, fetchedAt: res.fetchedAt, truncated: res.truncated };
     } catch (e) {
       if (!isProviderError(e)) this.stats.errors++;
-      throw asProviderError(this.name, e, url);
+      throw this.wrapError(e, url);
     }
   }
 
@@ -194,7 +256,7 @@ export class ProviderClient {
       return data;
     } catch (e) {
       this.stats.errors++;
-      throw new ProviderError(this.name, "parse", `${this.name}: invalid JSON (${(e as Error).message.slice(0, 80)})`, false, res.status, url);
+      throw new ProviderError(this.name, "parse", `${this.name}: invalid JSON (${(e as Error).message.slice(0, 80)})${res.truncated ? " — response was truncated at the byte limit" : ""}`, false, res.status, url);
     }
   }
 
@@ -203,16 +265,15 @@ export class ProviderClient {
     if (this.offline) return { status: 0, ok: false, finalUrl: url, error: "offline" };
     await this.acquire(url);
     this.stats.requests++;
-    const doFetch = this.fetchImpl ?? fetch;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 8_000);
+    const policy: EgressPolicy = { ...this.egress, timeoutMs: opts.timeoutMs ?? 8_000, maxBytes: 4_096, onLimit: "truncate" };
+    const headers = { "User-Agent": "LeClaude/1.0 (+internal legal research platform)" };
     try {
-      let res = await doFetch(url, { method: "HEAD", redirect: "follow", signal: ctrl.signal, headers: { "User-Agent": "LeClaude/1.0 (+internal legal research platform)" } });
-      if (res.status === 405 || res.status === 403 || res.status === 501) res = await doFetch(url, { method: "GET", redirect: "follow", signal: ctrl.signal, headers: { Range: "bytes=0-1024", "User-Agent": "LeClaude/1.0 (+internal legal research platform)" } });
-      return { status: res.status, ok: res.ok, finalUrl: res.url || url };
+      let res = await safeFetch(url, { method: "HEAD", headers, signal: opts.signal, fetchImpl: this.fetchImpl }, policy);
+      if (res.status === 405 || res.status === 403 || res.status === 501) res = await safeFetch(url, { method: "GET", headers: { ...headers, Range: "bytes=0-1024" }, signal: opts.signal, fetchImpl: this.fetchImpl }, policy);
+      return { status: res.status, ok: res.ok, finalUrl: res.finalUrl || url };
     } catch (e) {
-      return { status: 0, ok: false, finalUrl: url, error: asProviderError(this.name, e, url).message };
-    } finally { clearTimeout(t); }
+      return { status: 0, ok: false, finalUrl: url, error: this.wrapError(e, url).message };
+    }
   }
 }
 

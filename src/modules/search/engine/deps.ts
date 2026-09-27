@@ -2,6 +2,7 @@ import "server-only";
 import type { ResponseInput } from "openai/resources/responses/responses";
 import { generateJSON, generateText, runAgent, type AgentEvent } from "@/lib/ai/agent";
 import { aiConfig } from "@/lib/ai/config";
+import type { TokenUsage } from "@/lib/ai/events";
 import type { ToolContext, ToolDef } from "@/lib/ai/tools";
 import { webSearchTool } from "@/lib/ai/toolkit/web";
 import { searchCaseLawTool, searchDocketsTool, searchRegulationsTool, searchFederalRegisterTool, searchStatutesTool, verifyCitationsTool } from "@/lib/ai/toolkit/legal";
@@ -28,10 +29,10 @@ export interface EngineDeps {
   retrieve(source: SearchSource, query: string, settings: SearchSettings, signal?: AbortSignal): Promise<{ hits: SearchHit[]; total: number }>;
   /** Full text for a read reference (cached 24h by the service). */
   read(ref: ReadRef, opts: { title?: string; signal?: AbortSignal }): Promise<{ text: string; title?: string; cite?: string; url?: string; cached: boolean }>;
-  /** A bounded lane agent run. Returns the lane note. */
-  laneAgent(input: { instructions: string; input: string; tools: ToolDef<never, unknown>[]; web: boolean; maxSteps: number; signal?: AbortSignal; onEvent: (e: AgentEvent) => void }): Promise<{ text: string; steps: number }>;
-  /** Synthesis with streaming deltas (primary model, no tools). */
-  synthesize(input: { instructions: string; input: string | ResponseInput; signal?: AbortSignal; onDelta: (d: string) => void }): Promise<string>;
+  /** A bounded lane agent run. Returns the lane note (and token usage when the runtime reports it). */
+  laneAgent(input: { instructions: string; input: string; tools: ToolDef<never, unknown>[]; web: boolean; maxSteps: number; signal?: AbortSignal; onEvent: (e: AgentEvent) => void }): Promise<{ text: string; steps: number; usage?: TokenUsage }>;
+  /** Synthesis with streaming deltas (primary model, no tools). A plain string is accepted; an object may carry token usage. */
+  synthesize(input: { instructions: string; input: string | ResponseInput; signal?: AbortSignal; onDelta: (d: string) => void }): Promise<string | { text: string; usage?: TokenUsage }>;
   verify(input: { answer: string; sources: { title?: string; cite?: string; url?: string; text: string }[]; signal?: AbortSignal }): Promise<VerificationResult>;
   correct(input: { instructions: string; input: string; signal?: AbortSignal }): Promise<string>;
   refine(input: { question: string; gaps: string[]; laneKinds: LaneKind[]; signal?: AbortSignal }): Promise<Partial<Record<LaneKind, string[]>>>;
@@ -188,7 +189,7 @@ export function defaultDeps(): EngineDeps {
         metadata: { app: "leclaude", surface: "research-lane" },
         onEvent: input.onEvent,
       });
-      return { text: res.text, steps: res.steps };
+      return { text: res.text, steps: res.steps, usage: res.usage };
     },
 
     async synthesize(input) {
@@ -201,7 +202,7 @@ export function defaultDeps(): EngineDeps {
         metadata: { app: "leclaude", surface: "research-synthesis" },
         onEvent: (e) => { if (e.type === "text.delta") input.onDelta(e.delta); },
       });
-      return res.text;
+      return { text: res.text, usage: res.usage };
     },
 
     verify(input) {

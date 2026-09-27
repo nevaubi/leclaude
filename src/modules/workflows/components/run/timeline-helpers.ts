@@ -16,6 +16,7 @@ export function stepDotTone(status: WorkflowRunStep["status"]): { tone: DotTone;
     case "failed": return { tone: "destructive", pulse: false, label: "Failed" };
     case "waiting_approval": return { tone: "warning", pulse: true, label: "Waiting for approval" };
     case "skipped": return { tone: "muted", pulse: false, label: "Skipped" };
+    case "cancelled": return { tone: "muted", pulse: false, label: "Cancelled" };
     default: return { tone: "muted", pulse: false, label: "Pending" };
   }
 }
@@ -61,13 +62,38 @@ export function outputWithoutProvenance(output: unknown): unknown {
   return Object.fromEntries(Object.entries(o).filter(([k]) => !drop.includes(k)));
 }
 
-/** Steps grouped for the summary line: "3 of 7 done · 1 failed". */
+/** Steps grouped for the summary line: "3 of 7 done · 1 failed · 2 cancelled". */
 export function stepSummary(steps: { status: WorkflowRunStep["status"] }[]): string {
   const done = steps.filter((s) => s.status === "succeeded").length;
   const failed = steps.filter((s) => s.status === "failed").length;
+  const cancelled = steps.filter((s) => s.status === "cancelled").length;
   const waiting = steps.filter((s) => s.status === "waiting_approval").length;
   const parts = [`${done} of ${steps.length} done`];
   if (failed) parts.push(`${failed} failed`);
+  if (cancelled) parts.push(`${cancelled} cancelled`);
   if (waiting) parts.push(`${waiting} awaiting approval`);
   return parts.join(" · ");
+}
+
+/** Outcome line for a finished run: "5 completed · 1 failed · 2 skipped" (only non-zero parts, completed always). */
+export function outcomeSummary(outcome: { completed: string[]; failed: string[]; skipped: string[]; cancelled: string[]; notRun: string[] } | undefined): string | null {
+  if (!outcome) return null;
+  const parts = [`${outcome.completed.length} completed`];
+  if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
+  if (outcome.cancelled.length) parts.push(`${outcome.cancelled.length} cancelled`);
+  if (outcome.skipped.length) parts.push(`${outcome.skipped.length} skipped`);
+  if (outcome.notRun.length) parts.push(`${outcome.notRun.length} not run`);
+  return parts.join(" · ");
+}
+
+/** Secondary line of a step row: what failed and on which attempt, from typed fields only. */
+export function stepFailureLine(step: { status: WorkflowRunStep["status"]; failureKind?: string; attempt?: number; error?: string; skipReason?: string }, labels: { failure: Record<string, string>; skip: Record<string, string> }): string | null {
+  if (step.status === "failed" || step.status === "cancelled") {
+    const kind = step.failureKind ? labels.failure[step.failureKind] ?? step.failureKind : null;
+    const attempt = step.attempt && step.attempt > 1 ? `attempt ${step.attempt}` : null;
+    const head = [kind, attempt].filter(Boolean).join(" · ");
+    return head && step.error ? `${head} — ${step.error}` : head || step.error || null;
+  }
+  if (step.status === "skipped" && step.skipReason) return labels.skip[step.skipReason] ?? step.skipReason;
+  return null;
 }

@@ -161,24 +161,35 @@ export function builtinsFromOpenAITools(tools: Tool[] | undefined): BuiltinToolS
 // runTool / toProviderToolSpec (owned by another workstream) can take over.
 // ---------------------------------------------------------------------------
 
+/** tools.ts exports (owned by the tools workstream); detected at runtime so this loop works with or without them. */
 type ToolsModuleExtras = {
   toProviderToolSpec?: (def: ToolDef<never, unknown>) => ToolSpec;
-  runTool?: (def: ToolDef<never, unknown>, args: Record<string, unknown>, ctx: ToolContext) => Promise<{ result?: unknown; error?: string }>;
+  runTool?: (def: ToolDef<never, unknown>, args: Record<string, unknown>, ctx: ToolContext) => Promise<{ ok: boolean; value: unknown; output: string; error?: { error: string; code: string } }>;
 };
 const toolsExtras = toolsModule as unknown as ToolsModuleExtras;
 
 function toToolSpec(def: ToolDef<never, unknown>): ToolSpec {
-  if (typeof toolsExtras.toProviderToolSpec === "function") return toolsExtras.toProviderToolSpec(def);
   const extra = def as unknown as { examples?: Record<string, unknown>[]; callers?: ("direct" | "code_execution")[] };
+  if (typeof toolsExtras.toProviderToolSpec === "function") return { ...toolsExtras.toProviderToolSpec(def), callers: extra.callers };
   return { name: def.name, description: def.description, parameters: def.parameters, strict: def.strict !== false, examples: extra.examples, callers: extra.callers };
 }
 
-async function executeTool(def: ToolDef<never, unknown>, args: Record<string, unknown>, ctx: ToolContext): Promise<{ result?: unknown; error?: string }> {
-  if (typeof toolsExtras.runTool === "function") return toolsExtras.runTool(def, args, ctx);
+/** Normalised tool outcome: `value` for the UI/result log, `output` for the model, `error` when it failed. */
+interface ToolOutcome { ok: boolean; value?: unknown; output: string; error?: string }
+
+async function executeTool(def: ToolDef<never, unknown>, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> {
+  if (typeof toolsExtras.runTool === "function") {
+    // runTool applies authorize → timeout → bounded result → deterministic error shape and emits tool traces.
+    const r = await toolsExtras.runTool(def, args, ctx);
+    if (!r.ok) return { ok: false, value: r.value, output: r.output || JSON.stringify(r.error ?? { error: "tool failed" }), error: r.error?.error ?? "tool failed" };
+    return { ok: true, value: r.value, output: r.output };
+  }
   try {
-    return { result: await def.execute(args as never, ctx) };
+    const value = await def.execute(args as never, ctx);
+    return { ok: true, value, output: serializeToolOutput(value) };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    const error = e instanceof Error ? e.message : String(e);
+    return { ok: false, output: JSON.stringify({ error }), error };
   }
 }
 
@@ -343,14 +354,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         }
         const outcome = await executeTool(def, args, ctx);
         const durationMs = Date.now() - started;
-        if (outcome.error != null) {
-          emit({ type: "tool.result", id, name: call.name, ok: false, error: outcome.error, durationMs });
-          toolCalls.push({ name: call.name, args, error: outcome.error });
-          return { type: "tool_result", callId: id, content: JSON.stringify({ error: outcome.error }), isError: true };
+        if (!outcome.ok) {
+          const error = outcome.error ?? "tool failed";
+          emit({ type: "tool.result", id, name: call.name, ok: false, error, durationMs });
+          toolCalls.push({ name: call.name, args, error });
+          return { type: "tool_result", callId: id, content: outcome.output, isError: true };
         }
-        emit({ type: "tool.result", id, name: call.name, ok: true, result: summarizeForClient(outcome.result), durationMs });
-        toolCalls.push({ name: call.name, args, result: outcome.result });
-        return { type: "tool_result", callId: id, content: serializeToolOutput(outcome.result) };
+        emit({ type: "tool.result", id, name: call.name, ok: true, result: summarizeForClient(outcome.value), durationMs });
+        toolCalls.push({ name: call.name, args, result: outcome.value });
+        return { type: "tool_result", callId: id, content: outcome.output };
       }),
     );
     history.push({ role: "tool", content: results });

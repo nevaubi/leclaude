@@ -4,7 +4,26 @@ import type { RunEvent } from "./types";
 /**
  * In-process pub/sub for run progress. The engine publishes; the SSE stream
  * route subscribes. Kept on globalThis so Next.js dev reloads share one bus.
+ *
+ * Event vocabulary (constitution §46; the type lives in ./types so client
+ * code can fold events without importing this server module):
+ *
+ *   run.started · plan.created
+ *   node.started · node.progress · node.log · node.retrying · node.completed · node.failed · node.skipped · node.cancelled · node.waiting · node.reset
+ *   tool.started · tool.completed · tool.failed
+ *   artifact.created · output.created · handoff.created · review.required · budget.warning
+ *   run.waiting · run.completed · run.partial · run.failed · run.cancelled · run.budget_exhausted · run.verification_failed
+ *   run.done (stream terminator; the terminal run.* event before it carries the state) · error (transport)
  */
+export const RUN_EVENT_TYPES = [
+  "snapshot", "run.started", "plan.created",
+  "node.started", "node.progress", "node.log", "node.retrying", "node.completed", "node.failed", "node.skipped", "node.cancelled", "node.waiting", "node.reset",
+  "tool.started", "tool.completed", "tool.failed",
+  "artifact.created", "output.created", "handoff.created", "review.required", "budget.warning",
+  "run.waiting", "run.completed", "run.partial", "run.failed", "run.cancelled", "run.budget_exhausted", "run.verification_failed",
+  "run.done", "error",
+] as const satisfies readonly RunEvent["type"][];
+
 type Listener = (event: RunEvent) => void;
 type G = typeof globalThis & { __leclaudeWorkflowBus?: Map<string, Set<Listener>>; __leclaudeWorkflowRecent?: Map<string, RunEvent[]> };
 
