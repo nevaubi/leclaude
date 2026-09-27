@@ -9,7 +9,7 @@ import type { AnalysisOverview, ConflictNote, ConflictRow, CrossAnalysisResponse
 import { formatPageLine } from "./types";
 import { normalizeRange, searchTranscripts, summarizeObjections } from "./transcript";
 import { dedupeEvents, filterEvents, sortEvents } from "./chronology";
-import { buildGraph, resolvePersonName } from "./graph";
+import { buildGraph, resolveExactPersonName, resolvePersonName } from "./graph";
 import { CURRENT_USER, currentUser } from "@/lib/current-user";
 
 /** Kept for existing importers; prefer `currentUser().id` at call time (honours LECLAUDE_USER_ID). */
@@ -213,12 +213,16 @@ export async function crossAnalysis(matterId: string, opts: { topic: string; wit
   return { topic, witnessId: opts.witnessId, testimony, documents, otherTestimony, conflicts, aiConfigured: aiConfig().hasKey };
 }
 
-/** Suggested topics: exhibit descriptions and flagged answers give a good seed list. */
+/** kv key holding a matter's curated cross-analysis topics (string[]). */
+export const SUGGESTED_TOPICS_KEY = (matterId: string) => `ediscovery:topics:${matterId}`;
+
+/** Suggested topics: curated topics for the matter plus its issue-code labels. Empty for a new matter. */
 export function suggestTopics(matterId: string): string[] {
   const d = db();
   const codes = d.issueCodes.find((c) => c.matterId === matterId).map((c) => c.label);
-  const fixed = matterId === "m_afff_2873" ? ["90-day study final report", "8(e) notice EPA", "MW-7 groundwater 41 µg/L", "bioassay budget dose groups", "MSDS accumulate biodegrade", "Slide 8 biodegradable", "Navy NAVSEA qualification", "notification Illinois EPA city", "half-life serum recovery", "board minutes regulatory action"] : [];
-  return Array.from(new Set([...fixed, ...codes])).slice(0, 14);
+  // Curated topics for the matter (written by counsel or a seed) come first; issue-code labels fill the rest.
+  const curated = d.kv.get<string[]>(SUGGESTED_TOPICS_KEY(matterId)) ?? [];
+  return Array.from(new Set([...curated, ...codes])).slice(0, 14);
 }
 
 export function listFactMatrices(matterId: string): FactMatrix[] {
@@ -289,8 +293,9 @@ export function matterPeople(matterId: string): Person[] {
   const matter = d.matters.get(matterId);
   for (const t of matter?.teamIds ?? []) ids.add(t);
   const people = d.people.all();
-  // Also include anyone whose name appears in a header.
-  for (const doc of docs) for (const n of [doc.from ?? "", ...(doc.to ?? []), ...(doc.cc ?? [])]) { const p = resolvePersonName(n, people); if (p) ids.add(p.id); }
+  // Also include anyone named in a header of this matter's documents, but only by exact, unique full name: a surname or
+  // a near-miss never pulls a person from another matter into this one (constitution §23, no closest-name binding).
+  for (const doc of docs) for (const n of [doc.from ?? "", ...(doc.to ?? []), ...(doc.cc ?? [])]) { const p = resolveExactPersonName(n, people); if (p) ids.add(p.id); }
   return people.filter((p) => ids.has(p.id));
 }
 

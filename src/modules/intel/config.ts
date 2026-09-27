@@ -24,6 +24,15 @@ export interface IntelEnvConfig {
   offline: boolean;
 }
 
+/**
+ * True only when the workspace runs on the demo dataset (LECLAUDE_SEED=demo). The bundled sample
+ * corpus, its analysis and the sample-configured sources exist only in that mode; a production
+ * workspace (the default) starts with an empty intelligence layer and unconfigured sources.
+ */
+export function intelSampleMode(): boolean {
+  return (process.env.LECLAUDE_SEED ?? "").trim().toLowerCase() === "demo";
+}
+
 function env(name: string): string | undefined {
   const v = process.env[name];
   return v == null || !v.trim() ? undefined : v.trim();
@@ -60,7 +69,7 @@ export function providerStatuses(cfg: IntelEnvConfig = intelConfig()): IntelProv
     { id: "federal-register", name: "Federal Register", configured: true, keyed: false },
     { id: "govinfo", name: "GovInfo (U.S. Code, Public Laws)", configured: true, keyed: cfg.govInfoKey !== "DEMO_KEY", envVar: "GOVINFO_API_KEY", note: cfg.govInfoKey === "DEMO_KEY" ? "Using DEMO_KEY (low daily quota)." : undefined },
     { id: "openfda", name: "openFDA (recalls, labels, device events)", configured: true, keyed: Boolean(cfg.openFdaKey), envVar: "OPENFDA_API_KEY", note: cfg.openFdaKey ? undefined : "Anonymous access: 240 requests/minute." },
-    { id: "jpml", name: "JPML pending MDL list", configured: true, keyed: false, note: "Falls back to the seeded MDL list when the page cannot be parsed." },
+    { id: "jpml", name: "JPML pending MDL list", configured: true, keyed: false, note: "Live page only; the offline fallback list is used only when a source allows it (flagged unverified)." },
     { id: "firecrawl", name: "Firecrawl (scrape, search, crawl)", configured: Boolean(cfg.firecrawlKey), keyed: Boolean(cfg.firecrawlKey), envVar: "FIRECRAWL_API_KEY", note: cfg.firecrawlKey ? undefined : "Plain fetch is used for web pages; news search needs Firecrawl or Tavily." },
     { id: "tavily", name: "Tavily (news search, extract)", configured: Boolean(cfg.tavilyKey), keyed: Boolean(cfg.tavilyKey), envVar: "TAVILY_API_KEY" },
     { id: "web", name: "Plain web fetch", configured: !cfg.offline, keyed: false, note: cfg.offline ? "INTEL_OFFLINE is set." : undefined },

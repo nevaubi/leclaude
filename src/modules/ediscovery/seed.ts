@@ -10,6 +10,7 @@ import { AFFF_DOCS_B } from "./seed-docs-afff-b";
 import { NORTHGATE_DOCS, NG_CUSTODIANS } from "./seed-docs-northgate";
 import { indexTextFor, templatePrivilegeDescription } from "./privilege";
 import { CODING_RULES_KEY, DEFAULT_CODING_RULES } from "./rules";
+import { SEED_CODING_RULES } from "./seed-rules";
 import { seedAnalysis } from "./analysis/seed";
 import { seedReview, ensureReviewSeeded, REVIEW_SEED_VERSION } from "./seed-review";
 import { detectNearDuplicates, nearDuplicateMap } from "./near-dup";
@@ -79,7 +80,7 @@ export function seedEdiscovery(db: Database) {
   db.issueCodes.putMany([...AFFF_ISSUE_CODES, ...NORTHGATE_ISSUE_CODES]);
   db.privilegeLog.putMany(buildPrivilegeLog(docs));
   for (const matterId of [AFFF, NORTHGATE]) {
-    if (db.kv.get<string>(CODING_RULES_KEY(matterId)) == null) db.kv.set(CODING_RULES_KEY(matterId), DEFAULT_CODING_RULES[matterId] ?? DEFAULT_CODING_RULES.default);
+    if (db.kv.get<string>(CODING_RULES_KEY(matterId)) == null) db.kv.set(CODING_RULES_KEY(matterId), SEED_CODING_RULES[matterId] ?? DEFAULT_CODING_RULES.default);
   }
   // Keyword index (no embeddings without a key); synchronous when embed:false. Scoped to the two seeded matters; every
   // document declares its matterId in meta so the index never binds a row to a matter it did not come from.

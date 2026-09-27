@@ -1,11 +1,11 @@
 "use client";
 import * as React from "react";
 import {
-  AlertCircle, AlertTriangle, AlignLeft, BellRing, BookOpenCheck, Briefcase, CalendarClock, CalendarPlus, ChartLine, Check, CheckCircle2, CircleDashed, CircleSlash, ClipboardCheck, Clock, Coins, CopyMinus, Download, FileDown, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitFork, GitMerge, Globe, Layers, Library, ListChecks, ListTodo, Loader2, Mail, MessageSquareText, MinusCircle, Network, PauseCircle, PenLine, Play, Radar, Repeat, Scale, ScanSearch, ScanText, Send, ShieldAlert, ShieldCheck, ShieldX, Square, Stamp, Table, Tags, Timer, UserCheck, Workflow, XCircle, type LucideIcon,
+  AlertCircle, AlignLeft, BellRing, BookOpenCheck, Briefcase, CalendarClock, CalendarPlus, ChartLine, CheckCircle2, CircleDashed, CircleSlash, ClipboardCheck, Clock, CopyMinus, Download, FileDown, FilePlus2, FileOutput, FileSearch, Gavel, GitBranch, GitFork, GitMerge, Globe, Layers, Library, ListChecks, ListTodo, Loader2, Mail, MessageSquareText, MinusCircle, Network, PauseCircle, PenLine, Play, Radar, Repeat, Scale, ScanSearch, ScanText, Send, ShieldAlert, ShieldCheck, Square, Stamp, Table, Tags, Timer, UserCheck, Workflow, XCircle, type LucideIcon,
 } from "lucide-react";
 import type { WorkflowRun, WorkflowRunStep } from "@/lib/types/domain";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { StatusDot } from "@/components/ui/misc";
 import { categoryOf, nodeSpec, type NodeCategory } from "../registry";
 import { RUN_STATUS_LABEL } from "../types";
 
@@ -69,16 +69,15 @@ const RUN_VARIANT: Record<WorkflowRun["status"], "success" | "destructive" | "wa
   succeeded: "success", partial: "warning", failed: "destructive", verification_failed: "destructive", budget_exhausted: "warning", cancelled: "muted", waiting_approval: "warning", running: "info", queued: "secondary",
 };
 
-const RUN_ICON: Partial<Record<WorkflowRun["status"], LucideIcon>> = { succeeded: Check, partial: AlertTriangle, failed: XCircle, verification_failed: ShieldX, budget_exhausted: Coins, cancelled: CircleSlash, waiting_approval: PauseCircle };
 
 export function RunStatusBadge({ status, className }: { status: WorkflowRun["status"]; className?: string }) {
   const variant = RUN_VARIANT[status] ?? "secondary";
-  const Icon = RUN_ICON[status];
+  const tone = variant === "secondary" ? "muted" : variant;
   return (
-    <Badge variant={variant} className={cn("gap-1", className)}>
-      {status === "running" ? <Loader2 className="size-3 animate-spin" /> : Icon ? <Icon className="size-3" /> : null}
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-[12px]", variant === "destructive" ? "text-destructive" : "text-foreground/85", className)}>
+      {status === "running" ? <Loader2 className="size-3 animate-spin text-muted-foreground" aria-hidden /> : <StatusDot tone={tone} />}
       {RUN_STATUS_LABEL[status] ?? status}
-    </Badge>
+    </span>
   );
 }
 
@@ -96,7 +95,7 @@ export function StepStatusIcon({ status, className }: { status: WorkflowRunStep[
 }
 
 export function WorkflowStatusBadge({ status }: { status: "draft" | "active" | "archived" }) {
-  return <Badge variant={status === "active" ? "success" : status === "draft" ? "warning" : "muted"} className="capitalize">{status}</Badge>;
+  return <span className="inline-flex items-center gap-1.5 text-[12px] capitalize text-foreground/85"><StatusDot tone={status === "active" ? "success" : status === "draft" ? "warning" : "muted"} />{status}</span>;
 }
 
 export function formatDuration(ms?: number | null): string {

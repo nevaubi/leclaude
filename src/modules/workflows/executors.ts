@@ -728,7 +728,7 @@ const actionCreateTask: Executor = async (x) => {
     title: title.slice(0, 200),
     description: c.description ? str(c.description).slice(0, 4000) : undefined,
     matterId: matterId || undefined,
-    assigneeId: assigneeId && db().people.has(assigneeId) ? assigneeId : WORKFLOW_CURRENT_USER.id,
+    assigneeId: assigneeId && db().people.has(assigneeId) ? assigneeId : (x.run.triggeredById ?? WORKFLOW_CURRENT_USER.id),
     createdById: x.run.triggeredById ?? WORKFLOW_CURRENT_USER.id,
     status: "todo",
     priority: (["low", "medium", "high", "urgent"].includes(str(c.priority)) ? str(c.priority) : "medium") as Task["priority"],
@@ -774,7 +774,7 @@ const actionCreateEvent: Executor = async (x) => {
     allDay: duration === 0,
     kind: (["deadline", "hearing", "deposition", "meeting", "filing", "internal", "cle", "other"].includes(str(c.kind)) ? str(c.kind) : "other") as CalendarEvent["kind"],
     location: c.location ? str(c.location) : undefined,
-    attendeeIds: attendeeIds.length ? attendeeIds : [WORKFLOW_CURRENT_USER.id],
+    attendeeIds: attendeeIds.length ? attendeeIds : [x.run.triggeredById ?? WORKFLOW_CURRENT_USER.id],
     notes: c.notes ? `${str(c.notes)}\n\nCreated by workflow "${x.workflow.name}" (run ${x.run.id}).` : `Created by workflow "${x.workflow.name}" (run ${x.run.id}).`,
     ruleSource: c.ruleSource ? str(c.ruleSource) : undefined,
   };

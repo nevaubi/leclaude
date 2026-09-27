@@ -38,6 +38,8 @@ export interface HomeContextValue {
   aiConfigured: boolean;
   /** The intelligence layer has published insights for the "For you" slot. */
   intelInsights: boolean;
+  /** Workspace counts for the first-run checklist. */
+  setup: { matters: number; documents: number; people: number };
   people: PersonLite[];
   matters: MatterLite[];
   personById: (id?: string | null) => PersonLite | undefined;
@@ -280,7 +282,7 @@ export function HomeProvider({ initial, children }: { initial: HomeInitialData; 
       const err = e as ApiError;
       const payload = err.payload as { brief?: DailyBrief } | undefined;
       if (payload?.brief) setData((d) => ({ ...d, brief: payload.brief! }));
-      if (err.code === "no_api_key") toast.warning("OpenAI key required", { description: "Add OPENAI_API_KEY to .env.local to generate an AI brief. Showing the computed brief instead." });
+      if (err.code === "no_api_key") toast.warning("No model provider configured", { description: "Connect a model provider in Settings to generate an AI brief. Showing the computed brief instead." });
       else toast.error("Brief generation failed", { description: errMessage(e) });
     } finally { setBriefLoading(false); }
   }, []);
@@ -291,6 +293,7 @@ export function HomeProvider({ initial, children }: { initial: HomeInitialData; 
     userName: data.userName,
     aiConfigured: data.aiConfigured,
     intelInsights: data.intelInsights ?? false,
+    setup: data.setup ?? { matters: data.matters.length, documents: 0, people: data.people.length },
     people: data.people,
     matters: data.matters,
     personById,

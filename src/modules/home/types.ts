@@ -76,6 +76,8 @@ export interface HomeInitialData {
   aiConfigured: boolean;
   /** True once the intelligence layer holds published insights; the "For you" slot fetches only then. */
   intelInsights?: boolean;
+  /** Workspace counts behind the first-run checklist (matters, e-discovery documents, people). */
+  setup?: { matters: number; documents: number; people: number };
   userId: string;
   userName: string;
   people: PersonLite[];

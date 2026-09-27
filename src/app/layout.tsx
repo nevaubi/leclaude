@@ -4,16 +4,34 @@ import { AppShell } from "@/components/shell/app-shell";
 import { ThemeProvider } from "@/components/shell/theme-provider";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { currentUser, DEFAULT_USER } from "@/lib/current-user";
+import { SetupGate } from "@/modules/workspace/components/setup-gate";
+import { workspaceView } from "@/modules/workspace/service";
+import type { WorkspaceView } from "@/modules/workspace/roles";
 
-const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "LeClaude";
-const firmName = process.env.NEXT_PUBLIC_FIRM_NAME ?? "Seeger Weiss LLP";
+const appName = process.env.NEXT_PUBLIC_APP_NAME?.trim() || "LeClaude";
+const envFirmName = process.env.NEXT_PUBLIC_FIRM_NAME?.trim() || "Your firm";
 
-export const metadata: Metadata = {
-  title: { default: appName, template: `%s · ${appName}` },
-  description: `${firmName} internal legal AI platform: research, intelligence, e-discovery, workflows and an AI-native office suite.`,
-  applicationName: appName,
-};
+// The shell reads the workspace (firm, owner) from the database on every request.
+export const dynamic = "force-dynamic";
+
+/** The workspace for the shell; an unreadable or empty database renders the setup state instead of crashing. */
+function readWorkspace(): WorkspaceView {
+  try {
+    return workspaceView();
+  } catch (e) {
+    console.error("[layout] could not read the workspace", (e as Error).message);
+    return { configured: false, firmName: envFirmName, owner: null };
+  }
+}
+
+export function generateMetadata(): Metadata {
+  const { firmName } = readWorkspace();
+  return {
+    title: { default: appName, template: `%s · ${appName}` },
+    description: `${firmName || envFirmName} internal legal AI platform: research, intelligence, e-discovery, workflows and an AI-native office suite.`,
+    applicationName: appName,
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: [
@@ -25,8 +43,9 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const me = currentUser();
-  const user = me.id === DEFAULT_USER.id ? { ...me, role: "Partner", email: "jwhitfield@seegerweiss.com" } : me;
+  const ws = readWorkspace();
+  const firmName = ws.firmName || envFirmName;
+  const user = ws.owner ? { id: ws.owner.id, name: ws.owner.name, email: ws.owner.email, role: ws.owner.title || ws.owner.firmRole || undefined } : undefined;
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -40,7 +59,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="h-full overflow-hidden">
         <ThemeProvider>
           <TooltipProvider delayDuration={250}>
-            <AppShell appName={appName} firmName={firmName} user={user}>{children}</AppShell>
+            {ws.configured && user ? (
+              <AppShell appName={appName} firmName={firmName} user={user}>{children}</AppShell>
+            ) : (
+              // Before first-run setup there is no identity to show: render full-page and send every route to /setup.
+              <SetupGate configured={false}>{children}</SetupGate>
+            )}
             <Toaster position="bottom-right" closeButton toastOptions={{ className: "font-sans text-[12.5px]" }} />
           </TooltipProvider>
         </ThemeProvider>

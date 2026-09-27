@@ -6,6 +6,7 @@ import { putProvenance } from "@/lib/integrity/store";
 import type { Provenance } from "@/lib/integrity/types";
 import { safeVerifyClaims, type VerifySource } from "@/lib/ai/verify";
 import { classifyError } from "@/modules/intel/steward";
+import { getSource } from "@/modules/intel/service";
 import type { IntelDocumentKind } from "@/modules/intel/types";
 import { nodeSpec, type AnyNodeType } from "./registry";
 import { resolveText } from "./template-expr";
@@ -33,11 +34,19 @@ function parseJsonMaybe(v: unknown): Record<string, unknown> | undefined {
 
 // ───────────── intel.fetch ─────────────
 
+const isSystemSourceId = (id: string) => id.startsWith("isrc_sys_");
+
 const intelFetch: Executor = async (x) => {
   const c = resolveConfig(x);
   const sourceId = str(c.sourceId).trim();
   const adapter = str(c.adapter).trim();
   if (!sourceId && !adapter) throw new StepError("Choose a source id or an adapter.", "no_source");
+  // A built-in source that this workspace has not set up (a fresh install before the intelligence sources are
+  // configured) is "nothing to fetch", not a failure; a missing user source still fails the step.
+  if (sourceId && isSystemSourceId(sourceId) && !getSource(sourceId)) {
+    x.log(`Source ${sourceId} is not set up in this workspace; nothing to fetch.`);
+    return { output: { jobId: "", status: "not_configured", sourceId, sourceName: sourceId, added: 0, updated: 0, skipped: 0, docIds: [], errors: [], notes: ["Source not set up in this workspace"], kinds: [] } };
+  }
   const r = await fetchSource({ sourceId: sourceId || undefined, adapter: sourceId ? undefined : adapter, config: parseJsonMaybe(c.config), name: `${x.workflow.name} › ${x.node.label}`, mode: str(c.mode) === "enqueue" ? "enqueue" : "run", maxDocs: c.maxDocs ? num(c.maxDocs, 100) : undefined, since: c.since ? str(c.since) : undefined, signal: x.signal, log: x.log });
   const mode = str(c.mode) === "enqueue" ? "enqueue" : "run";
   // A job that failed, was escalated, or was re-queued by the intel steward for a later retry (network / rate limit)

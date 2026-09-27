@@ -13,6 +13,7 @@ import type { Story, TranscriptImportRecord } from "./types";
 import { EXTRA_PEOPLE, EXTRA_PEOPLE_IDS as X } from "./seed-people";
 import { KLEIN, RAMAN, obj, qa } from "./seed-helpers";
 import { resolvePersonName } from "./graph";
+import { SUGGESTED_TOPICS_KEY } from "./service";
 
 const M = MATTERS.afff;
 const P = PEOPLE;
@@ -162,7 +163,11 @@ export function seedAnalysis(db: Database) {
   // Keep a reviewer's edits: the seeded story is only written when absent.
   const stories = db.collection<Story>("ediscovery_stories");
   if (!stories.has(AFFF_STORY.id)) stories.put(AFFF_STORY);
+  if (db.kv.get<string[]>(SUGGESTED_TOPICS_KEY(M)) == null) db.kv.set(SUGGESTED_TOPICS_KEY(M), AFFF_TOPICS);
 }
+
+/** Curated cross-analysis topics for the sample AFFF matter (demo data only). */
+const AFFF_TOPICS = ["90-day study final report", "8(e) notice EPA", "MW-7 groundwater 41 µg/L", "bioassay budget dose groups", "MSDS accumulate biodegrade", "Slide 8 biodegradable", "Navy NAVSEA qualification", "notification Illinois EPA city", "half-life serum recovery", "board minutes regulatory action"];
 
 export const ANALYSIS_SEED_IDS = {
   depositions: { voss: VOSS_DEPOSITION.id, hale: HALE_DEPOSITION.id, pryce: PRYCE_DEPOSITION.id, brooks: BROOKS_DEPOSITION.id, liu: LIU_DEPOSITION.id, haleVol2: "dep_afff_hale_v2", suarez: "dep_afff_suarez_v1" },

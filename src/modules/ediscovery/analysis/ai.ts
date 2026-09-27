@@ -146,7 +146,8 @@ export async function prepareOutline(matterId: string, opts: { witnessId?: strin
   const d = db();
   const witnessName = opts.witnessName.trim();
   const people = matterPeople(matterId);
-  const person = opts.witnessId ? d.people.get(opts.witnessId) : resolvePersonName(witnessName, people);
+  // The witness must be one of this matter's people; an id from another matter is ignored rather than trusted.
+  const person = opts.witnessId ? people.find((p) => p.id === opts.witnessId) : resolvePersonName(witnessName, people);
   const deps = d.depositions.find((x) => x.matterId === matterId && x.transcript.length > 0);
   const last = witnessName.split(" ").pop()!.toLowerCase();
   // Prior testimony about this witness from other deponents, plus their own prior volume(s).
@@ -231,17 +232,28 @@ export interface ContradictionsResult {
 }
 
 /** Resolve a Bates cite to a document of this matter, or nothing. Never falls back to another document. */
-function resolveBatesInMatter(matterId: string, cite: string): EDocument | null {
+export function resolveBatesInMatter(matterId: string, cite: string): EDocument | null {
   const upper = cite.toUpperCase();
-  return db().edocs.findOne((x) => x.matterId === matterId && (upper.includes(x.bates.toUpperCase()) || (!!x.batesEnd && upper.includes(x.batesEnd.toUpperCase())))) ?? null;
+  // Whole-token match: "MFC-00418770" must not resolve to MFC-0041877 because one is a prefix of the other.
+  const has = (bates: string) => new RegExp(`(^|[^A-Z0-9])${bates.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![0-9])`).test(upper);
+  return db().edocs.findOne((x) => x.matterId === matterId && (has(x.bates) || (!!x.batesEnd && has(x.batesEnd)))) ?? null;
 }
 
-/** Resolve a "Witness 24:05" cite to a transcribed deposition of this matter by the witness's last name, or nothing. */
-function resolveWitnessInMatter(matterId: string, cite: string): Deposition | null {
-  const last = cite.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z'-]/g, "");
+/**
+ * Resolve a "Witness 24:05" cite to a transcribed deposition of this matter by the witness's last name, or nothing.
+ * When several transcripts match (two witnesses sharing a surname, or several volumes) the cited page must select
+ * exactly one of them; otherwise the cite stays unresolved rather than binding to the earliest or closest one.
+ */
+export function resolveWitnessInMatter(matterId: string, cite: string): Deposition | null {
+  const tokens = cite.trim().split(/\s+/);
+  const last = tokens.find((t) => /[a-z]/i.test(t) && !/^(vol|volume|dep|depo|tr|at|p|pp)\.?$/i.test(t))?.toLowerCase().replace(/[^a-z'-]/g, "");
   if (!last) return null;
   const hits = db().depositions.find((x) => x.matterId === matterId && x.transcript.length > 0 && x.witnessName.toLowerCase().split(/\s+/).pop() === last);
-  return hits.length === 1 ? hits[0] : hits.sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+  if (hits.length <= 1) return hits[0] ?? null;
+  const page = Number(cite.match(/(\d+)\s*:\s*\d+/)?.[1] ?? NaN);
+  const volume = Number(cite.match(/vol(?:ume)?\.?\s*(\d+)/i)?.[1] ?? NaN);
+  const narrowed = hits.filter((x) => (!Number.isFinite(volume) || (x.volume ?? 1) === volume) && (!Number.isFinite(page) || x.transcript.some((q) => q.page === page)));
+  return narrowed.length === 1 ? narrowed[0] : null;
 }
 
 export async function findContradictions(matterId: string, opts: { depositionId: string; topic: string; indexes?: number[]; signal?: AbortSignal } & VerifyOpt): Promise<ContradictionsResult> {
@@ -516,7 +528,7 @@ Produce a "who knew what, when" map for the topic. For each person with evidence
   for (const e of checked.output) {
     if (entries.some((x) => isDuplicateKnowledgeEntry(x, e))) { collapsed++; continue; }
     const p = resolvePersonName(e.personName, people);
-    entries.push({ personId: p?.id, personName: p?.name ?? e.personName, knew: e.knew, firstKnownDate: e.firstKnownDate, confidence: e.confidence, cites: e.cites.map((c) => ({ ...c, sourceId: c.sourceKind === "document" ? d.edocs.findOne((x) => c.cite.toUpperCase().includes(x.bates.toUpperCase()))?.id : d.depositions.findOne((x) => x.matterId === matterId && c.cite.toLowerCase().includes(x.witnessName.split(" ").pop()!.toLowerCase()))?.id })) });
+    entries.push({ personId: p?.id, personName: p?.name ?? e.personName, knew: e.knew, firstKnownDate: e.firstKnownDate, confidence: e.confidence, cites: e.cites.map((c) => ({ ...c, sourceId: resolveCiteSourceId(matterId, c) })) });
   }
   entries.sort((a, b) => a.firstKnownDate.localeCompare(b.firstKnownDate));
   const overlap = entries.filter((e) => priorEntries.some((p) => isDuplicateKnowledgeEntry(p, e))).length;
@@ -533,6 +545,17 @@ Produce a "who knew what, when" map for the topic. For each person with evidence
   saveKnowledgeMap(map);
   attachProvenance({ kind: "knowledge-map", recordId: id, matterId, title: `Who knew what — ${opts.topic}`, href: tabHref(matterId, "people"), provenance });
   return map;
+}
+
+/**
+ * The source id a model cite points at, resolved only inside this matter: a Bates cite to one of the matter's
+ * documents, a page:line cite to one of its transcripts. Unresolved cites keep `sourceId` undefined (the UI shows
+ * them as unresolved); they are never mapped to the first document, another matter's document or the closest name.
+ */
+export function resolveCiteSourceId(matterId: string, c: { sourceKind: string; cite: string }): string | undefined {
+  if (c.sourceKind === "document") return resolveBatesInMatter(matterId, c.cite)?.id;
+  if (c.sourceKind === "deposition") return resolveWitnessInMatter(matterId, c.cite)?.id;
+  return undefined;
 }
 
 export function exhibitDocs(dep: Deposition) { return exhibitDocuments(dep); }

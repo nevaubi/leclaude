@@ -6,11 +6,9 @@
  * the gallery's System filter and never in the template list.
  */
 import type { Workflow, WorkflowEdge, WorkflowNode, WorkflowNodeType } from "@/lib/types/domain";
-import { MATTERS, PEOPLE } from "@/lib/seed/ids";
 import { autoLayout } from "./graph";
 import { defaultConfigFor, type AnyNodeType } from "./registry";
 
-const P = PEOPLE;
 const T0 = "2026-06-01T09:00:00.000Z";
 
 /** Stable ids of the seeded intelligence sources (mirrors src/modules/intel/seed.ts SEED_SOURCE_IDS). */
@@ -53,7 +51,7 @@ function E(source: string, target: string, sourceHandle?: string, targetHandle?:
 type SystemDef = Omit<Workflow, "createdAt" | "updatedAt" | "status" | "isTemplate" | "ownerId" | "system">;
 
 const fetch = (id: string, label: string, sourceId: string, extra: Record<string, unknown> = {}) => N(id, "intel.fetch", label, { sourceId, adapter: "", mode: "run", maxDocs: 150, onError: "continue", ...extra });
-const steward = (id: string, steps: string, label = "Steward") => N(id, "review.auto", label, { steps, fixes: ["retry", "narrow", "fast_model", "skip_verify"], maxFixes: 3, escalate: true, reviewerId: P.aishaKhan, stopOnEscalate: false });
+const steward = (id: string, steps: string, label = "Steward") => N(id, "review.auto", label, { steps, fixes: ["retry", "narrow", "fast_model", "skip_verify"], maxFixes: 3, escalate: true, reviewerId: "{{user.id}}", stopOnEscalate: false });
 const anyNew = (id: string, ref: string, label = "Anything new?") => N(id, "logic.branch", label, { rules: [{ id: "yes", label: "New records", logic: "all", conditions: [{ left: `{{steps.${ref}.output.count}}`, op: "gt", right: "0" }] }], elseLabel: "Quiet" });
 
 const SYSTEM: SystemDef[] = [
@@ -61,7 +59,7 @@ const SYSTEM: SystemDef[] = [
   {
     id: SYSTEM_WORKFLOW_IDS.authorityRefresh,
     name: "Authority refresh",
-    description: "Every morning: pull new opinions and court rules for the matters' research themes, extract and index them, link judges, counsel and courts, refresh the 90-day authority trend and publish it to Home once verified.",
+    description: "Every morning: pull new opinions and court rules for the matters' research themes, extract and index them, link judges, counsel and courts, and, when there are authorities in the last 90 days, refresh the authority trend and publish it to Home once verified.",
     category: "automation",
     tags: ["system", "case law", "court rules", "daily"],
     inputs: [],
@@ -73,18 +71,20 @@ const SYSTEM: SystemDef[] = [
       N("extract", "intel.extract", "Extract and summarize", { docIds: "{{steps.opinions.output.docIds}}", blobIds: "", summarize: true, entities: true, maxDocs: 40, modelTier: "fast", onError: "continue" }),
       N("index", "intel.index", "Index for search", { docIds: "{{steps.extract.output.docIds}}", embed: true, chunkSize: 1200, onError: "continue" }),
       N("entities", "intel.entities", "Link judges, counsel and courts", { docIds: "{{steps.extract.output.docIds}}", relations: true, onError: "continue" }),
+      N("recent", "data.query", "Authorities in the last 90 days", { source: "intel_documents", q: "", filters: { kinds: "opinion, court_rule" }, matterId: "", since: "-90d", limit: 1, sort: "date", direction: "desc" }),
+      anyNew("any", "recent", "Any authorities?"),
       N("trends", "intel.analyze", "Authority trend (90 days)", { analysis: "trends", scope: { matterId: "", kinds: ["opinion", "court_rule"], entityIds: "", court: "", jurisdiction: "", dateFrom: "-90d", dateTo: "", q: "" }, title: "Case law and court rules — last 90 days", maxDocs: 800, onError: "continue" }),
       N("verify", "intel.verify", "Verify the insight", { target: "insights", insightIds: "{{steps.trends.output.insightIds}}", steps: "", limit: 5, onError: "continue" }),
       N("publish", "intel.publish", "Publish to Home", { to: "home", insightIds: "{{steps.trends.output.insightIds}}", items: "", title: "", summary: "", matterId: "", userId: "", recipientIds: [], libraryFolderId: "", requireVerified: false, onError: "continue" }),
     ],
-    edges: [E("schedule", "opinions"), E("schedule", "rules"), E("opinions", "steward"), E("rules", "steward"), E("steward", "extract"), E("extract", "index"), E("extract", "entities"), E("index", "trends"), E("entities", "trends"), E("trends", "verify"), E("verify", "publish")],
+    edges: [E("schedule", "opinions"), E("schedule", "rules"), E("opinions", "steward"), E("rules", "steward"), E("steward", "extract"), E("extract", "index"), E("extract", "entities"), E("index", "recent"), E("entities", "recent"), E("recent", "any"), E("any", "trends", "yes"), E("trends", "verify"), E("verify", "publish")],
   },
 
   // 2 ── Docket watch (hourly): fetch matter dockets → steward → new entries today → alert watchers
   {
     id: SYSTEM_WORKFLOW_IDS.docketWatch,
     name: "Docket watch",
-    description: "Every hour: refresh the RECAP dockets for the AFFF and Depo-Provera MDLs, index new entries and, when there are any, publish an alert to the people watching those dockets and the matter teams.",
+    description: "Every hour: refresh the RECAP dockets the firm watches, index new entries and, when there are any, publish an alert to the people watching those dockets and the matter teams.",
     category: "automation",
     tags: ["system", "docket", "PACER", "hourly"],
     inputs: [],
@@ -104,7 +104,7 @@ const SYSTEM: SystemDef[] = [
   {
     id: SYSTEM_WORKFLOW_IDS.mdlTracker,
     name: "MDL tracker",
-    description: "Daily: refresh the JPML pending-MDL list, link the MDL records to the matters, rebuild the MDL profiles (transferee courts, judges, activity) and publish them to the AFFF and Depo-Provera matters.",
+    description: "Daily: refresh the JPML pending-MDL list, link the MDL records to the matters, rebuild the MDL profiles (transferee courts, judges, activity), verify them and publish them to Home.",
     category: "automation",
     tags: ["system", "MDL", "JPML", "daily"],
     inputs: [],
@@ -116,10 +116,9 @@ const SYSTEM: SystemDef[] = [
       N("mdls", "data.query", "Watched MDL records", { source: "intel_documents", q: "", filters: { kinds: "mdl" }, matterId: "", since: "", limit: 50, sort: "updated", direction: "desc" }),
       N("profiles", "intel.analyze", "MDL profiles", { analysis: "profiles", scope: { matterId: "", kinds: ["mdl", "docket", "docket_entry"], entityIds: "{{steps.entities.output.entityIds}}", court: "", jurisdiction: "", dateFrom: "", dateTo: "", q: "" }, title: "", maxDocs: 500, onError: "continue" }),
       N("verify", "intel.verify", "Verify profiles", { target: "insights", insightIds: "{{steps.profiles.output.insightIds}}", steps: "", limit: 10, onError: "continue" }),
-      N("publish_afff", "intel.publish", "Publish to AFFF", { to: "matter", insightIds: "{{steps.profiles.output.insightIds}}", items: "", title: "", summary: "", matterId: MATTERS.afff, userId: "", recipientIds: [], libraryFolderId: "", requireVerified: false, onError: "continue" }),
-      N("publish_depo", "intel.publish", "Publish to Depo-Provera", { to: "matter", insightIds: "{{steps.profiles.output.insightIds}}", items: "", title: "", summary: "", matterId: MATTERS.depo, userId: "", recipientIds: [], libraryFolderId: "", requireVerified: false, onError: "continue" }),
+      N("publish", "intel.publish", "Publish to Home", { to: "home", insightIds: "{{steps.profiles.output.insightIds}}", items: "", title: "", summary: "", matterId: "", userId: "", recipientIds: [], libraryFolderId: "", requireVerified: false, onError: "continue" }),
     ],
-    edges: [E("schedule", "jpml"), E("jpml", "steward"), E("steward", "entities"), E("entities", "mdls"), E("mdls", "profiles"), E("profiles", "verify"), E("verify", "publish_afff"), E("verify", "publish_depo")],
+    edges: [E("schedule", "jpml"), E("jpml", "steward"), E("steward", "entities"), E("entities", "mdls"), E("mdls", "profiles"), E("profiles", "verify"), E("verify", "publish")],
   },
 
   // 4 ── Regulatory watch (daily): FDA + Federal Register + eCFR → steward → extract → index → new records → trends → verify → publish
@@ -242,7 +241,7 @@ const SYSTEM: SystemDef[] = [
       N("verify", "intel.verify", "Re-verify insights", { target: "insights", insightIds: "", steps: "", limit: 25, onError: "continue" }),
       N("flagged", "data.query", "Flagged insights", { source: "intel_insights", q: "", filters: { status: "flagged" }, matterId: "", since: "-1d", limit: 50, sort: "updated", direction: "desc" }),
       N("any", "logic.branch", "Anything flagged?", { rules: [{ id: "yes", label: "Flagged", logic: "all", conditions: [{ left: "{{steps.flagged.output.count}}", op: "gt", right: "0" }] }], elseLabel: "All clear" }),
-      N("task", "action.create_task", "Review flagged insights", { title: "Review {{steps.flagged.output.count}} flagged insight(s)", description: "The verification sweep flagged insights whose claims the evidence does not support.\n\n{{steps.flagged.output.text | truncate:1500}}", assigneeId: P.aishaKhan, priority: "medium", dueRule: "+2bd", matterId: "", tags: ["intel", "verification"], requireTrusted: false }),
+      N("task", "action.create_task", "Review flagged insights", { title: "Review {{steps.flagged.output.count}} flagged insight(s)", description: "The verification sweep flagged insights whose claims the evidence does not support.\n\n{{steps.flagged.output.text | truncate:1500}}", assigneeId: "{{user.id}}", priority: "medium", dueRule: "+2bd", matterId: "", tags: ["intel", "verification"], requireTrusted: false }),
     ],
     edges: [E("schedule", "verify"), E("verify", "flagged"), E("flagged", "any"), E("any", "task", "yes")],
   },
@@ -260,7 +259,7 @@ const SYSTEM: SystemDef[] = [
       N("sweep", "intel.verify", "Integrity sweep", { target: "sweep", insightIds: "", steps: "", limit: 10, network: false, onError: "continue" }),
       N("escalated", "data.query", "Escalated jobs", { source: "intel_jobs", q: "", filters: { status: "escalated" }, matterId: "", since: "-7d", limit: 50, sort: "updated", direction: "desc" }),
       N("any", "logic.branch", "Needs a person?", { rules: [{ id: "yes", label: "Findings", logic: "any", conditions: [{ left: "{{steps.sweep.output.flagged}}", op: "gt", right: "0" }, { left: "{{steps.escalated.output.count}}", op: "gt", right: "0" }] }], elseLabel: "Clean" }),
-      N("task", "action.create_task", "Resolve integrity findings", { title: "Integrity sweep: {{steps.sweep.output.flagged}} finding(s), {{steps.escalated.output.count}} escalated job(s)", description: "Sweep notes:\n{{steps.sweep.output.notes | bullets}}\n\nEscalated jobs:\n{{steps.escalated.output.text | truncate:1200}}", assigneeId: P.aishaKhan, priority: "medium", dueRule: "+1bd", matterId: "", tags: ["intel", "integrity"], requireTrusted: false }),
+      N("task", "action.create_task", "Resolve integrity findings", { title: "Integrity sweep: {{steps.sweep.output.flagged}} finding(s), {{steps.escalated.output.count}} escalated job(s)", description: "Sweep notes:\n{{steps.sweep.output.notes | bullets}}\n\nEscalated jobs:\n{{steps.escalated.output.text | truncate:1200}}", assigneeId: "{{user.id}}", priority: "medium", dueRule: "+1bd", matterId: "", tags: ["intel", "integrity"], requireTrusted: false }),
     ],
     edges: [E("schedule", "sweep"), E("sweep", "escalated"), E("escalated", "any"), E("any", "task", "yes")],
   },

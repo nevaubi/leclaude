@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import type { CalendarEvent, LibraryItem, NewsItem, PracticeArea, Task, TeamUpdate } from "@/lib/types/domain";
 import { fetchJSON } from "@/lib/ai/toolkit/http";
 import { HOME_COLLECTIONS } from "./seed";
-import { currentUser } from "@/lib/current-user";
+import { currentUser, DEFAULT_USER } from "@/lib/current-user";
 import { type CalendarEntry, type DailyBrief, type EventInput, type EventPatch, type HomeInitialData, type MatterLite, type MatterOverview, type PersonLite, type TaskInput, type TaskPatch, type TeamUpdateView, type UpdateReply } from "./types";
 import { addDays, dateKey, daysBetween, toDate } from "./time";
 import { computeFallbackBrief, type BriefContext } from "./brief-fallback";
@@ -370,13 +370,24 @@ export function briefKey(date: string) {
   return `home:brief:${date}`;
 }
 
+/**
+ * Display name for the signed-in user: the person record, else the workspace owner recorded at
+ * setup. Empty (never the "Workspace owner" placeholder) before setup, so greetings stay neutral.
+ */
+export function displayUserName(userId = currentUser().id): string {
+  const me = db().people.get(userId);
+  if (me?.name) return me.name;
+  const cur = currentUser();
+  if (cur.id === DEFAULT_USER.id && cur.name === DEFAULT_USER.name) return "";
+  return cur.id === userId ? cur.name : "";
+}
+
 export function buildBriefContext(now = new Date(), userId = currentUser().id): BriefContext {
   const d = db();
-  const me = d.people.get(userId);
   return {
     now,
     userId,
-    userName: me?.name ?? currentUser().name,
+    userName: displayUserName(userId),
     events: listEvents({ from: dateKey(addDays(now, -1)), to: dateKey(addDays(now, 45)) }),
     tasks: d.tasks.all(),
     news: d.news.all(),
@@ -412,13 +423,13 @@ export function loadHomeInitialData(opts: { now?: Date; userId?: string; aiConfi
   const now = opts.now ?? new Date();
   const userId = opts.userId ?? currentUser().id;
   const d = db();
-  const me = d.people.get(userId);
   return {
     now: now.toISOString(),
     aiConfigured: opts.aiConfigured,
     intelInsights: hasPublishedInsights(d),
+    setup: { matters: d.matters.count(), documents: d.edocs.count(), people: d.people.count() },
     userId,
-    userName: me?.name ?? currentUser().name,
+    userName: displayUserName(userId),
     people: listPeopleLite(),
     matters: listMattersLite(),
     tasks: listTasks({ now }),

@@ -1,0 +1,30 @@
+"use client";
+import * as React from "react";
+import { usePathname, useRouter } from "next/navigation";
+
+/** Paths that stay reachable before first-run setup. */
+export function isSetupExempt(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return pathname === "/setup" || pathname.startsWith("/setup/") || pathname.startsWith("/api/");
+}
+
+/**
+ * First-run gate. Until the workspace has an owner, every page redirects to /setup; the page content is not
+ * rendered meanwhile so an unconfigured workspace never flashes empty module screens.
+ */
+export function SetupGate({ configured, children }: { configured: boolean; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const redirect = !configured && !isSetupExempt(pathname);
+  React.useEffect(() => {
+    if (redirect) router.replace("/setup");
+  }, [redirect, router]);
+  if (redirect) {
+    return (
+      <div className="flex h-full items-center justify-center text-[12.5px] text-muted-foreground" role="status">
+        Opening workspace setup…
+      </div>
+    );
+  }
+  return <>{children}</>;
+}

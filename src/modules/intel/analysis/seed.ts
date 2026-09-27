@@ -1,5 +1,6 @@
 import "server-only";
 import { db, type Database } from "@/lib/db";
+import { intelSampleMode } from "../config";
 import { INTEL_SEED_VERSION, ensureIntelSeeded } from "../seed";
 import { intelDocuments } from "../store";
 import { rebuildEntities } from "./entities";
@@ -33,8 +34,9 @@ export function seedIntelAnalysis(database: Database): void {
   database.kv.set(KEY, INTEL_ANALYSIS_SEED_VERSION);
 }
 
-/** Seed the analysis layer on databases that predate it (cheap kv check). */
+/** Seed the analysis layer on demo databases that predate it (cheap kv check). Production workspaces analyse only their own records, through the analysis jobs. */
 export function ensureIntelAnalysisSeeded(database: Database = db()): boolean {
+  if (!intelSampleMode()) return false;
   if (database.kv.get<number>(KEY) === INTEL_ANALYSIS_SEED_VERSION) return false;
   seedIntelAnalysis(database);
   return true;

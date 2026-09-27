@@ -789,7 +789,7 @@ export function deleteIssueCode(id: string): boolean {
 // ---------------------------------------------------------------------------
 
 export function getCodingRules(matterId: string): string {
-  return db().kv.get<string>(CODING_RULES_KEY(matterId)) ?? DEFAULT_CODING_RULES[matterId] ?? DEFAULT_CODING_RULES.default;
+  return db().kv.get<string>(CODING_RULES_KEY(matterId)) ?? DEFAULT_CODING_RULES.default;
 }
 
 export function setCodingRules(matterId: string, text: string) {

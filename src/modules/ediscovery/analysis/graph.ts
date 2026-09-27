@@ -15,16 +15,39 @@ export function normalizeName(name: string) {
   return name.toLowerCase().replace(/\(.*?\)/g, "").replace(/\b(dr|mr|mrs|ms|cmdr|chief|hon|esq)\.?\s+/g, "").replace(/[^a-z' -]/g, "").replace(/\s+/g, " ").trim();
 }
 
-/** Map a free-text name (as it appears in email headers) to a person id. */
+/**
+ * Map a free-text name (as it appears in email headers or model output) to a person.
+ *
+ * Evidence contract (constitution §23): `people` must be the matter's own people (`matterPeople`), never the
+ * tenant-wide directory, so a surname shared by people in two matters can never bind across them. Within that set
+ * the match is exact (normalized full name), or unambiguous: a surname or first-initial + surname that identifies
+ * exactly one person. Anything ambiguous stays unresolved (undefined) instead of binding to the closest name.
+ */
 export function resolvePersonName(name: string, people: Person[]): Person | undefined {
   const n = normalizeName(name);
   if (!n) return undefined;
-  const exact = people.find((p) => normalizeName(p.name) === n);
-  if (exact) return exact;
-  const last = n.split(" ").pop()!;
+  const exact = people.filter((p) => normalizeName(p.name) === n);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return undefined;
+  const tokens = n.split(" ");
+  const last = tokens[tokens.length - 1];
   const cands = people.filter((p) => normalizeName(p.name).split(" ").pop() === last);
-  if (cands.length === 1) return cands[0];
-  return cands.find((p) => normalizeName(p.name).startsWith(n.split(" ")[0]));
+  if (tokens.length === 1) return cands.length === 1 ? cands[0] : undefined;
+  // "J. Smith" / "Jane Smith" against a set with one Smith whose first name starts with the same letters.
+  const first = tokens[0].replace(/\.$/, "");
+  const byFirst = cands.filter((p) => normalizeName(p.name).split(" ")[0].startsWith(first));
+  return byFirst.length === 1 ? byFirst[0] : undefined;
+}
+
+/**
+ * Exact identity for header names outside a matter's known people: the normalized full name must match exactly one
+ * person in `people`. Used to widen a matter's people set from email headers without closest-name guessing.
+ */
+export function resolveExactPersonName(name: string, people: Person[]): Person | undefined {
+  const n = normalizeName(name);
+  if (!n || !n.includes(" ")) return undefined;
+  const hits = people.filter((p) => normalizeName(p.name) === n);
+  return hits.length === 1 ? hits[0] : undefined;
 }
 
 export function buildGraph(people: Person[], relationships: Relationship[], docs: GraphDocLite[], depositionsByWitness: Map<string, number> = new Map()): GraphData {

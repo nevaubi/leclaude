@@ -778,6 +778,14 @@ class RunExecution {
 
   // ───────────── approvals ─────────────
 
+  /** The approver id from the node config, template-resolved (`{{user.id}}` is the person who started the run). */
+  private resolveApprover(node: WorkflowNode, ctx: TemplateContext): string | undefined {
+    const raw = node.config.approverId ? String(node.config.approverId).trim() : "";
+    if (!raw) return undefined;
+    const id = raw.includes("{{") ? resolveText(raw, ctx, { missing: [], errors: [] }).trim() : raw;
+    return id || undefined;
+  }
+
   private async requestApproval(node: WorkflowNode, frame: Frame) {
     if (frame.parent) { this.fail({ kind: "step_error", message: "Approval steps inside a loop body are not supported.", code: "unsupported", retryable: false }, frame, node.id); return; }
     const ctx = this.templateContext(frame);
@@ -786,7 +794,7 @@ class RunExecution {
       nodeId: node.id,
       title: resolveText(String(node.config.title ?? "Approval"), ctx, report),
       message: resolveText(String(node.config.message ?? ""), ctx, report),
-      approverId: node.config.approverId ? String(node.config.approverId) : undefined,
+      approverId: this.resolveApprover(node, ctx),
       requestedAt: new Date().toISOString(),
     };
     this.run.approvals = [...(this.run.approvals ?? []).filter((a) => a.nodeId !== node.id), approval];
@@ -802,7 +810,7 @@ class RunExecution {
    * show exactly what failed verification.
    */
   private pauseForTrust(node: WorkflowNode, frame: Frame, e: TrustGateError) {
-    const approverId = node.config.approverId ? String(node.config.approverId) : WORKFLOW_CURRENT_USER.id;
+    const approverId = this.resolveApprover(node, this.templateContext(frame)) ?? this.run.triggeredById ?? WORKFLOW_CURRENT_USER.id;
     const title = (node.type as string) === "logic.review" ? String(node.config.title || `Trust review: ${node.label}`) : `Trust gate: ${node.label}`;
     const approval = { nodeId: node.id, title, message: e.message, approverId, requestedAt: new Date().toISOString(), kind: "trust-gate", reasons: e.reasons, stepIds: e.stepIds } as RunApproval;
     this.run.approvals = [...(this.run.approvals ?? []).filter((a) => a.nodeId !== node.id), approval];

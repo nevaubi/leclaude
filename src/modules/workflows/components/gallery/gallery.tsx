@@ -19,7 +19,7 @@ import { describeSchedule } from "../../schedule";
 import { apiJson, ApiError, useWorkflowMeta } from "../../hooks";
 import type { RunSummary } from "../../service";
 import type { WorkflowListItem, WorkflowStats } from "../../types";
-import { CATEGORY_LABEL, formatTokens, formatUsd, NodeTypeStrip, RunStatusBadge, WorkflowStatusBadge } from "../shared";
+import { CATEGORY_LABEL, formatTokens, formatUsd, RunStatusBadge, WorkflowStatusBadge } from "../shared";
 import { RunsTable } from "../run/runs-table";
 import { DescribeWorkflowDialog } from "./describe-dialog";
 import { filterWorkflows, startHref } from "./gallery-helpers";
@@ -100,7 +100,6 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
   const mineColumns = React.useMemo<DataTableColumn<WorkflowListItem>[]>(() => [
     { id: "name", header: "Workflow", minWidth: 200, sortable: true, accessor: (w) => w.name, render: (w) => (
       <span className="flex min-w-0 items-center gap-2" title={w.description}>
-        <NodeTypeStrip types={w.nodeTypes} max={4} className="hidden shrink-0 xl:flex" />
         <span className="truncate font-medium">{w.name}</span>
       </span>
     ) },
@@ -138,15 +137,17 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
       </TopbarSlot>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {/* Stat line: plain tabular text. */}
-        <div className="hairline-b flex h-9 shrink-0 flex-wrap items-center gap-x-5 gap-y-1 overflow-hidden px-4 text-[12px] md:px-5" aria-label="Workflow statistics">
-          <StatInline label="Workflows" value={stats.workflows} hint={`${stats.active} active · ${stats.templates} templates · ${stats.system} system`} />
-          <StatInline label="Runs this week" value={stats.runsThisWeek} hint={`${stats.succeededThisWeek} ok · ${stats.failedThisWeek} failed`} />
-          <StatInline label="Success" value={`${stats.successRate}%`} hint={`${stats.runs} runs`} />
-          <StatInline label="Awaiting approval" value={stats.waitingApproval} hint={stats.running ? `${stats.running} running` : undefined} tone={stats.waitingApproval ? "warning" : undefined} />
-          <StatInline label="AI usage (7d)" value={formatTokens(stats.tokensThisWeek)} hint={`≈ ${formatUsd(stats.costThisWeekUsd)}`} />
-          <StatInline label="Next scheduled" value={stats.nextScheduled[0] ? <RelativeTime value={stats.nextScheduled[0].at} /> : "—"} hint={stats.nextScheduled[0]?.name} />
-        </div>
+        {/* Stat line: plain tabular text, only for what exists (no success rate before there are runs). */}
+        {(stats.runs > 0 || stats.waitingApproval > 0 || stats.nextScheduled.length > 0) && (
+          <div className="hairline-b flex h-9 shrink-0 flex-wrap items-center gap-x-5 gap-y-1 overflow-hidden px-4 text-[12px] md:px-5" aria-label="Workflow statistics">
+            {stats.runs > 0 && <StatInline label="Runs this week" value={stats.runsThisWeek} hint={stats.runsThisWeek ? `${stats.succeededThisWeek} succeeded · ${stats.failedThisWeek} failed` : undefined} />}
+            {stats.runs > 0 && <StatInline label="Success" value={`${stats.successRate}%`} hint={`of ${stats.runs} run${stats.runs === 1 ? "" : "s"}`} />}
+            {stats.waitingApproval > 0 && <StatInline label="Awaiting approval" value={stats.waitingApproval} tone="warning" />}
+            {stats.running > 0 && <StatInline label="Running" value={stats.running} />}
+            {stats.tokensThisWeek > 0 && <StatInline label="AI usage (7d)" value={formatTokens(stats.tokensThisWeek)} hint={`≈ ${formatUsd(stats.costThisWeekUsd)}`} />}
+            {stats.nextScheduled[0] && <StatInline label="Next scheduled" value={<RelativeTime value={stats.nextScheduled[0].at} />} hint={stats.nextScheduled[0].name} />}
+          </div>
+        )}
 
         {/* Tabs + filters: one 36px toolbar. */}
         <div className="hairline-b flex min-h-9 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-1 md:px-5">
@@ -187,7 +188,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
             <div className="grid min-h-full gap-4 p-4 md:p-5 xl:grid-cols-[minmax(0,1fr)_300px]">
               <div className="flex min-h-[360px] min-w-0 flex-col">
                 {shownMine.length === 0 ? (
-                  <EmptyState icon={WorkflowIcon} title={term || category ? "No workflows match" : archivedCount ? "No active workflows" : "No workflows yet"} description={term || category ? "Try another search or category." : archivedCount ? `${archivedCount} archived workflow${archivedCount === 1 ? " is" : "s are"} hidden — use the Archived filter to see ${archivedCount === 1 ? "it" : "them"}.` : "Start from a template or describe what you need."} action={<div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setTab("templates")}>Browse templates</Button><Button size="sm" onClick={() => setDescribeOpen(true)}><PenLine className="size-3.5" /> Describe a workflow</Button></div>} />
+                  <EmptyState icon={WorkflowIcon} title={term || category ? "No workflows match" : archivedCount ? "No active workflows" : "No workflows yet"} description={term || category ? "Try another search or category." : archivedCount ? `${archivedCount} archived workflow${archivedCount === 1 ? " is" : "s are"} hidden — use the Archived filter to see ${archivedCount === 1 ? "it" : "them"}.` : "Start from one of the templates, or describe what you need and a workflow is drafted for you."} action={term || category || archivedCount ? undefined : <div className="flex gap-2"><Button size="sm" onClick={() => setTab("templates")}>Start from a template</Button><Button size="sm" variant="outline" onClick={() => setDescribeOpen(true)}><PenLine className="size-3.5" /> Describe a workflow</Button></div>} />
                 ) : (
                   <DataTable<WorkflowListItem>
                     rows={shownMine}
@@ -227,7 +228,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
                 <RecentRuns runs={recentRuns} />
                 {stats.nextScheduled.length > 0 && (
                   <section>
-                    <div className="mb-1 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>Upcoming</span><span className="normal-case tracking-normal tabular">{stats.nextScheduled.length}</span></div>
+                    <div className="mb-1 flex items-center justify-between text-[12px] font-medium"><span>Upcoming</span><span className="tabular text-muted-foreground">{stats.nextScheduled.length}</span></div>
                     <ul className="divide-y divide-line-quiet">
                       {stats.nextScheduled.map((s) => <li key={s.workflowId} className="flex h-7 items-center justify-between gap-2 text-[12px]"><Link href={`/workflows/${s.workflowId}`} className="min-w-0 truncate hover:underline">{s.name}{s.system && <span className="ml-1 text-[10.5px] text-muted-foreground">system</span>}</Link><span className="shrink-0 tabular text-[11px] text-muted-foreground"><RelativeTime value={s.at} /></span></li>)}
                     </ul>
@@ -239,7 +240,7 @@ export function WorkflowsGallery({ templates, mine: mineInitial, system: systemI
 
           {tab === "system" && (
             <div className="flex min-h-full flex-col gap-3 p-4 md:p-5">
-              <p className="text-[12px] text-muted-foreground">The platform&apos;s own background work, expressed as workflows: authority refresh, docket and regulatory watches, profiles, chronologies, verification sweeps and the team digest. Each run is stewarded, verified and audited like any other; pause one with its switch, or open it to see the steps.</p>
+              <p className="text-[12px] text-muted-foreground">Background work the platform runs on a schedule. Pause one with its switch, or open it to see the steps.</p>
               {shownSystem.length === 0 ? (
                 <EmptyState icon={CalendarClock} title={term ? "No automations match" : "No system workflows"} description={term ? "Try another search." : "System workflows are seeded with the database."} />
               ) : (
@@ -288,14 +289,13 @@ function StatInline({ label, value, hint, tone }: { label: string; value: React.
 }
 
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} aria-pressed={active} className={cn("h-6 rounded-[var(--radius-chip)] border px-2 text-[11px] font-medium transition-colors cursor-pointer", active ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-accent hover:text-foreground")}>{children}</button>;
+  return <button type="button" onClick={onClick} aria-pressed={active} className={cn("h-6 cursor-pointer px-1.5 text-[12px] transition-colors", active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>{children}</button>;
 }
 
 function TemplateCard({ t, onCustomize, busy }: { t: WorkflowListItem; onCustomize: () => void; busy: boolean }) {
   return (
     <div className="group flex flex-col gap-1.5 rounded-md border bg-card p-3 transition-colors hover:border-foreground/20">
       <div className="flex items-start gap-2">
-        <NodeTypeStrip types={t.nodeTypes} max={4} className="mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
           <Link href={startHref(t)} className="block truncate text-[13px] font-semibold leading-tight hover:underline underline-offset-2" title={t.name}>{t.name}</Link>
           <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span>{CATEGORY_LABEL[t.category] ?? t.category}</span><span aria-hidden>·</span><span className="tabular">{t.nodeCount} steps</span>{t.usesAI && <><span aria-hidden>·</span><span>AI</span></>}{t.hasApproval && <><span aria-hidden>·</span><span className="inline-flex items-center gap-0.5"><UserCheck className="size-3" /> review</span></>}{t.schedule && <><span aria-hidden>·</span><span className="inline-flex items-center gap-0.5"><CalendarClock className="size-3" /> scheduled</span></>}</div>
@@ -316,8 +316,8 @@ function TemplateCard({ t, onCustomize, busy }: { t: WorkflowListItem; onCustomi
 function RecentRuns({ runs }: { runs: RunSummary[] }) {
   return (
     <section>
-      <div className="mb-1 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>Recent runs</span><Link href="/workflows?tab=runs" className="normal-case tracking-normal text-primary hover:underline">All runs</Link></div>
-      {runs.length === 0 ? <div className="text-[12px] text-muted-foreground">No runs yet.</div> : (
+      <div className="mb-1 flex items-center justify-between text-[12px] font-medium"><span>Recent runs</span>{runs.length > 0 && <Link href="/workflows?tab=runs" className="font-normal text-muted-foreground hover:text-foreground hover:underline">All runs</Link>}</div>
+      {runs.length === 0 ? <div className="text-[12px] text-muted-foreground">No runs yet. Runs appear here when a workflow starts.</div> : (
         <ul className="divide-y divide-line-quiet">
           {runs.map((r) => (
             <li key={r.id}>

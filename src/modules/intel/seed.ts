@@ -4,14 +4,21 @@ import { indexDocuments } from "@/lib/ai/vector-store";
 import { contentHash } from "@/lib/integrity/hash";
 import { MATTERS } from "@/lib/seed/ids";
 import { chunkIndexText, chunkIntelText, normalizeText } from "./chunk";
+import { intelSampleMode } from "./config";
 import { computeNextRunAt } from "./schedule";
 import { SEED_DOCS, SEED_ENTITIES, type SeedSourceKey } from "./seed-corpus";
-import { docMetaForVector, textBlobIdFor } from "./store";
-import { INTEL_COLLECTIONS, INTEL_VECTOR_NAMESPACE, type IntelChunk, type IntelDocument, type IntelEntity, type IntelSource } from "./types";
+import { deleteDocument, docMetaForVector, textBlobIdFor } from "./store";
+import { INTEL_COLLECTIONS, INTEL_VECTOR_NAMESPACE, type IntelChunk, type IntelDocument, type IntelEntity, type IntelInsight, type IntelRelation, type IntelSource } from "./types";
 
 /**
- * Intel seeds: one system source per adapter (enabled where no key is needed)
- * and the offline sample corpus (documents, chunks, keyword index, entities).
+ * Intel seeds, two modes (LECLAUDE_SEED, see src/lib/seed/index.ts):
+ * - demo: one sample-configured system source per adapter (enabled where no key is needed) and the
+ *   offline sample corpus (documents, chunks, keyword index, entities). Test suite and demos only.
+ * - reference (production default): the same source catalog with neutral names and empty
+ *   configuration, all disabled except the local folders when LECLAUDE_CORPUS_DIRS is set. No
+ *   documents, entities or insights are created; the layer fills only from sources the firm turns on
+ *   in Settings → Data & automation. Databases that received the sample corpus before this split are
+ *   cleaned once (purgeSampleIntel).
  * Idempotent: stable ids, putMany; user edits to system sources are kept.
  */
 export const INTEL_SEED_VERSION = 1;
@@ -33,7 +40,7 @@ export const SEED_SOURCE_IDS: Record<SeedSourceKey, string> = {
 
 const hasEnv = (k: string) => Boolean(process.env[k]?.trim());
 
-/** The twelve system sources with sensible schedules. Enabled only where no key is needed. */
+/** The twelve sample-configured system sources (demo mode). Enabled only where no key is needed. */
 export function systemSources(now = new Date()): IntelSource[] {
   const ts = now.toISOString();
   const base = (key: SeedSourceKey, s: Omit<IntelSource, "id" | "status" | "health" | "stats" | "createdAt" | "updatedAt" | "system" | "nextRunAt">, order: number): IntelSource => ({
@@ -69,6 +76,116 @@ export function systemSources(now = new Date()): IntelSource[] {
     base("localCorpus", { adapter: "local-corpus", name: "Local document folders", description: "The firm's document folders (LECLAUDE_CORPUS_DIRS or the folders below), indexed incrementally and mapped to matters by folder name.", config: { dirs: corpusDirs, recursive: true, maxFileMb: 25, maxFiles: 500, skipHidden: true, matterMap: { "AFFF-PFAS": MATTERS.afff, "Depo-Provera": MATTERS.depo, "Northgate": MATTERS.northgate, "Project-Harbor": MATTERS.harbor, "Sterling": MATTERS.sterling }, maxTextChars: 400_000 }, schedule: { every: "daily", at: "02:00" }, enabled: corpusDirs.length > 0 }, 10),
     base("webList", { adapter: "web-list", name: "Watched web pages: EPA PFAS and FDA drug safety", description: "Agency hub pages kept current as web_page documents.", config: { urls: [{ url: "https://www.epa.gov/pfas", title: "EPA — Per- and Polyfluoroalkyl Substances (PFAS)", matterId: MATTERS.afff, tags: ["pfas"] }, { url: "https://www.fda.gov/drugs/drug-safety-and-availability", title: "FDA — Drug Safety and Availability", matterId: MATTERS.depo, tags: ["fda"] }], kind: "web_page", maxTextChars: 120_000, prefer: "auto" }, schedule: { every: "weekly", at: "01:30", weekday: 3 }, enabled: true }, 11),
   ];
+}
+
+/**
+ * Production source catalog: one disabled, unconfigured source per adapter (same stable ids as the
+ * demo catalog so the system workflows resolve them). Nothing runs until the firm enables a source;
+ * the local folders are enabled only when LECLAUDE_CORPUS_DIRS names folders.
+ */
+export function referenceSources(now = new Date()): IntelSource[] {
+  const ts = now.toISOString();
+  const corpusDirs = (process.env.LECLAUDE_CORPUS_DIRS ?? "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+  const base = (key: SeedSourceKey, s: Pick<IntelSource, "adapter" | "name" | "description" | "config" | "schedule"> & { enabled?: boolean }, order: number): IntelSource => {
+    const enabled = Boolean(s.enabled);
+    return {
+      id: SEED_SOURCE_IDS[key],
+      adapter: s.adapter,
+      name: s.name,
+      description: s.description,
+      config: s.config,
+      schedule: s.schedule,
+      enabled,
+      status: enabled ? "idle" : "disabled",
+      health: { ok: true, consecutiveFailures: 0 },
+      nextRunAt: enabled ? new Date(now.getTime() + (order + 1) * 90_000).toISOString() : computeNextRunAt(s.schedule, now)?.toISOString(),
+      stats: { documents: 0, chunks: 0, entities: 0, lastAdded: 0 },
+      system: true,
+      createdAt: ts,
+      updatedAt: ts,
+    };
+  };
+  const configure = "Add queries to this source, then enable it.";
+  return [
+    base("clOpinions", { adapter: "courtlistener-opinions", name: "Case law (CourtListener opinions)", description: `Opinions matching saved queries. ${configure}`, config: { queries: [] }, schedule: { every: "daily", at: "05:00" } }, 0),
+    base("clDockets", { adapter: "courtlistener-dockets", name: "Docket watch (CourtListener RECAP)", description: "Follows the dockets of your matters and watched docket numbers; new entries become records.", config: { docketNumbers: [], includeMatters: true, includeWatches: true }, schedule: { every: "1h" } }, 1),
+    base("clJudges", { adapter: "courtlistener-judges", name: "Judge profiles (CourtListener)", description: "Profiles for judges named on your dockets and opinions.", config: { names: [], fromDocuments: true }, schedule: { every: "weekly", at: "03:00", weekday: 1 } }, 2),
+    base("ecfr", { adapter: "ecfr", name: "Regulations (eCFR)", description: `Tracked CFR sections kept current. ${configure}`, config: { sections: [], queries: [] }, schedule: { every: "daily", at: "04:00" } }, 3),
+    base("federalRegister", { adapter: "federal-register", name: "Federal Register", description: `Rules, proposed rules and notices matching saved queries. ${configure}`, config: { queries: [], agencies: [] }, schedule: { every: "daily", at: "06:30" } }, 4),
+    base("govinfo", { adapter: "govinfo", name: "Statutes (GovInfo)", description: `U.S. Code sections from GovInfo. ${configure}`, config: { queries: [] }, schedule: { every: "weekly", at: "03:30", weekday: 2 } }, 5),
+    base("openfda", { adapter: "openfda-recalls", name: "FDA enforcement (openFDA)", description: `Recalls and labeling for watched products. ${configure}`, config: { products: [], firms: [], labels: [] }, schedule: { every: "daily", at: "05:30" } }, 6),
+    base("jpml", { adapter: "jpml-mdls", name: "JPML pending MDL list", description: "The JPML pending MDL list, linked to your matters by MDL number. Live page only.", config: { watch: [], allowFallback: false }, schedule: { every: "weekly", at: "02:30", weekday: 1 } }, 7),
+    base("courtRules", { adapter: "court-rules", name: "Court rules and standing orders", description: `Local rules and standing orders for your courts. ${configure}`, config: { rules: [] }, schedule: { every: "weekly", at: "02:00", weekday: 0 } }, 8),
+    base("news", { adapter: "news", name: "News on your matters", description: "Recent news for your matters (needs TAVILY_API_KEY or FIRECRAWL_API_KEY).", config: { queries: [], includeMatters: true }, schedule: { every: "daily", at: "07:00" } }, 9),
+    base("localCorpus", { adapter: "local-corpus", name: "Local document folders", description: "The firm's document folders from LECLAUDE_CORPUS_DIRS, indexed incrementally and mapped to matters by folder name.", config: { dirs: corpusDirs, recursive: true, matterMap: {} }, schedule: { every: "daily", at: "02:00" }, enabled: corpusDirs.length > 0 }, 10),
+    base("webList", { adapter: "web-list", name: "Watched web pages", description: `Web pages kept current as records. ${configure}`, config: { urls: [] }, schedule: { every: "weekly", at: "01:30", weekday: 3 } }, 11),
+  ];
+}
+
+export const INTEL_REFERENCE_VERSION = 1;
+const REFERENCE_KEY = "intel:reference:version";
+
+export interface SamplePurgeReport { documents: number; entities: number; relations: number; insights: number; sources: number }
+
+/**
+ * Remove the bundled sample corpus and everything derived from it from a production (non-demo)
+ * database: seeded documents (with chunks, blobs and vectors), documents fetched by sources that
+ * still carry the sample configuration, seeded entities, and relations/insights whose evidence no
+ * longer resolves. Sample-configured system sources are replaced by the neutral catalog. Records
+ * from sources the firm configured itself are kept.
+ */
+export function purgeSampleIntel(database: Database = db(), now = new Date()): SamplePurgeReport {
+  const sources = database.collection<IntelSource>(INTEL_COLLECTIONS.sources);
+  const documents = database.collection<IntelDocument>(INTEL_COLLECTIONS.documents);
+  const entities = database.collection<IntelEntity>(INTEL_COLLECTIONS.entities);
+  const relations = database.collection<IntelRelation>(INTEL_COLLECTIONS.relations);
+  const insights = database.collection<IntelInsight>(INTEL_COLLECTIONS.insights);
+  const report: SamplePurgeReport = { documents: 0, entities: 0, relations: 0, insights: 0, sources: 0 };
+
+  const sample = new Map(systemSources(now).map((s) => [s.id, JSON.stringify(s.config)]));
+  const sampleSourceIds = new Set(sources.all().filter((s) => sample.get(s.id) === JSON.stringify(s.config)).map((s) => s.id));
+
+  for (const d of documents.all()) {
+    if (d.meta?.seeded === true || sampleSourceIds.has(d.sourceId)) { if (deleteDocument(d.id)) report.documents++; }
+  }
+  const alive = (docId: string) => documents.has(docId);
+  for (const e of entities.all()) {
+    const live = e.docIds.filter(alive);
+    if (e.attributes?.seeded || (e.docIds.length > 0 && live.length === 0)) { entities.delete(e.id); report.entities++; }
+    else if (live.length !== e.docIds.length) entities.put({ ...e, docIds: live, updatedAt: now.toISOString() });
+  }
+  for (const r of relations.all()) {
+    if (!r.evidence.some((ev) => alive(ev.docId)) || !entities.has(r.from) || !entities.has(r.to)) { relations.delete(r.id); report.relations++; }
+  }
+  for (const i of insights.all()) {
+    const evidenceGone = i.evidence.length > 0 && !i.evidence.some((ev) => alive(ev.docId));
+    const scopeGone = i.evidence.length === 0 && (i.scope.entityIds ?? []).length > 0 && !(i.scope.entityIds ?? []).some((id) => entities.has(id));
+    if (evidenceGone || scopeGone) { insights.delete(i.id); report.insights++; }
+  }
+  const neutral = new Map(referenceSources(now).map((s) => [s.id, s]));
+  for (const id of sampleSourceIds) {
+    const next = neutral.get(id);
+    if (next) { sources.put(next); report.sources++; }
+  }
+  return report;
+}
+
+/** Production path of ensureIntelSeeded: neutral source catalog, one-time purge of any sample corpus. */
+function ensureIntelReference(database: Database): boolean {
+  if (database.kv.get<number>(REFERENCE_KEY) === INTEL_REFERENCE_VERSION) return false;
+  const now = new Date();
+  if (database.kv.get<number>("intel:seed:version") != null) {
+    const r = purgeSampleIntel(database, now);
+    if (r.documents || r.entities || r.insights || r.relations || r.sources) console.log(`[intel] removed sample data from a production workspace: ${r.documents} records, ${r.entities} entities, ${r.relations} relations, ${r.insights} insights; ${r.sources} sources reset`);
+    database.kv.delete("intel:seed:version");
+    database.kv.delete("intel:analysis:seed:version");
+    if (r.documents || r.insights) { database.kv.delete("intel:analysis:lastRun"); database.kv.delete("intel:last-sweep"); }
+  }
+  const sources = database.collection<IntelSource>(INTEL_COLLECTIONS.sources);
+  const missing = referenceSources(now).filter((s) => !sources.has(s.id));
+  if (missing.length) sources.putMany(missing);
+  database.kv.set(REFERENCE_KEY, INTEL_REFERENCE_VERSION);
+  return true;
 }
 
 export function seedIntel(database: Database): void {
@@ -164,8 +281,12 @@ export function seedIntel(database: Database): void {
   database.kv.set("intel:seed:version", INTEL_SEED_VERSION);
 }
 
-/** Seed the intel layer on databases created before the intel seeder was registered (cheap kv check). */
+/**
+ * Seed the intel layer lazily (cheap kv check). Demo mode: the sample corpus, for databases created
+ * before the intel seeder was registered. Production: the neutral source catalog only.
+ */
 export function ensureIntelSeeded(database: Database = db()): boolean {
+  if (!intelSampleMode()) return ensureIntelReference(database);
   if (database.kv.get<number>("intel:seed:version") === INTEL_SEED_VERSION) return false;
   seedIntel(database);
   return true;
