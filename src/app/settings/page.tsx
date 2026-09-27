@@ -18,6 +18,8 @@ import { DataAutomationSection } from "@/modules/settings/data-automation";
 import { AiSettings } from "@/modules/settings/ai-settings";
 import { WorkspaceSettings } from "@/modules/settings/workspace-settings";
 import { providersPayload } from "@/modules/settings/providers";
+import { DemoDataSection } from "@/modules/settings/demo-data";
+import { demoStatus } from "@/modules/demo";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings" };
@@ -35,6 +37,7 @@ export default async function SettingsPage() {
   const signedIn = me.id === DEFAULT_USER.id && me.name === DEFAULT_USER.name ? "Not set up" : me.name;
   const workspace = workspaceView();
   const providers = providersPayload();
+  const demo = demoStatus();
   const matters = d.matters.all().map((m) => ({ id: m.id, shortName: m.shortName }));
   const counts: { label: string; value: number }[] = [
     { label: "Matters", value: d.matters.count() }, { label: "People", value: d.people.count() }, { label: "E-discovery docs", value: d.edocs.count() },
@@ -56,8 +59,13 @@ export default async function SettingsPage() {
               <WorkspaceSettings initial={workspace} />
             </SettingsSection>
 
+            <SettingsSection id="demo" title="Demo data" description="Adds a sample Apple antitrust matter with synthetic documents, depositions and work product for demonstrations; remove it at any time.">
+              <DemoDataSection initial={demo} />
+            </SettingsSection>
+
             <SettingsSection id="team" title="Team" bare>
-              <TeamSettings />
+              {/* Remounts (and refetches) when demo data is loaded or removed, so the demo team appears without a reload. */}
+              <TeamSettings key={demo.loadedAt ?? "no-demo"} />
             </SettingsSection>
 
             <SettingsSection id="ai" title="AI" description="Model providers are read from the environment; edit .env.local and restart to change them. Outputs carry provenance and are verified before they are trusted.">

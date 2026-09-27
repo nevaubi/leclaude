@@ -48,7 +48,7 @@ export const DEMO_DEPOSITIONS = {
 } as const;
 
 /** Bates prefix for the defendant's production in the consumer matter. */
-export const DEMO_BATES_PREFIX = "APL-DEMO";
+export const DEMO_BATES_PREFIX = "APLD"; // 2–8 letters: what the Bates parser and cross-reference scanner accept
 
 /** Id prefix every demo record uses, so removal can also sweep by prefix. */
 export const DEMO_ID_PREFIX = "demo_apl_";

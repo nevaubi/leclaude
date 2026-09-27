@@ -1,0 +1,358 @@
+import "server-only";
+/**
+ * Apple antitrust demonstration pack: load, status and removal (Settings → Demo data).
+ *
+ * The pack is loaded only on request by the owner, a partner or an admin (never implicitly). Every record it writes
+ * has a stable id, so loading again updates the same records in place. Every written id is recorded, by collection,
+ * in the manifest (kv "demo:apple-antitrust:manifest"); removal deletes exactly those records (plus the blobs and
+ * search-index rows of the demo documents) and the manifest, and never the workspace owner.
+ *
+ * Everything runs synchronously against the local mirror except PDF generation and search indexing, so a load or a
+ * removal fits in one serverless request; `withDb` persists the writes to the shared store when the request ends.
+ */
+import { db } from "@/lib/db";
+import type { Principal } from "@/lib/auth/types";
+import type { EDocument, LibraryItem, OfficeDocument, OfficeKind } from "@/lib/types/domain";
+import { indexDocuments, removeDocument, VECTOR_COLLECTIONS } from "@/lib/ai/vector-store";
+import { audit } from "@/lib/integrity/audit";
+import { getWorkspace } from "@/lib/workspace";
+import { ensureLibraryStructure } from "@/modules/library/service";
+import { createOfficeDoc, deleteOfficeDoc } from "@/modules/office/shared/docs-service";
+import { settingsForTemplate } from "@/modules/office/word/constants";
+import { generatePdf } from "@/modules/office/pdf/generate";
+import { modelFromBytes } from "@/modules/office/pdf/service";
+import { matterRetrievalScope } from "@/modules/ediscovery/service";
+import { indexTextFor } from "@/modules/ediscovery/privilege";
+import { buildAppleEdiscoveryDemo, type AppleEdiscoveryDemo } from "@/modules/demo/ediscovery";
+import { DEMO_CUSTODIANS, DEMO_MATTERS, DEMO_PACK } from "./ids";
+import { buildDemoWorkspace, demoMeta, emailDomainOf, DEMO_FOLDERS, type DemoBuildContext } from "./workspace";
+import { damagesWorkbook, keyDocRows, researchMemo, reyesOutlineSpec, rfpDraft, strategyDeck, DEMO_OFFICE_IDS, DEMO_OUTLINE_BLOB } from "./workspace/office";
+
+export const DEMO_MANIFEST_KEY = `demo:${DEMO_PACK}:manifest`;
+export const DEMO_MANIFEST_VERSION = 1;
+
+/** Collection names as stored (the `docs.collection` column), for the typed handles in `db()`. */
+const C = {
+  people: "people",
+  matters: "matters",
+  tasks: "tasks",
+  events: "events",
+  updates: "team_updates",
+  library: "library_items",
+  officeDocs: "office_documents",
+  officeVersions: "office_versions",
+  officeComments: "office_comments",
+  edocs: "ediscovery_documents",
+  depositions: "depositions",
+  timeline: "timeline_events",
+  relationships: "relationships",
+  conflicts: "conflicts",
+  issueCodes: "issue_codes",
+  privilegeLog: "privilege_log",
+} as const;
+
+export interface DemoManifest {
+  pack: typeof DEMO_PACK;
+  version: number;
+  loadedAt: string;
+  loadedBy: { id: string; name: string };
+  /** Written record ids by collection name. */
+  records: Record<string, string[]>;
+  kv: string[];
+  blobs: string[];
+  /** Search-index rows by vector collection. */
+  vectors: Record<string, string[]>;
+}
+
+export type DemoCounts = {
+  matters: number;
+  teamMembers: number;
+  people: number;
+  tasks: number;
+  events: number;
+  updates: number;
+  libraryItems: number;
+  officeDocs: number;
+  edocs: number;
+  depositions: number;
+  timeline: number;
+  relationships: number;
+  conflicts: number;
+  issueCodes: number;
+  privilegeLog: number;
+  indexed: number;
+};
+
+export interface DemoStatus {
+  loaded: boolean;
+  loadedAt: string | null;
+  loadedBy: string | null;
+  counts: DemoCounts | null;
+  matterId: string;
+  relatedMatterId: string;
+}
+
+export class DemoPackError extends Error {
+  constructor(message: string, readonly status: number, readonly code: string) {
+    super(message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// E-discovery half (built by src/modules/demo/ediscovery)
+// ---------------------------------------------------------------------------
+
+type Rec = { id: string } & Record<string, unknown>;
+
+/** The e-discovery pack normalized to what the loader writes. */
+interface EdiscoveryPart {
+  collections: Record<string, Rec[]>;
+  kv: Record<string, unknown>;
+  blobs: { id: string; bytes: Uint8Array; mime: string; name?: string; meta?: Record<string, unknown> }[];
+}
+
+/** The e-discovery pack's typed bundle as collections by stored name (its module-private collections included). */
+function normalizeEdiscovery(b: AppleEdiscoveryDemo): EdiscoveryPart {
+  const out: EdiscoveryPart = { collections: {}, kv: { ...b.kv }, blobs: [] };
+  const add = (name: string, recs: { id: string }[]) => { if (recs.length) out.collections[name] = [...(out.collections[name] ?? []), ...(recs as Rec[])]; };
+  add(C.edocs, b.edocs);
+  add(C.issueCodes, b.issueCodes);
+  add(C.depositions, b.depositions);
+  add(C.timeline, b.timeline);
+  add(C.relationships, b.relationships);
+  add(C.conflicts, b.conflicts);
+  add(C.privilegeLog, b.privilegeLog);
+  for (const c of b.collections) add(c.collection, c.docs);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Status
+// ---------------------------------------------------------------------------
+
+function readManifest(): DemoManifest | null {
+  const m = db().kv.get<DemoManifest>(DEMO_MANIFEST_KEY);
+  return m && typeof m === "object" && m.records ? m : null;
+}
+
+function present(name: string, ids: string[] | undefined): number {
+  if (!ids?.length) return 0;
+  const col = db().collection<{ id: string }>(name);
+  let n = 0;
+  for (const id of ids) if (col.has(id)) n++;
+  return n;
+}
+
+function countsFor(m: DemoManifest): DemoCounts {
+  const r = m.records;
+  const people = db().collection<{ id: string; role?: string }>(C.people);
+  const team = (r[C.people] ?? []).filter((id) => { const p = people.get(id); return !!p && (p.role === "attorney" || p.role === "paralegal" || p.role === "staff"); }).length;
+  const libraryIds = r[C.library] ?? [];
+  return {
+    matters: present(C.matters, r[C.matters]),
+    teamMembers: team,
+    people: present(C.people, r[C.people]),
+    tasks: present(C.tasks, r[C.tasks]),
+    events: present(C.events, r[C.events]),
+    updates: present(C.updates, r[C.updates]),
+    libraryItems: present(C.library, libraryIds),
+    officeDocs: present(C.officeDocs, r[C.officeDocs]),
+    edocs: present(C.edocs, r[C.edocs]),
+    depositions: present(C.depositions, r[C.depositions]),
+    timeline: present(C.timeline, r[C.timeline]),
+    relationships: present(C.relationships, r[C.relationships]),
+    conflicts: present(C.conflicts, r[C.conflicts]),
+    issueCodes: present(C.issueCodes, r[C.issueCodes]),
+    privilegeLog: present(C.privilegeLog, r[C.privilegeLog]),
+    indexed: (m.vectors[VECTOR_COLLECTIONS.edocs] ?? []).length,
+  };
+}
+
+export function demoStatus(): DemoStatus {
+  const m = readManifest();
+  return { loaded: !!m, loadedAt: m?.loadedAt ?? null, loadedBy: m?.loadedBy.name ?? null, counts: m ? countsFor(m) : null, matterId: DEMO_MATTERS.consumer, relatedMatterId: DEMO_MATTERS.doj };
+}
+
+// ---------------------------------------------------------------------------
+// Load
+// ---------------------------------------------------------------------------
+
+interface OfficeSpec { id: string; key: string; kind: OfficeKind; title: string; folder: string; tags: string[]; content: () => unknown | Promise<unknown>; meta?: Record<string, unknown> }
+
+export interface LoadResult { status: DemoStatus; durationMs: number }
+
+export async function loadDemoPack({ principal }: { principal: Principal }): Promise<LoadResult> {
+  const started = Date.now();
+  const d = db();
+  const ws = getWorkspace();
+  if (!ws.configured || !ws.owner) throw new DemoPackError("Set up the workspace before loading demo data.", 409, "not_configured");
+  const owner = ws.owner;
+  const previous = readManifest();
+  const now = new Date();
+  const ctx: DemoBuildContext = { now, ownerId: owner.id, ownerName: owner.name, firmName: ws.firmName, emailDomain: emailDomainOf(owner.email) };
+
+  // System folders (Matters root and friends) are structural, not demo records: create them first so they are
+  // never captured in the manifest.
+  ensureLibraryStructure();
+
+  const records: Record<string, Set<string>> = {};
+  const track = (name: string, ids: Iterable<string>) => { const s = (records[name] ??= new Set()); for (const id of ids) s.add(id); };
+  const put = <T extends { id: string }>(name: string, docs: T[]) => {
+    if (!docs.length) return;
+    d.collection<T>(name).putMany(docs);
+    track(name, docs.map((x) => x.id));
+  };
+
+  // E-discovery half first: the calendar uses the transcripts' own deposition dates.
+  const ed = normalizeEdiscovery(buildAppleEdiscoveryDemo());
+  const edDocs = (ed.collections[C.edocs] ?? []) as unknown as EDocument[];
+  const depositions = (ed.collections[C.depositions] ?? []) as unknown as { id: string; witnessId: string; witnessName: string; date: string; location?: string }[];
+
+  const takenEmails = new Set(d.people.all().filter((p) => !p.id.includes("_demo_") && p.email).map((p) => p.email!.toLowerCase()));
+  const w = buildDemoWorkspace(ctx, { takenEmails, depositions });
+
+  // People: the parties floor, then the e-discovery pack's richer records for the same ids, then the team.
+  // The workspace owner is never written or recorded by the pack.
+  const people = new Map<string, Rec>();
+  for (const p of [...w.parties, ...((ed.collections[C.people] ?? []) as Rec[]), ...w.team] as Rec[]) if (p.id !== owner.id) people.set(p.id, { ...(people.get(p.id) ?? {}), ...p });
+  put(C.people, Array.from(people.values()));
+
+  put(C.matters, w.matters);
+  put(C.library, [...w.folders, ...w.libraryItems]);
+  put(C.tasks, w.tasks);
+  put(C.events, w.events);
+  put(C.updates, w.updates);
+
+  for (const [name, recs] of Object.entries(ed.collections)) {
+    if (name === C.people) continue;
+    put(name, recs);
+  }
+  const kvKeys: string[] = [];
+  for (const [key, value] of Object.entries(ed.kv)) { d.kv.set(key, value); kvKeys.push(key); }
+  const blobIds: string[] = [];
+  for (const b of ed.blobs) { d.blobs.put(b.bytes, b.mime, { id: b.id, name: b.name, meta: { ...(b.meta ?? {}), ...demoMeta() } }); blobIds.push(b.id); }
+
+  // Office documents through the office service (versions, library rows and search index as the editors produce).
+  const consumer = DEMO_MATTERS.consumer;
+  const hot = keyDocRows(edDocs.filter((x) => x.matterId === consumer));
+  const reyesDocs = edDocs
+    .filter((x) => x.matterId === consumer && (x.custodianId === DEMO_CUSTODIANS.walletNfc || (x.coding?.issues ?? x.aiIssues ?? []).some((i) => /^NFC/i.test(i))))
+    .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0) || a.date.localeCompare(b.date))
+    .slice(0, 8)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const officeSpecs: OfficeSpec[] = [
+    { id: DEMO_OFFICE_IDS.memo, key: "memo", kind: "word", title: "Research memo — market definition and anti-steering", folder: DEMO_FOLDERS.research, tags: ["memo", "research", "market definition"], content: () => researchMemo(ctx), meta: { settings: settingsForTemplate("word-research-memo") } },
+    { id: DEMO_OFFICE_IDS.rfp, key: "rfp", kind: "word", title: "Plaintiffs' First Requests for Production (draft)", folder: DEMO_FOLDERS.discovery, tags: ["RFP", "discovery", "draft"], content: () => rfpDraft(ctx), meta: { settings: settingsForTemplate("word-interrogatories") } },
+    { id: DEMO_OFFICE_IDS.damages, key: "damages", kind: "sheet", title: "Damages model — overcharge × volume by year", folder: DEMO_FOLDERS.experts, tags: ["damages", "model"], content: () => damagesWorkbook(ctx) },
+    { id: DEMO_OFFICE_IDS.deck, key: "deck", kind: "slides", title: "Case strategy — consumer class", folder: DEMO_FOLDERS.pleadings, tags: ["strategy", "deck"], content: () => strategyDeck(ctx, hot), meta: { themeId: "seeger-navy" } },
+    {
+      id: DEMO_OFFICE_IDS.outline, key: "outline", kind: "pdf", title: "Deposition outline — Tomas Reyes (Wallet & NFC)", folder: DEMO_FOLDERS.depoPrep, tags: ["deposition", "outline"],
+      content: async () => {
+        const bytes = await generatePdf(reyesOutlineSpec(ctx, reyesDocs));
+        const { model } = await modelFromBytes(bytes, { name: "Reyes-deposition-outline.pdf", title: "Deposition outline — Tomas Reyes (Wallet & NFC)", blobId: DEMO_OUTLINE_BLOB, meta: { ...demoMeta() } });
+        blobIds.push(DEMO_OUTLINE_BLOB);
+        return model;
+      },
+    },
+  ];
+  const officeDocs: OfficeDocument[] = [];
+  for (const spec of officeSpecs) {
+    const content = await spec.content();
+    if (d.officeDocs.has(spec.id)) deleteOfficeDoc(spec.id);
+    const doc = createOfficeDoc({ id: spec.id, kind: spec.kind, title: spec.title, content, matterId: consumer, folderId: spec.folder, tags: ["demo", ...spec.tags], meta: demoMeta(spec.meta ?? {}) });
+    officeDocs.push(doc);
+    track(C.officeDocs, [doc.id]);
+    track(C.officeVersions, d.officeVersions.find((v) => v.docId === doc.id).map((v) => v.id));
+  }
+  const officeRows: LibraryItem[] = officeDocs.map((doc, i) => ({
+    id: `demo_apl_lib_doc_${officeSpecs[i].key}`, parentId: officeSpecs[i].folder, name: doc.title, type: ({ word: "docx", sheet: "xlsx", slides: "pptx", pdf: "pdf" } as const)[doc.kind], matterId: consumer, officeDocId: doc.id,
+    size: doc.size, tags: doc.tags, ownerId: owner.id, sharedWith: ["matter-team"], practiceArea: "Litigation", createdAt: doc.createdAt, updatedAt: doc.updatedAt, version: doc.contentVersion, status: "draft",
+  }));
+  put(C.library, officeRows);
+
+  // Keyword index for the demo e-discovery documents, scoped per matter (the path e-discovery ingest uses; no
+  // embeddings, so the load never waits on a model provider).
+  const vectors: Record<string, string[]> = { [VECTOR_COLLECTIONS.office]: officeDocs.map((x) => x.id) };
+  const byMatter = new Map<string, EDocument[]>();
+  for (const doc of edDocs) byMatter.set(doc.matterId, [...(byMatter.get(doc.matterId) ?? []), doc]);
+  for (const [matterId, docs] of byMatter) {
+    await indexDocuments(VECTOR_COLLECTIONS.edocs, docs.map((x) => ({ id: x.id, text: indexTextFor(x), meta: { matterId: x.matterId, custodianId: x.custodianId, type: x.type, date: x.date, bates: x.bates } })), { embed: false, scope: matterRetrievalScope(matterId) });
+    vectors[VECTOR_COLLECTIONS.edocs] = [...(vectors[VECTOR_COLLECTIONS.edocs] ?? []), ...docs.map((x) => x.id)];
+  }
+
+  const manifest: DemoManifest = {
+    pack: DEMO_PACK,
+    version: DEMO_MANIFEST_VERSION,
+    loadedAt: now.toISOString(),
+    loadedBy: { id: principal.id, name: principal.name },
+    records: Object.fromEntries(Object.entries(records).map(([k, v]) => [k, Array.from(v)])),
+    kv: kvKeys,
+    blobs: Array.from(new Set(blobIds)),
+    vectors,
+  };
+
+  // Re-load: anything the previous load wrote that this load did not (e.g. an older pack version) is removed.
+  if (previous) removeRecords(diffManifest(previous, manifest), owner.id);
+  d.kv.set(DEMO_MANIFEST_KEY, manifest);
+
+  const status = demoStatus();
+  audit(previous ? "update" : "create", { kind: "demo.pack", id: DEMO_PACK, label: "Apple antitrust demo data", matterId: consumer }, { counts: status.counts, reload: !!previous }, { id: principal.id, name: principal.name });
+  return { status, durationMs: Date.now() - started };
+}
+
+/** Records in `prev` that `next` does not contain. */
+function diffManifest(prev: DemoManifest, next: DemoManifest): DemoManifest {
+  const minus = (a: string[] = [], b: string[] = []) => { const s = new Set(b); return a.filter((x) => !s.has(x)); };
+  const records: Record<string, string[]> = {};
+  for (const [name, ids] of Object.entries(prev.records)) records[name] = minus(ids, next.records[name]);
+  const vectors: Record<string, string[]> = {};
+  for (const [name, ids] of Object.entries(prev.vectors ?? {})) vectors[name] = minus(ids, next.vectors[name]);
+  return { ...prev, records, kv: minus(prev.kv, next.kv), blobs: minus(prev.blobs, next.blobs), vectors };
+}
+
+// ---------------------------------------------------------------------------
+// Remove
+// ---------------------------------------------------------------------------
+
+export interface RemoveResult { removed: Record<string, number>; durationMs: number }
+
+function removeRecords(m: DemoManifest, ownerId: string | undefined): Record<string, number> {
+  const d = db();
+  const removed: Record<string, number> = {};
+  const officeIds = new Set(m.records[C.officeDocs] ?? []);
+  // Dependents of demo office documents created after the load (autosave versions, comments, library rows the
+  // library adds for editor-created documents) go with them; they belong to no other record.
+  if (officeIds.size) {
+    track(m.records, C.officeVersions, d.officeVersions.find((v) => officeIds.has(v.docId)).map((v) => v.id));
+    track(m.records, C.officeComments, d.officeComments.find((c) => officeIds.has(c.docId)).map((c) => c.id));
+    track(m.records, C.library, d.library.find((l) => !!l.officeDocId && officeIds.has(l.officeDocId)).map((l) => l.id));
+  }
+  for (const [name, ids] of Object.entries(m.records)) {
+    const col = d.collection<{ id: string }>(name);
+    let n = 0;
+    for (const id of ids) {
+      if (name === C.people && id === ownerId) continue;
+      if (col.delete(id)) n++;
+    }
+    if (n) removed[name] = n;
+  }
+  for (const key of m.kv) d.kv.delete(key);
+  for (const id of m.blobs) d.blobs.delete(id);
+  for (const [collection, ids] of Object.entries(m.vectors ?? {})) for (const id of ids) removeDocument(collection, id);
+  return removed;
+}
+
+function track(records: Record<string, string[]>, name: string, ids: string[]) {
+  if (!ids.length) return;
+  records[name] = Array.from(new Set([...(records[name] ?? []), ...ids]));
+}
+
+export function removeDemoPack({ principal }: { principal: Principal }): RemoveResult {
+  const started = Date.now();
+  const m = readManifest();
+  if (!m) throw new DemoPackError("The demo data is not loaded.", 404, "not_loaded");
+  const removed = removeRecords({ ...m, records: { ...m.records } }, getWorkspace().owner?.id);
+  db().kv.delete(DEMO_MANIFEST_KEY);
+  audit("delete", { kind: "demo.pack", id: DEMO_PACK, label: "Apple antitrust demo data", matterId: DEMO_MATTERS.consumer }, { removed }, { id: principal.id, name: principal.name });
+  return { removed, durationMs: Date.now() - started };
+}

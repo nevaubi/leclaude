@@ -1,9 +1,10 @@
 /** Settings sections in page order (pure; shared by the nav, the page and tests). */
-export interface SettingsGroup { id: "workspace" | "team" | "ai" | "research" | "data" | "integrity" | "about"; label: string; anchors?: string[] }
+export interface SettingsGroup { id: "workspace" | "demo" | "team" | "ai" | "research" | "data" | "integrity" | "about"; label: string; anchors?: string[] }
 
 /** The firm: its profile and its people. Shown first, above the system configuration. */
 export const WORKSPACE_GROUPS: SettingsGroup[] = [
   { id: "workspace", label: "Workspace" },
+  { id: "demo", label: "Demo data" },
   { id: "team", label: "Team" },
 ];
 
