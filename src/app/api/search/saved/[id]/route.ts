@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { deleteSavedSearch, savedSearches, updateSavedSearch } from "@/modules/search/service";
 import type { SavedSearch } from "@/modules/search/types";
@@ -29,6 +30,6 @@ async function handleDELETE(_req: Request, { params }: Params) {
   return Response.json({ ok: deleteSavedSearch(id) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.research(id) });
-export const PUT = withAuth(handlePUT, { action: "write", resource: (_req, { id }) => refs.research(id) });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.research(id) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.research(id) }));
+export const PUT = withDb(withAuth(handlePUT, { action: "write", resource: (_req, { id }) => refs.research(id) }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.research(id) }));

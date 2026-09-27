@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { listNews, refreshNewsFromFederalRegister } from "@/modules/home/service";
 import type { NewsItem, PracticeArea } from "@/lib/types/domain";
 import { param } from "@/modules/home/api-utils";
@@ -23,4 +24,4 @@ async function handleGET(req: Request) {
   return Response.json({ items, refresh });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "news", matterId: queryParam(req, "matter") }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "news", matterId: queryParam(req, "matter") }) }));

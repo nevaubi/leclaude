@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { deleteRun, getRun } from "@/modules/search/service";
 import { withAuth } from "@/lib/auth/route";
@@ -19,5 +20,5 @@ async function handleDELETE(_req: Request, { params }: Params) {
   return Response.json({ ok: deleteRun(id) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.research(id) });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.research(id) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.research(id) }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.research(id) }));

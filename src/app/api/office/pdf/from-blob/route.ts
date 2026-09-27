@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { createFromBlob } from "@/modules/office/pdf/service";
@@ -20,4 +21,4 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: officeCollection });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeCollection }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { bootstrap } from "@/modules/workflows/api-utils";
 import { cancelRun } from "@/modules/workflows/engine";
@@ -15,4 +16,4 @@ async function handlePOST(_req: Request, { params }: { params: Promise<{ runId: 
   return Response.json({ run: summarizeRun(run) });
 }
 
-export const POST = withAuth(handlePOST, { action: "run", resource: (_req, { runId }) => refs.workflowRun(runId) });
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: (_req, { runId }) => refs.workflowRun(runId) }));

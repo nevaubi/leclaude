@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { getThread, listThreadSummaries } from "@/modules/search/engine/threads";
 import { jsonError } from "@/lib/ai/sse";
@@ -18,4 +19,4 @@ async function handleGET(req: NextRequest) {
   return Response.json({ threads: listThreadSummaries(limit) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.research() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.research() }));

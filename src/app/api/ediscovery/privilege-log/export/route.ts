@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/integrity/audit";
@@ -9,7 +10,7 @@ import { privilegeLogXlsx } from "@/modules/ediscovery/privilege-xlsx";
 export const runtime = "nodejs";
 
 /** ?matter=&format=csv|xlsx|markdown — CSV/XLSX download; markdown is returned as JSON for the client to convert with markdownToDoc → POST /api/office/docs. */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   const matter = db().matters.get(m.matterId)!;
@@ -28,3 +29,5 @@ export async function GET(req: NextRequest) {
     headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="privilege-log-${matter.slug}-${stamp}.csv"` },
   });
 }
+
+export const GET = withDb(withDb(GET__handler));

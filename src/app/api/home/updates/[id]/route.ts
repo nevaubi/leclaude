@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { deleteUpdate } from "@/modules/home/service";
 import { withAuth } from "@/lib/auth/route";
@@ -10,4 +11,4 @@ async function handleDELETE(_req: Request, { params }: { params: Promise<{ id: s
   return deleteUpdate(id) ? Response.json({ ok: true }) : jsonError("Update not found", 404);
 }
 
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.update(id) });
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.update(id) }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -7,14 +8,14 @@ import { knowledgeMap } from "@/modules/ediscovery/analysis/ai";
 export const runtime = "nodejs";
 
 /** GET ?matter= → { maps } */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   return Response.json({ maps: listKnowledgeMaps(m.matterId) });
 }
 
 /** POST { matterId, topic, verify? } → 201 { map: KnowledgeMap & { provenance, duplicateOf? } } (503 no_api_key without a key) */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<{ matterId?: string; topic?: string; verify?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -23,3 +24,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ map: await knowledgeMap(m.matterId, { topic: body.topic.trim(), verify: body.verify, signal: req.signal }) }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));

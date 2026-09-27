@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
@@ -49,6 +50,6 @@ async function handleDELETE(req: NextRequest, { params }: Ctx) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) });
-export const PATCH = withAuth(handlePATCH, { action: "admin", resource: (_req, { id }) => ({ kind: "intel", id }) });
-export const DELETE = withAuth(handleDELETE, { action: "admin", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) }));
+export const PATCH = withDb(withAuth(handlePATCH, { action: "admin", resource: (_req, { id }) => ({ kind: "intel", id }) }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "admin", resource: (_req, { id }) => ({ kind: "intel", id }) }));

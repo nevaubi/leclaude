@@ -1,5 +1,6 @@
 import "server-only";
 import { getSqlite } from "./sqlite";
+import { markDirty } from "./sync";
 
 export const kv = {
   get<T = unknown>(key: string): T | null {
@@ -8,8 +9,10 @@ export const kv = {
   },
   set(key: string, value: unknown) {
     getSqlite().prepare("INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(key, JSON.stringify(value), new Date().toISOString());
+    markDirty("kv", key);
   },
   delete(key: string) {
     getSqlite().prepare("DELETE FROM kv WHERE key = ?").run(key);
+    markDirty("kv", key);
   },
 };

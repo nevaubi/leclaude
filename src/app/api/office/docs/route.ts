@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { createOfficeDoc, listOfficeDocs } from "@/modules/office/shared/docs-service";
@@ -43,5 +44,5 @@ async function handlePOST(req: NextRequest) {
   return Response.json({ doc });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: officeCollection });
-export const POST = withAuth(handlePOST, { action: "write", resource: officeCollection });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: officeCollection }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeCollection }));

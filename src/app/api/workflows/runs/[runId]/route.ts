@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { bootstrap } from "@/modules/workflows/api-utils";
 import { isRunActive } from "@/modules/workflows/engine";
@@ -28,5 +29,5 @@ async function handleDELETE(_req: Request, { params }: Ctx) {
   return Response.json({ ok: true });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { runId }) => refs.workflowRun(runId) });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { runId }) => refs.workflowRun(runId) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { runId }) => refs.workflowRun(runId) }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: (_req, { runId }) => refs.workflowRun(runId) }));

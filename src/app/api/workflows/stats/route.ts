@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { bootstrap } from "@/modules/workflows/api-utils";
 import { workflowStats } from "@/modules/workflows/service";
 import { withAuth } from "@/lib/auth/route";
@@ -10,4 +11,4 @@ async function handleGET() {
   return Response.json({ stats: workflowStats() });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.workflow() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.workflow() }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { providersPayload } from "@/modules/settings/providers";
 import { withAuth } from "@/lib/auth/route";
@@ -15,4 +16,4 @@ async function handleGET() {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "admin", resource: () => refs.settings() });
+export const GET = withDb(withAuth(handleGET, { action: "admin", resource: () => refs.settings() }));

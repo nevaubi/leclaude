@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { ensureScheduledScans, fixFinding, lastReport, listScans, runScans } from "@/lib/integrity/bootstrap";
@@ -21,5 +22,5 @@ async function handlePOST(req: NextRequest) {
   } catch (e) { return jsonError((e as Error).message, 500); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "audit" }) });
-export const POST = withAuth(handlePOST, { action: "admin", resource: () => ({ kind: "audit" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => ({ kind: "audit" }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "admin", resource: () => ({ kind: "audit" }) }));

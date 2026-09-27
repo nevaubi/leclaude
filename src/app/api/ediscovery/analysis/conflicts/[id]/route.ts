@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
@@ -7,7 +8,7 @@ import type { Conflict } from "@/lib/types/domain";
 export const runtime = "nodejs";
 
 /** GET → { conflict: ConflictRow, notes } */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const res = getConflict(id);
   if (!res) return jsonError(`No conflict ${id}`, 404);
@@ -15,7 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 /** PATCH { status? | severity? | title? | analysis? | kind? | addSide? | removeSideIndex? } → { conflict } */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PATCH__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<Partial<Pick<Conflict, "status" | "severity" | "title" | "analysis" | "kind">> & { addSide?: Conflict["sides"][number]; removeSideIndex?: number }>(req);
   if (!body) return jsonError("Invalid JSON body");
@@ -27,7 +28,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 /** DELETE → { ok } */
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function DELETE__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return Response.json({ ok: deleteConflict(id) });
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

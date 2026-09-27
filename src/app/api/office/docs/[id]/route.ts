@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { deleteOfficeDoc, getOfficeDoc, saveOfficeDoc } from "@/modules/office/shared/docs-service";
@@ -36,8 +37,8 @@ async function handleDELETE(_req: NextRequest, { params }: Params) {
   return Response.json({ ok: deleteOfficeDoc(id) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: officeDocFromParams });
-export const PUT = withAuth(handlePUT, { action: "write", resource: officeDocFromParams });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: officeDocFromParams });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: officeDocFromParams }));
+export const PUT = withDb(withAuth(handlePUT, { action: "write", resource: officeDocFromParams }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: officeDocFromParams }));
 /** POST is an alias of PUT for keepalive/sendBeacon saves on page unload (beacons can only POST). */
-export const POST = withAuth(handlePUT, { action: "write", resource: officeDocFromParams });
+export const POST = withDb(withAuth(handlePUT, { action: "write", resource: officeDocFromParams }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { aiConfig, AIConfigError } from "@/lib/ai/config";
@@ -24,5 +25,5 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.library() });
-export const POST = withAuth(handlePOST, { action: "admin", resource: () => refs.library() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.library() }));
+export const POST = withDb(withAuth(handlePOST, { action: "admin", resource: () => refs.library() }));

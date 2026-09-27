@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { z } from "zod";
 import { jsonError } from "@/lib/ai/sse";
 import { bootstrap, errorResponse, parseBody } from "@/modules/workflows/api-utils";
@@ -69,7 +70,7 @@ async function handleDELETE(_req: Request, { params }: Ctx) {
   return Response.json({ ok: true });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.workflow(id) });
-export const PUT = withAuth(handlePUT, { action: "write", resource: (_req, { id }) => refs.workflow(id) });
-export const PATCH = withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => refs.workflow(id) });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.workflow(id) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.workflow(id) }));
+export const PUT = withDb(withAuth(handlePUT, { action: "write", resource: (_req, { id }) => refs.workflow(id) }));
+export const PATCH = withDb(withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => refs.workflow(id) }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.workflow(id) }));

@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { WorkflowsGallery } from "@/modules/workflows/components/gallery/gallery";
 import { listRuns, listWorkflows, workflowStats } from "@/modules/workflows/service";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Workflows" };
 
 export default async function WorkflowsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  await pageDb();
   const { tab } = await searchParams;
   ensureScheduler();
   const templates = listWorkflows({ template: true });

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { ensureReview, errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -7,7 +8,7 @@ import type { SavedSearchInput } from "@/modules/ediscovery/types";
 export const runtime = "nodejs";
 
 /** GET ?matter= → { searches: SavedSearchRecord[] } (own + shared) */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   ensureReview();
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST SavedSearchInput → 201 { search } */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<SavedSearchInput>(req);
   if (!body) return jsonError("Invalid JSON body");
   const m = matterFrom(req, body);
@@ -24,3 +25,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ search: createSavedSearch({ ...body, matterId: m.matterId }) }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));

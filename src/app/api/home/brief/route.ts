@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { AIConfigError } from "@/lib/ai/config";
 import { jsonError } from "@/lib/ai/sse";
 import { generateDailyBrief } from "@/modules/home/brief";
@@ -41,5 +42,5 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "brief" }) });
-export const POST = withAuth(handlePOST, { action: "run", resource: () => ({ kind: "brief" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => ({ kind: "brief" }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: () => ({ kind: "brief" }) }));

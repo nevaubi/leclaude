@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import * as React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +18,7 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 
 /** Library: /library?folder=<id>&item=<id>&matter=<id>&view=starred|recent|shared&q=… */
 export default async function Page({ searchParams }: Props) {
+  await pageDb();
   const raw = await searchParams;
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(raw)) if (typeof v === "string") sp.set(k, v);

@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import * as React from "react";
 import { Radar } from "lucide-react";
 import { PageTopbar } from "@/components/shell/page-topbar";
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
  * With no intelligence records (a new workspace, no source has run) every
  * section would be empty, so the shell shows how to connect a source instead.
  */
-export default function IntelLayout({ children }: { children: React.ReactNode }) {
+export default async function IntelLayout({ children }: { children: React.ReactNode }) {
+  await pageDb();
   intelAnalysisBootstrap();
   if (intelDocuments().count() === 0) {
     const sources = intelSources().all();

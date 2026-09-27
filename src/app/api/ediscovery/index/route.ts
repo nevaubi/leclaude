@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { aiConfig } from "@/lib/ai/config";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -6,7 +7,7 @@ import { rebuildIndex } from "@/modules/ediscovery/service";
 export const runtime = "nodejs";
 
 /** Rebuild the keyword/vector index for a matter. Embeds only when a key is configured (and `embed` is not false). */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<{ matterId?: string; embed?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -17,3 +18,5 @@ export async function POST(req: NextRequest) {
     return errorResponse(e);
   }
 }
+
+export const POST = withDb(withDb(POST__handler));

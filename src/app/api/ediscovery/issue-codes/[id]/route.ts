@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
@@ -6,7 +7,7 @@ import type { IssueCodeInput } from "@/modules/ediscovery/types";
 
 export const runtime = "nodejs";
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PATCH__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<Partial<IssueCodeInput>>(req);
   if (!body) return jsonError("Invalid JSON body");
@@ -19,9 +20,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function DELETE__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ok = deleteIssueCode(id);
   if (!ok) return jsonError(`No issue code ${id}`, 404);
   return Response.json({ ok: true });
 }
+
+export const PATCH = withDb(withDb(PATCH__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

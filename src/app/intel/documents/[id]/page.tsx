@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -26,6 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * Read-only; flags are managed by the steward, the sweeps and the API.
  */
 export default async function IntelDocumentPage({ params }: Props) {
+  await pageDb();
   intelAnalysisBootstrap();
   const { id } = await params;
   const doc = getDocument(decodeURIComponent(id));

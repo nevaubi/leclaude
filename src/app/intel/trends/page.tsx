@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { Radar } from "lucide-react";
 import { PageTopbar } from "@/components/shell/page-topbar";
@@ -11,6 +12,7 @@ export const metadata: Metadata = { title: "Trends · Intelligence" };
 
 /** Month-bucketed series by jurisdiction, court, judge, kind, motion type and more, with anomalies and compare mode. */
 export default async function TrendsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await pageDb();
   intelAnalysisBootstrap();
   const sp = await searchParams;
   const params = new URLSearchParams();

@@ -58,3 +58,21 @@ A production adapter (Aurora PostgreSQL or DynamoDB behind the same interface) m
 5. Turn on tenant partition enforcement in strict mode, then by default.
 
 Nothing in `src/modules/**` should import a storage driver directly; the seam is `db()`.
+
+## Serverless mode (implemented)
+
+On Vercel every request can run on a different instance with its own throwaway `/tmp`, so a
+local SQLite file cannot be the source of truth. When `DATABASE_URL` (or `POSTGRES_URL`) is set:
+
+- Postgres (Neon, via its HTTP SQL endpoint in `src/lib/db/remote.ts`) is authoritative, in tables
+  `lc_docs`, `lc_kv`, `lc_blobs`, `lc_vectors` and the change log `lc_changes`.
+- Each instance keeps a local SQLite mirror (`leclaude-mirror.db`); the data API stays synchronous.
+- `src/lib/db/sync.ts`: cold start hydrates the mirror; each request pulls changes logged since the
+  instance's last sync; writes mark keys dirty and are pushed in one transaction before the response.
+- `src/lib/db/request.ts`: every API route is wrapped with `withDb`, every page/layout calls
+  `pageDb()`. Streaming responses flush when the stream ends.
+- Without a database on a serverless host, writes are refused with `db_not_configured` so data is
+  never silently lost.
+- Limits: last writer wins per record; kv counters (Bates, audit sequence) can race between
+  instances under concurrent writes; blobs are hydrated in full on cold start (move file bytes to
+  object storage as volume grows).

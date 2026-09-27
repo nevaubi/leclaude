@@ -8,6 +8,7 @@ import type {
 } from "@/lib/types/domain";
 import { ensureSeeded } from "@/lib/seed";
 import { applyWorkspaceIdentity } from "@/lib/workspace";
+import { mirrorReady, onSynced } from "./sync";
 
 /**
  * Typed handles for every shared collection. Call `db()` from server code
@@ -44,6 +45,14 @@ export interface Database {
 let handle: Database | null = null;
 let identityApplied = false;
 
+// After every hydrate/pull (serverless mode): seed reference data once and re-apply the workspace owner,
+// which another instance may have just created.
+onSynced(() => {
+  const h = db();
+  ensureSeeded(h);
+  applyWorkspaceIdentity();
+});
+
 export function db(): Database {
   if (!handle) {
     handle = {
@@ -72,6 +81,8 @@ export function db(): Database {
       raw: getSqlite(),
     };
   }
+  // Serverless mode before the first sync: the mirror is empty, so seeding now would overwrite shared data.
+  if (!mirrorReady()) return handle;
   ensureSeeded(handle);
   if (!identityApplied) { identityApplied = true; applyWorkspaceIdentity(); }
   return handle;

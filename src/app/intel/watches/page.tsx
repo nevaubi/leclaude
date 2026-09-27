@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { Radar } from "lucide-react";
 import { PageTopbar } from "@/components/shell/page-topbar";
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: "Watches · Intelligence" };
 
 /** Watch management: judges, dockets, MDLs, products, regulations, counsel, firms, courts and saved queries the user follows. */
 export default async function WatchesPage() {
+  await pageDb();
   intelAnalysisBootstrap();
   const me = currentUser();
   const rows: WatchRow[] = listWatches({ userId: me.id }).map((w) => {

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { withAuth } from "@/lib/auth/route";
 import { createMatter, listMatters } from "@/modules/matters/service";
@@ -27,5 +28,5 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "matter" }) });
-export const POST = withAuth(handlePOST, { action: "write", resource: () => ({ kind: "matter" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => ({ kind: "matter" }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: () => ({ kind: "matter" }) }));

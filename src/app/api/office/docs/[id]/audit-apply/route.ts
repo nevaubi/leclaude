@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -38,4 +39,4 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
   return Response.json({ ok: true, eventId: ev.id, applied: applied.length, discarded, failed });
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeDocFromParams }));

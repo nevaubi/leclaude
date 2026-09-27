@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { deleteEvent, getEvent, updateEvent } from "@/modules/home/service";
 import { eventPatchSchema } from "@/modules/home/schemas";
@@ -28,6 +29,6 @@ async function handleDELETE(_req: Request, { params }: { params: Promise<{ id: s
   return deleteEvent(id) ? Response.json({ ok: true }) : jsonError("Event not found", 404);
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.event(id) });
-export const PATCH = withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => refs.event(id) });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.event(id) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.event(id) }));
+export const PATCH = withDb(withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => refs.event(id) }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.event(id) }));

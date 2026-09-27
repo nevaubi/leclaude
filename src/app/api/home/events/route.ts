@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { createEvent, listEvents } from "@/modules/home/service";
 import { eventCreateSchema } from "@/modules/home/schemas";
@@ -24,5 +25,5 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "event", matterId: queryParam(req, "matter") }) });
-export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "event", matterId: await bodyMatterId(req) }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "event", matterId: queryParam(req, "matter") }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "event", matterId: await bodyMatterId(req) }) }));

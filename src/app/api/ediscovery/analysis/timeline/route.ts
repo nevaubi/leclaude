@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -9,7 +10,7 @@ import type { TimelineEvent } from "@/lib/types/domain";
 export const runtime = "nodejs";
 
 /** GET ?matter=&categories=a,b&person=&min=&from=&to=&source=&q=&disputed=1&unverified=1 → { events, people: {id,name}[] } */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   const sp = req.nextUrl.searchParams;
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST { matterId, ...TimelineEventInput } → 201 { event } */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<TimelineEventInput & { matterId?: string }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
 }
 
 /** PATCH { id, patch } → { event } */
-export async function PATCH(req: NextRequest) {
+async function PATCH__handler(req: NextRequest) {
   const body = await readJson<{ id?: string; patch?: Partial<TimelineEvent> }>(req);
   if (!body?.id || !body.patch) return jsonError("`id` and `patch` are required");
   const e = updateEvent(body.id, body.patch);
@@ -52,8 +53,16 @@ export async function PATCH(req: NextRequest) {
 }
 
 /** DELETE ?id= */
-export async function DELETE(req: NextRequest) {
+async function DELETE__handler(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return jsonError("`id` is required");
   return Response.json({ ok: deleteEvent(id) });
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

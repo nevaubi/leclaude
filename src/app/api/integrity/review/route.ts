@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { ensureScheduledScans } from "@/lib/integrity/bootstrap";
@@ -40,5 +41,5 @@ async function handlePOST(req: NextRequest) {
   return Response.json({ results, counts: reviewCounts() }, { status: ok ? 200 : 207 });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "review", matterId: queryParam(req, "matter", "matterId") }) });
-export const POST = withAuth(handlePOST, { action: "approve", resource: () => ({ kind: "review" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "review", matterId: queryParam(req, "matter", "matterId") }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "approve", resource: () => ({ kind: "review" }) }));

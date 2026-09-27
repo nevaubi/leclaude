@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { aiConfig } from "@/lib/ai/config";
 import { loadHomeInitialData } from "@/modules/home/service";
 import { withAuth } from "@/lib/auth/route";
@@ -9,4 +10,4 @@ async function handleGET() {
   return Response.json(loadHomeInitialData({ aiConfigured: aiConfig().hasKey }));
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "brief" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => ({ kind: "brief" }) }));

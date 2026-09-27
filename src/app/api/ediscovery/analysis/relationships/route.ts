@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -7,7 +8,7 @@ import type { Relationship } from "@/lib/types/domain";
 export const runtime = "nodejs";
 
 /** POST { matterId, fromId, toId, kind, weight?, label?, evidence? } → 201 { relationship } */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<{ matterId?: string; fromId?: string; toId?: string; kind?: Relationship["kind"]; weight?: number; label?: string; evidence?: Relationship["evidence"] }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -18,8 +19,12 @@ export async function POST(req: NextRequest) {
 }
 
 /** DELETE ?id= */
-export async function DELETE(req: NextRequest) {
+async function DELETE__handler(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return jsonError("`id` is required");
   return Response.json({ ok: deleteRelationship(id) });
 }
+
+export const POST = withDb(withDb(POST__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

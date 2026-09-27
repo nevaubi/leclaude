@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { listDocuments, type ListDocumentsOptions } from "@/modules/intel/store";
@@ -41,4 +42,4 @@ async function handleGET(req: NextRequest) {
   return Response.json(listDocuments(opts));
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) }));

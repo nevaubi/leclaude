@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -6,7 +7,7 @@ import type { SearchRequest } from "@/modules/ediscovery/types";
 
 export const runtime = "nodejs";
 
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<SearchRequest>(req);
   if (!body) return jsonError("Invalid JSON body");
   const m = matterFrom(req, body);
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
 }
 
 /** GET variant for quick curl checks: ?matter=&q=&view=&semantic=1&sort=&dir=&offset=&limit= */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   const sp = req.nextUrl.searchParams;
@@ -40,3 +41,7 @@ export async function GET(req: NextRequest) {
     return errorResponse(e);
   }
 }
+
+export const POST = withDb(withDb(POST__handler));
+
+export const GET = withDb(withDb(GET__handler));

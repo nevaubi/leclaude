@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { parseRunRequest } from "@/modules/search/service";
 import { runResearch } from "@/modules/search/engine/run";
@@ -24,4 +25,4 @@ async function handlePOST(req: Request) {
   });
 }
 
-export const POST = withAuth(handlePOST, { action: "run", resource: async (req) => refs.research(undefined, await bodyMatterId(req)) });
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: async (req) => refs.research(undefined, await bodyMatterId(req)) }));

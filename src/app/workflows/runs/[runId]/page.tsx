@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { RunDetail } from "@/modules/workflows/components/run/run-detail";
@@ -13,6 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ runId: st
 }
 
 export default async function RunDetailPage({ params }: { params: Promise<{ runId: string }> }) {
+  await pageDb();
   const { runId } = await params;
   ensureScheduler();
   const run = getRun(runId);

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { loopState } from "@/modules/intel/background";
 import { intelHealth } from "@/modules/intel/health";
@@ -21,4 +22,4 @@ async function handleGET() {
   });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.intel() }));

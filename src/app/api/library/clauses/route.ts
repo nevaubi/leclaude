@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { fillClauseItem, listClauses } from "@/modules/library/service";
@@ -19,5 +20,5 @@ async function handlePOST(req: NextRequest) {
   try { return Response.json(fillClauseItem(body.id, { values: body.values ?? {}, createDoc: body.createDoc, matterId: body.matterId, folderId: body.folderId, title: body.title, copyOnly: body.copyOnly })); } catch (e) { return jsonError((e as Error).message, 400); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.library() });
-export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => refs.library(await bodyString(req, "id")) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.library() }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: async (req) => refs.library(await bodyString(req, "id")) }));

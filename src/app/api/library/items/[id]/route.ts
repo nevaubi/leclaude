@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { deleteItem, getItemDetail, updateItem } from "@/modules/library/service";
@@ -32,6 +33,6 @@ async function handleDELETE(_req: NextRequest, { params }: Params) {
   } catch (e) { return jsonError((e as Error).message, 400); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.library(id) });
-export const PATCH = withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => refs.library(id) });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.library(id) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.library(id) }));
+export const PATCH = withDb(withAuth(handlePATCH, { action: "write", resource: (_req, { id }) => refs.library(id) }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: (_req, { id }) => refs.library(id) }));

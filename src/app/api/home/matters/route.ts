@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { matterOverview } from "@/modules/home/service";
 import { withAuth } from "@/lib/auth/route";
 
@@ -7,4 +8,4 @@ async function handleGET() {
   return Response.json({ matters: matterOverview() });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "matter" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => ({ kind: "matter" }) }));

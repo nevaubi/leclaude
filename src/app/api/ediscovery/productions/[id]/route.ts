@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import type { ProductionSet } from "@/lib/types/domain";
@@ -7,7 +8,7 @@ import { deleteProduction, getProduction, productionRows, removeFromProduction, 
 export const runtime = "nodejs";
 
 /** GET → { production: ProductionSummary2, rows } */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   ensureReview();
   const production = getProduction(id);
@@ -16,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 /** PATCH { name?, status?, stampText?, notes?, volume?, remove?: docId[] } → { production, rows } (status: draft → qc → final; qc runs on the way) */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PATCH__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<Partial<Pick<ProductionSet, "name" | "status" | "stampText" | "notes" | "volume">> & { remove?: string[] }>(req);
   if (!body) return jsonError("Invalid JSON body");
@@ -29,7 +30,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch (e) { return errorResponse(e); }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function DELETE__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try { return deleteProduction(id) ? Response.json({ ok: true }) : jsonError(`No production ${id}`, 404); } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

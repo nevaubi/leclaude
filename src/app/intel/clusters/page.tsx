@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { Radar } from "lucide-react";
 import { PageTopbar } from "@/components/shell/page-topbar";
@@ -14,6 +15,7 @@ export const metadata: Metadata = { title: "Clusters · Intelligence" };
 
 /** Topic clusters over the corpus (embeddings when present, TF-IDF otherwise) per scope. */
 export default async function ClustersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await pageDb();
   intelAnalysisBootstrap();
   const sp = await searchParams;
   const s = (k: string) => (typeof sp[k] === "string" && sp[k] ? (sp[k] as string) : undefined);

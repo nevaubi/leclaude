@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { z } from "zod";
 import { jsonError } from "@/lib/ai/sse";
 import { boolParam, bootstrap, errorResponse, param, parseBody } from "@/modules/workflows/api-utils";
@@ -37,5 +38,5 @@ async function handlePOST(req: Request) {
   } catch (e) { return errorResponse(e); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.workflow() });
-export const POST = withAuth(handlePOST, { action: "write", resource: () => refs.workflow() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.workflow() }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: () => refs.workflow() }));

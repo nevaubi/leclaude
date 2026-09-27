@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { documentText, safeName } from "@/modules/office/pdf/service";
@@ -21,4 +22,4 @@ async function handleGET(req: NextRequest, { params }: Params) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: officeDocFromParams });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: officeDocFromParams }));

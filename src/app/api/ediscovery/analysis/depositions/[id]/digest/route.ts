@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
 import { digestDeposition } from "@/modules/ediscovery/analysis/ai";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
  * The summary is claim-verified against the transcript, admissions are self-corrected, and page:line / Bates cites
  * that do not resolve are marked [VERIFY].
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function POST__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<{ force?: boolean; verify?: boolean }>(req);
   try {
@@ -18,3 +19,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return Response.json({ digest, provenance: digest.provenance ?? null });
   } catch (e) { return errorResponse(e); }
 }
+
+export const POST = withDb(withDb(POST__handler));

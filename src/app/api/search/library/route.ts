@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { saveHitToLibrary } from "@/modules/search/service";
 import type { SearchHit } from "@/modules/search/types";
@@ -14,4 +15,4 @@ async function handlePOST(req: Request) {
   return Response.json({ item }, { status: 201 });
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "library_item", matterId: await bodyMatterId(req) }) });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "library_item", matterId: await bodyMatterId(req) }) }));

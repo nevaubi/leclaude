@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { nanoid } from "nanoid";
 import { jsonError } from "@/lib/ai/sse";
@@ -78,4 +79,4 @@ function duplicateResponse(existing: { id: string; title: string; kind: OfficeKi
   return Response.json({ duplicate: true, existing: { id: existing.id, title: existing.title, kind: existing.kind, url: `/office/${existing.kind}/${existing.id}`, libraryItemId: li?.id ?? null }, message: `${message}: "${existing.title}". Open the existing document or re-upload with allowDuplicate=1.` }, { status: 409 });
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: officeUploadTarget });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeUploadTarget }));

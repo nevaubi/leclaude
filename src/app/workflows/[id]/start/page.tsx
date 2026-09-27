@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { WorkflowFrontendPage } from "@/modules/workflows/components/frontend/frontend-page";
@@ -15,6 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 /** One-page start form for a workflow: the front end on the left, what happens and recent runs on the right. */
 export default async function WorkflowStartPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ run?: string }> }) {
+  await pageDb();
   const { id } = await params;
   const { run } = await searchParams;
   ensureScheduler();

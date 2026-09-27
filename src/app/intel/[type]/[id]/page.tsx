@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { Radar } from "lucide-react";
@@ -27,6 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * timeline, the records themselves, insights and the watch toggle.
  */
 export default async function EntityPage({ params }: Props) {
+  await pageDb();
   intelAnalysisBootstrap();
   const { type, id } = await params;
   if (type === "documents") notFound();

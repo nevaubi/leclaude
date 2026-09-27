@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import type { ReviewBatch } from "@/lib/types/domain";
@@ -7,7 +8,7 @@ import { deleteBatch, getBatch, updateBatch } from "@/modules/ediscovery/review-
 export const runtime = "nodejs";
 
 /** GET → { batch: ReviewBatchSummary & { disagreements } } */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   ensureReview();
   const batch = getBatch(id);
@@ -16,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 /** PATCH { name?, description?, assigneeId?, priority?, dueAt?, status?, qcSamplePercent?, secondPass? } → { batch } */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PATCH__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<Partial<Pick<ReviewBatch, "name" | "description" | "assigneeId" | "priority" | "dueAt" | "status" | "qcSamplePercent" | "secondPass">>>(req);
   if (!body) return jsonError("Invalid JSON body");
@@ -27,7 +28,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch (e) { return errorResponse(e); }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function DELETE__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return deleteBatch(id) ? Response.json({ ok: true }) : jsonError(`No batch ${id}`, 404);
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

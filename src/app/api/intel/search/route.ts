@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
@@ -45,5 +46,5 @@ async function handlePOST(req: NextRequest) {
   try { return await run({ ...body, q: String(body.q ?? "") }); } catch (e) { return jsonError((e as Error).message, 500); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
-export const POST = withAuth(handlePOST, { action: "read", resource: async (req) => refs.intel(await bodyMatterId(req)) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) }));
+export const POST = withDb(withAuth(handlePOST, { action: "read", resource: async (req) => refs.intel(await bodyMatterId(req)) }));

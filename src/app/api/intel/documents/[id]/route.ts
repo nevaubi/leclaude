@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
@@ -42,5 +43,5 @@ async function handlePOST(req: NextRequest, { params }: Ctx) {
   return jsonError("Provide { flag: { kind, note? } } or { unflag: kind }", 422);
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }, principal) => refs.intelDocument(id, principal) });
-export const POST = withAuth(handlePOST, { action: "write", resource: (_req, { id }, principal) => refs.intelDocument(id, principal) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }, principal) => refs.intelDocument(id, principal) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: (_req, { id }, principal) => refs.intelDocument(id, principal) }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { intelConfigView } from "@/modules/intel/health";
 import { httpCacheStats } from "@/modules/intel/providers";
@@ -14,4 +15,4 @@ async function handleGET() {
   return Response.json({ ...view, sources: listSources().map((s) => ({ id: s.id, name: s.name, adapter: s.adapter, enabled: s.enabled, schedule: s.schedule, system: Boolean(s.system) })), httpCache: httpCacheStats() });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.intel() }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { addComment, deleteComment, listComments, updateComment } from "@/modules/office/shared/docs-service";
@@ -40,7 +41,7 @@ async function handleDELETE(req: NextRequest, { params }: Params) {
   return Response.json({ ok: deleteComment(commentId) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: officeDocFromParams });
-export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });
-export const PATCH = withAuth(handlePATCH, { action: "write", resource: officeDocFromParams });
-export const DELETE = withAuth(handleDELETE, { action: "write", resource: officeDocFromParams });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: officeDocFromParams }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeDocFromParams }));
+export const PATCH = withDb(withAuth(handlePATCH, { action: "write", resource: officeDocFromParams }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "write", resource: officeDocFromParams }));

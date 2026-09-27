@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { askAboutSource, type AskSourceBody } from "@/modules/search/service";
 import { withAuth } from "@/lib/auth/route";
@@ -16,4 +17,4 @@ async function handlePOST(req: Request) {
   });
 }
 
-export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.research() });
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: () => refs.research() }));

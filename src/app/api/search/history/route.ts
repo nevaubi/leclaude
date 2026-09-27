@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { clearRuns, listRuns } from "@/modules/search/service";
 import { withAuth } from "@/lib/auth/route";
@@ -17,5 +18,5 @@ async function handleDELETE() {
   return Response.json({ ok: true });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.research() });
-export const DELETE = withAuth(handleDELETE, { action: "delete", resource: () => refs.research() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.research() }));
+export const DELETE = withDb(withAuth(handleDELETE, { action: "delete", resource: () => refs.research() }));

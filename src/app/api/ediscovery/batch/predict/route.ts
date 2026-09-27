@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { isAIConfigError, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -6,7 +7,7 @@ import { predictResponsiveness } from "@/modules/ediscovery/ai";
 export const runtime = "nodejs";
 
 /** SSE: {type:"start"|"progress"|"doc"|"done"|"error"} — see PredictProgressEvent. */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<{ matterId?: string; ids?: string[]; force?: boolean; batchSize?: number }>(req);
   if (!body) return jsonError("Invalid JSON body");
   const m = matterFrom(req, body);
@@ -24,3 +25,5 @@ export async function POST(req: NextRequest) {
     }
   });
 }
+
+export const POST = withDb(withDb(POST__handler));

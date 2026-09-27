@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
 const RULINGS: ObjectionRuling[] = ["pending", "sustained", "overruled"];
 
 /** GET → { deposition, designations, objections, rulings: {[index]: ruling}, exhibits: [{id, description, bates, docId}], digestProvenance: Provenance | null } */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dep = getDeposition(id);
   if (!dep) return jsonError(`No deposition ${id}`, 404);
@@ -22,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
  * PATCH { index, flags? | toggle?: QAFlag, note? } → { qa, index }
  * PATCH { index, ruling: "pending" | "sustained" | "overruled", rulingNote? } → { index, ruling, objections, rulings }
  */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PATCH__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<{ index?: number; flags?: QAFlag[]; toggle?: QAFlag; note?: string | null; ruling?: ObjectionRuling; rulingNote?: string }>(req);
   if (!body || typeof body.index !== "number") return jsonError("`index` is required");
@@ -38,3 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return Response.json({ qa: dep.transcript[body.index], index: body.index });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));

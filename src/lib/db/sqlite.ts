@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { remoteUrl } from "./remote";
 
 /**
  * SQLite via Node's built-in `node:sqlite` (Node ≥ 22.13). Loaded through
@@ -81,9 +82,14 @@ CREATE TABLE IF NOT EXISTS blobs (
 
 type GlobalWithDb = typeof globalThis & { __leclaudeDb?: DatabaseSync; __leclaudeDbPath?: string };
 
+/** Local database file; with a remote store it is only this instance's mirror, kept apart from a development database. */
+function dbFile(): string {
+  return path.join(dataDir(), remoteUrl() ? "leclaude-mirror.db" : "leclaude.db");
+}
+
 export function getSqlite(): DatabaseSync {
   const g = globalThis as GlobalWithDb;
-  const file = path.join(dataDir(), "leclaude.db");
+  const file = dbFile();
   if (g.__leclaudeDb && g.__leclaudeDbPath === file) return g.__leclaudeDb;
   const Database = loadDatabaseSync();
   const db = new Database(file);
@@ -100,7 +106,7 @@ export function resetSqlite() {
     try { g.__leclaudeDb.close(); } catch {}
     g.__leclaudeDb = undefined;
   }
-  const file = path.join(dataDir(), "leclaude.db");
+  const file = dbFile();
   for (const suffix of ["", "-wal", "-shm"]) {
     try { fs.rmSync(file + suffix, { force: true }); } catch {}
   }

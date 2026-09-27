@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -9,7 +10,7 @@ import { upsertPrivilegeEntry } from "@/modules/ediscovery/service";
 export const runtime = "nodejs";
 
 /** POST { save?, verify? } → { description, ai, provenance?, entry } — drafts a privilege-safe description; `save: true` upserts the log entry. */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function POST__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<{ save?: boolean; verify?: boolean }>(req);
   const doc = db().edocs.get(id);
@@ -23,3 +24,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return errorResponse(e);
   }
 }
+
+export const POST = withDb(withDb(POST__handler));

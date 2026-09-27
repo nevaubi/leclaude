@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
  */
 let cached: { body: Buffer; version: string } | null = null;
 
-export async function GET() {
+async function GET__handler() {
   try {
     if (!cached) {
       const root = path.join(process.cwd(), "node_modules", "pdfjs-dist");
@@ -25,3 +26,5 @@ export async function GET() {
     return new Response(`// pdf.js worker unavailable: ${(e as Error).message}`, { status: 500, headers: { "Content-Type": "text/javascript; charset=utf-8" } });
   }
 }
+
+export const GET = withDb(withDb(GET__handler));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { withAuth, requirePrincipal } from "@/lib/auth/route";
 import { AuthError } from "@/lib/auth/errors";
@@ -32,6 +33,6 @@ async function handlePUT(req: NextRequest) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "settings" }) });
-export const POST = withAuth(handlePOST, { action: "write", resource: () => ({ kind: "settings" }) });
-export const PUT = withAuth(handlePUT, { action: "write", resource: () => ({ kind: "settings" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => ({ kind: "settings" }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: () => ({ kind: "settings" }) }));
+export const PUT = withDb(withAuth(handlePUT, { action: "write", resource: () => ({ kind: "settings" }) }));

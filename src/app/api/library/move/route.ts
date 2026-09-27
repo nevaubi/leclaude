@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { moveItems } from "@/modules/library/service";
@@ -13,4 +14,4 @@ async function handlePOST(req: NextRequest) {
   try { return Response.json(moveItems(body.ids, body.parentId ?? null)); } catch (e) { return jsonError((e as Error).message, 400); }
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: () => refs.library() });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: () => refs.library() }));

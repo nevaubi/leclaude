@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { allTemplates } from "@/modules/office/shared/template-registry";
 import { withAuth } from "@/lib/auth/route";
@@ -11,4 +12,4 @@ async function handleGET(req: NextRequest) {
   return Response.json({ templates });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: officeCollection });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: officeCollection }));

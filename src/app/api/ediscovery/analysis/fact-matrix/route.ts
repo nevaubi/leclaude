@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -7,14 +8,14 @@ import { buildFactMatrix } from "@/modules/ediscovery/analysis/ai";
 export const runtime = "nodejs";
 
 /** GET ?matter= → { matrices } */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   return Response.json({ matrices: listFactMatrices(m.matterId) });
 }
 
 /** POST { matterId, topic, witnessId?, verify? } → 201 { matrix: FactMatrix & { provenance } } (503 no_api_key without a key) */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<{ matterId?: string; topic?: string; witnessId?: string; verify?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -25,8 +26,14 @@ export async function POST(req: NextRequest) {
 }
 
 /** DELETE ?id= */
-export async function DELETE(req: NextRequest) {
+async function DELETE__handler(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return jsonError("`id` is required");
   return Response.json({ ok: deleteFactMatrix(id) });
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

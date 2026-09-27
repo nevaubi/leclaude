@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
  * → 201 { doc, duplicateOf: EDocument | null, created } — the content hash is computed and an identical document in the
  * matter is linked through `isDuplicateOf`. A Bates number already in the matter → 409 { error, existingId }.
  */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<Partial<CreateDocumentInput> & { matterId?: string }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -25,3 +26,5 @@ export async function POST(req: NextRequest) {
     return errorResponse(e);
   }
 }
+
+export const POST = withDb(withDb(POST__handler));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { computeDeadline, DEADLINE_PRESETS, federalHolidays } from "@/modules/home/deadline";
 import { deadlineSchema } from "@/modules/home/schemas";
 import { parseBody } from "@/modules/home/api-utils";
@@ -17,5 +18,5 @@ async function handlePOST(req: Request) {
   return Response.json({ result: computeDeadline(body.data) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => ({ kind: "event" }) });
-export const POST = withAuth(handlePOST, { action: "read", resource: () => ({ kind: "event" }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => ({ kind: "event" }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "read", resource: () => ({ kind: "event" }) }));

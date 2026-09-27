@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import type { ReviewBatch } from "@/lib/types/domain";
@@ -8,7 +9,7 @@ import type { BatchCreateInput } from "@/modules/ediscovery/types";
 export const runtime = "nodejs";
 
 /** GET ?matter=&assignee=&status= → { batches: ReviewBatchSummary[] } */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   ensureReview();
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST BatchCreateInput → 201 { batches: ReviewBatch[] } (size splits the set into numbered batches). */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<BatchCreateInput>(req);
   if (!body) return jsonError("Invalid JSON body");
   const m = matterFrom(req, body);
@@ -28,3 +29,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ batches }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));

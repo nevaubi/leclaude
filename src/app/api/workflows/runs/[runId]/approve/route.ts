@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { bootstrap, errorResponse, parseBody } from "@/modules/workflows/api-utils";
 import { resumeRun } from "@/modules/workflows/engine";
 import { approvalSchema } from "@/modules/workflows/schema";
@@ -19,4 +20,4 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ runId: s
   } catch (e) { return errorResponse(e); }
 }
 
-export const POST = withAuth(handlePOST, { action: "approve", resource: (_req, { runId }) => refs.workflowRun(runId) });
+export const POST = withDb(withAuth(handlePOST, { action: "approve", resource: (_req, { runId }) => refs.workflowRun(runId) }));

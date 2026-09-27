@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import type { OfficeKind } from "@/lib/types/domain";
 import { listOfficeDocSummaries, officeHomeData } from "@/modules/office/home/service";
@@ -14,4 +15,4 @@ async function handleGET(req: NextRequest) {
   return Response.json({ docs: listOfficeDocSummaries({ kind, matterId: sp.get("matter") || undefined, q: sp.get("q") || undefined, limit: Number(sp.get("limit") ?? 200) || 200 }) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "office_doc", matterId: queryParam(req, "matter", "matterId") }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "office_doc", matterId: queryParam(req, "matter", "matterId") }) }));

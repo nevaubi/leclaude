@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { z } from "zod";
 import { jsonError } from "@/lib/ai/sse";
 import { bootstrap, parseBody } from "@/modules/workflows/api-utils";
@@ -27,4 +28,4 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   return Response.json({ workflow }, { status: 201 });
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: (_req, { id }) => refs.workflow(id) });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: (_req, { id }) => refs.workflow(id) }));

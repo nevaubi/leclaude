@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { errorResponse, matterFrom } from "@/modules/ediscovery/api-utils";
 import { crossAnalysis } from "@/modules/ediscovery/analysis/service";
@@ -5,7 +6,7 @@ import { crossAnalysis } from "@/modules/ediscovery/analysis/service";
 export const runtime = "nodejs";
 
 /** GET ?matter=&topic=&witness=&deposition=&k= → CrossAnalysisResponse (deterministic; BM25 without a key) */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   const sp = req.nextUrl.searchParams;
@@ -14,3 +15,5 @@ export async function GET(req: NextRequest) {
     return Response.json(res);
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));

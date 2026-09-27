@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { adapterInfos } from "@/modules/intel/adapters";
@@ -34,5 +35,5 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
-export const POST = withAuth(handlePOST, { action: "admin", resource: () => refs.intel() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.intel() }));
+export const POST = withDb(withAuth(handlePOST, { action: "admin", resource: () => refs.intel() }));

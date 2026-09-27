@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { z } from "zod";
 import { bootstrap, parseBody } from "@/modules/workflows/api-utils";
 import { schedulerStatus, tick } from "@/modules/workflows/scheduler";
@@ -21,5 +22,5 @@ async function handlePOST(req: Request) {
   return Response.json({ ...res, scheduler: schedulerStatus() });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.workflow() });
-export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.workflow() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.workflow() }));
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: () => refs.workflow() }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
@@ -11,7 +12,7 @@ export const runtime = "nodejs";
  * `dryRun: true` returns the BulkPreview (ids after family expansion, per-field change counts, overwrites)
  * that the confirmation dialog shows before anything is written.
  */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<BulkCodingRequest>(req);
   if (!body?.ids?.length) return jsonError("`ids` is required");
   if (body.ids.length > 2000) return jsonError("Too many ids (max 2000)");
@@ -23,3 +24,5 @@ export async function POST(req: NextRequest) {
     return errorResponse(e);
   }
 }
+
+export const POST = withDb(withDb(POST__handler));

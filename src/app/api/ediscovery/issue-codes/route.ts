@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
@@ -6,14 +7,14 @@ import type { IssueCodeInput } from "@/modules/ediscovery/types";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   return Response.json({ codes: listIssueCodes(m.matterId) });
 }
 
 /** POST { matterId, code, label, … } → 201 { code }; POST { matterId, preset: "standard" } → 201 { created, skipped }. */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<IssueCodeInput & { matterId?: string; preset?: string }>(req);
   if (body?.preset === "standard") {
     const m = matterFrom(req, body);
@@ -29,3 +30,7 @@ export async function POST(req: NextRequest) {
     return errorResponse({ ...(e as Error), message: (e as Error).message, status: 409 });
   }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));

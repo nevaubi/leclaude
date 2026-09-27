@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { searchLibrary } from "@/modules/library/service";
@@ -16,4 +17,4 @@ async function handleGET(req: NextRequest) {
   try { return Response.json(await searchLibrary(q, { ...f, q: undefined }, k)); } catch (e) { return jsonError((e as Error).message, 500); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "library_item", matterId: queryParam(req, "matter", "matterId") }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "library_item", matterId: queryParam(req, "matter", "matterId") }) }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { createItem, listItems } from "@/modules/library/service";
@@ -21,5 +22,5 @@ async function handlePOST(req: NextRequest) {
   try { return Response.json({ item: createItem(body) }, { status: 201 }); } catch (e) { return jsonError((e as Error).message, 400); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "library_item", matterId: queryParam(req, "matter", "matterId") }) });
-export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "library_item", matterId: await bodyMatterId(req) }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "library_item", matterId: queryParam(req, "matter", "matterId") }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "library_item", matterId: await bodyMatterId(req) }) }));

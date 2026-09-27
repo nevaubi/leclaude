@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { createUpdate, listUpdates } from "@/modules/home/service";
 import { updateCreateSchema } from "@/modules/home/schemas";
 import { param, parseBody } from "@/modules/home/api-utils";
@@ -17,5 +18,5 @@ async function handlePOST(req: Request) {
   return Response.json({ update: createUpdate(body.data) }, { status: 201 });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "update", matterId: queryParam(req, "matter") }) });
-export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "update", matterId: await bodyMatterId(req) }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "update", matterId: queryParam(req, "matter") }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "update", matterId: await bodyMatterId(req) }) }));

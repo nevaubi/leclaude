@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { parseReadRef, providerMessage, readSource } from "@/modules/search/service";
 import { withAuth } from "@/lib/auth/route";
@@ -22,4 +23,4 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const POST = withAuth(handlePOST, { action: "read", resource: () => refs.research() });
+export const POST = withDb(withAuth(handlePOST, { action: "read", resource: () => refs.research() }));

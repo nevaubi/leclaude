@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { duplicateItem } from "@/modules/library/service";
@@ -15,4 +16,4 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
   } catch (e) { return jsonError((e as Error).message, 400); }
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: (_req, { id }) => refs.library(id) });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: (_req, { id }) => refs.library(id) }));

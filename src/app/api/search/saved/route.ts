@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { createSavedSearch, listSavedSearches } from "@/modules/search/service";
 import type { SearchSettings } from "@/modules/search/types";
@@ -17,5 +18,5 @@ async function handlePOST(req: Request) {
   return Response.json({ saved }, { status: 201 });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.research() });
-export const POST = withAuth(handlePOST, { action: "write", resource: () => refs.research() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.research() }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: () => refs.research() }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { errorResponse, matterFrom, readJson } from "@/modules/ediscovery/api-utils";
 import { createConflict, listConflicts } from "@/modules/ediscovery/analysis/service";
@@ -6,7 +7,7 @@ import type { Conflict } from "@/lib/types/domain";
 export const runtime = "nodejs";
 
 /** GET ?matter=&status=&kind=&severity=&witness=&q= → { conflicts: ConflictRow[] } */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   const sp = req.nextUrl.searchParams;
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** POST { matterId, title, kind, severity, sides[2+], analysis } → 201 { conflict } */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<Partial<Conflict> & { matterId?: string }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -24,3 +25,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ conflict: c }, { status: 201 });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));

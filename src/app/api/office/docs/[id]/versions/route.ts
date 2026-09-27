@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { checkpoint, getVersion, listVersions, restoreVersion } from "@/modules/office/shared/docs-service";
@@ -32,5 +33,5 @@ async function handlePOST(req: NextRequest, { params }: Params) {
   return jsonError("Unknown action");
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: officeDocFromParams });
-export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: officeDocFromParams }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeDocFromParams }));

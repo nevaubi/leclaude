@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "E-Discovery" };
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ matter?: string; tab?: string; doc?: string; person?: string; q?: string; view?: string; custodian?: string; batch?: string; production?: string }> }) {
+  await pageDb();
   const sp = await searchParams;
   const d = db();
   ensureReviewSeeded(d);

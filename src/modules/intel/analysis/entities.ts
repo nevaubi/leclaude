@@ -1,4 +1,5 @@
 import "server-only";
+import { markDirty } from "@/lib/db/sync";
 import { db } from "@/lib/db";
 import { INTEL_VECTOR_NAMESPACE, type IntelDocument, type IntelEntity, type IntelEntityMention, type IntelEntityType, type IntelFlag } from "../types";
 import { canonicalKey, courtIdFromName, courtMention, dedupeMentions, mention, mentionsFromCaption, mentionsFromCounselString, mentionsFromJudgeField, COURT_NAMES } from "../mentions";
@@ -225,7 +226,7 @@ export function refreshVectorMeta(doc: IntelDocument): void {
   try {
     const raw = db().raw;
     const upd = raw.prepare("UPDATE vectors SET meta = ? WHERE collection = ? AND doc_id = ?");
-    for (const c of listChunks(doc.id)) upd.run(JSON.stringify(docMetaForVector(doc, c)), INTEL_VECTOR_NAMESPACE, c.id);
+    for (const c of listChunks(doc.id)) { upd.run(JSON.stringify(docMetaForVector(doc, c)), INTEL_VECTOR_NAMESPACE, c.id); markDirty("vectors", INTEL_VECTOR_NAMESPACE, c.id); }
     // The vector store caches parsed rows per collection; drop the cached namespace so filters see the new metadata.
     const g = globalThis as typeof globalThis & { __leclaudeVecCache?: Map<string, unknown> };
     g.__leclaudeVecCache?.delete(INTEL_VECTOR_NAMESPACE);

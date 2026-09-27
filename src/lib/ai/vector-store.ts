@@ -2,6 +2,7 @@ import "server-only";
 import MiniSearch from "minisearch";
 import type { DatabaseSync } from "node:sqlite";
 import { getSqlite } from "@/lib/db/sqlite";
+import { markDirty, registerVectorInvalidator } from "@/lib/db/sync";
 import { aiConfig } from "./config";
 import { bufferToFloat32, chunkText, cosine, embedTexts, embedText, float32ToBuffer } from "./embeddings";
 
@@ -293,6 +294,9 @@ function invalidate(collection: string) {
   cache(sqlite()).delete(collection);
 }
 
+// Rows pulled from the shared store (serverless mode) must drop the parsed cache too.
+registerVectorInvalidator(invalidate);
+
 function metaOf(entry: Entry, i: number): Record<string, unknown> {
   let m = entry.metas[i];
   if (!m) { m = parseMeta(entry.rows[i].meta); entry.metas[i] = m; }
@@ -340,6 +344,7 @@ export async function indexDocument(collection: string, docId: string, text: str
     chunks.forEach((t, i) => ins.run(collection, docId, i, t, vecs[i] ? float32ToBuffer(vecs[i]!) : null, JSON.stringify(meta), model, row.tenantId, row.matterId, row.corpus));
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); throw e; }
+  markDirty("vectors", collection, docId);
   invalidate(collection);
   return { chunks: chunks.length, embedded: vecs.filter(Boolean).length };
 }
@@ -367,6 +372,7 @@ export async function indexDocuments(collection: string, docs: IndexableDocument
     });
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); throw e; }
+  for (const d of docs) markDirty("vectors", collection, d.id);
   invalidate(collection);
   opts.onProgress?.(docs.length, docs.length);
   return { docs: docs.length, chunks: all.length, embedded: vecs.filter(Boolean).length };
@@ -374,6 +380,7 @@ export async function indexDocuments(collection: string, docs: IndexableDocument
 
 export function removeDocument(collection: string, docId: string) {
   sqlite().prepare("DELETE FROM vectors WHERE collection = ? AND doc_id = ?").run(collection, docId);
+  markDirty("vectors", collection, docId);
   invalidate(collection);
 }
 

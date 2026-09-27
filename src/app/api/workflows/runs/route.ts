@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { bootstrap, param } from "@/modules/workflows/api-utils";
 import { listRuns } from "@/modules/workflows/service";
 import { withAuth } from "@/lib/auth/route";
@@ -13,4 +14,4 @@ async function handleGET(req: Request) {
   return Response.json(res);
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "workflow_run", matterId: queryParam(req, "matterId") }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "workflow_run", matterId: queryParam(req, "matterId") }) }));

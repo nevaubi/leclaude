@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { createTask, listTasks } from "@/modules/home/service";
 import { taskCreateSchema } from "@/modules/home/schemas";
@@ -32,5 +33,5 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "task", matterId: queryParam(req, "matter") }) });
-export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "task", matterId: await bodyMatterId(req) }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => ({ kind: "task", matterId: queryParam(req, "matter") }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "task", matterId: await bodyMatterId(req) }) }));

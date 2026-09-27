@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import * as React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +22,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
 /** Office home: /office?kind=word|sheet|slides|pdf */
 export default async function Page({ searchParams }: Props) {
+  await pageDb();
   const { kind } = await searchParams;
   const k = kind && (OFFICE_KINDS as string[]).includes(kind) ? (kind as OfficeKind) : null;
   // Resolve the principal from the request so the initial list is matter-scoped exactly like /api/library/office.

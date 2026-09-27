@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { blobs, db } from "@/lib/db";
 import { jsonError } from "@/lib/ai/sse";
@@ -51,4 +52,4 @@ async function handlePOST(req: NextRequest) {
   return Response.json({ id: rec.id, url: `/api/blobs/${rec.id}`, size: rec.size, mime: rec.mime, name: rec.name, sha256: hash, duplicate: false });
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: (req) => ({ kind: "blob", matterId: queryParam(req, "matterId") }) });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: (req) => ({ kind: "blob", matterId: queryParam(req, "matterId") }) }));

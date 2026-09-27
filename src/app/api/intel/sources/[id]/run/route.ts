@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { kickRunner } from "@/modules/intel/background";
@@ -24,4 +25,4 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export const POST = withAuth(handlePOST, { action: "run", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: (_req, { id }) => ({ kind: "intel", id }) }));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/integrity/audit";
@@ -8,7 +9,7 @@ import { chronologyCsv, chronologyMarkdown } from "@/modules/ediscovery/analysis
 export const runtime = "nodejs";
 
 /** GET ?matter=&format=csv (download) | markdown → { title, markdown, count } */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   const matter = db().matters.get(m.matterId);
@@ -22,3 +23,5 @@ export async function GET(req: NextRequest) {
   }
   return new Response(chronologyCsv(events, people), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="chronology-${matter?.slug ?? m.matterId}.csv"` } });
 }
+
+export const GET = withDb(withDb(GET__handler));

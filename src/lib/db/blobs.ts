@@ -1,6 +1,7 @@
 import "server-only";
 import { nanoid } from "nanoid";
 import { getSqlite } from "./sqlite";
+import { markDirty } from "./sync";
 
 export interface BlobRecord { id: string; name?: string; mime: string; size: number; meta?: Record<string, unknown>; createdAt: string }
 
@@ -11,6 +12,7 @@ export const blobs = {
     getSqlite()
       .prepare("INSERT INTO blobs (id, name, mime, size, bytes, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, mime = excluded.mime, size = excluded.size, bytes = excluded.bytes, meta = excluded.meta")
       .run(id, opts.name ?? null, mime, bytes.byteLength, bytes, opts.meta ? JSON.stringify(opts.meta) : null, createdAt);
+    markDirty("blobs", id);
     return { id, name: opts.name, mime, size: bytes.byteLength, meta: opts.meta, createdAt };
   },
   get(id: string): (BlobRecord & { bytes: Uint8Array }) | null {
@@ -27,5 +29,6 @@ export const blobs = {
   },
   delete(id: string) {
     getSqlite().prepare("DELETE FROM blobs WHERE id = ?").run(id);
+    markDirty("blobs", id);
   },
 };

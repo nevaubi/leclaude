@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -9,7 +10,7 @@ import type { Designation } from "@/modules/ediscovery/analysis/types";
 export const runtime = "nodejs";
 
 /** GET → { designations }; ?format=csv downloads; ?format=markdown → { title, markdown, count } */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dep = getDeposition(id);
   if (!dep) return jsonError(`No deposition ${id}`, 404);
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 /** POST { startPage, startLine, endPage, endLine, purpose, note? } → 201 { designation } */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function POST__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dep = getDeposition(id);
   if (!dep) return jsonError(`No deposition ${id}`, 404);
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 /** PATCH { id, purpose?, note?, range? } → { designation } */
-export async function PATCH(req: NextRequest) {
+async function PATCH__handler(req: NextRequest) {
   const body = await readJson<{ id?: string } & Partial<Designation>>(req);
   if (!body?.id) return jsonError("`id` is required");
   const { id, ...patch } = body;
@@ -45,8 +46,16 @@ export async function PATCH(req: NextRequest) {
 }
 
 /** DELETE ?id= → { ok } */
-export async function DELETE(req: NextRequest) {
+async function DELETE__handler(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return jsonError("`id` is required");
   return Response.json({ ok: deleteDesignation(id) });
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import * as React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,7 +8,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Matters" };
 
 /** Matters: /matters?id=<matterId>&new=1. Data loads through the authorized /api/matters routes. */
-export default function Page() {
+export default async function Page() {
+  await pageDb();
   return (
     <React.Suspense fallback={<div className="space-y-2 p-3"><Skeleton className="h-9" /><Skeleton className="h-64" /></div>}>
       <MattersPage />

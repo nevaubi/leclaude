@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { aiConfig } from "@/lib/ai/config";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
  * SSE: {type:"start", total, ai} → {type:"progress", done, total} → {type:"done", created, removed, ai}.
  * Uses generateText for privilege-safe descriptions when a key is configured; otherwise a template.
  */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<{ matterId?: string; regenerate?: boolean; useAI?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -27,3 +28,5 @@ export async function POST(req: NextRequest) {
     }
   });
 }
+
+export const POST = withDb(withDb(POST__handler));

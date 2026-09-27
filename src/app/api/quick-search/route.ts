@@ -1,10 +1,11 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import type { QuickSearchHit } from "@/components/shell/command-palette";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase();
   if (!q) return Response.json({ hits: [] });
   const d = db();
@@ -21,3 +22,5 @@ export async function GET(req: NextRequest) {
   for (const doc of d.edocs.all()) { if (n >= 8) break; if (has(doc.bates) || has(doc.subject)) { hits.push({ id: doc.id, kind: "document", title: `${doc.bates} — ${doc.subject}`, subtitle: `${doc.custodianName} · ${doc.date}`, href: `/ediscovery?matter=${doc.matterId}&doc=${doc.id}` }); n++; } }
   return Response.json({ hits: hits.slice(0, 30) });
 }
+
+export const GET = withDb(withDb(GET__handler));

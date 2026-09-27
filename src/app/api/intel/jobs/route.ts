@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { jobCounts, listJobs } from "@/modules/intel/jobs";
@@ -27,4 +28,4 @@ async function handleGET(req: NextRequest) {
   });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.intel() }));

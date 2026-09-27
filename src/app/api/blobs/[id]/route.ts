@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { blobs } from "@/lib/db";
 import { parseRange } from "@/lib/http-range";
@@ -30,5 +31,5 @@ async function handleHEAD(req: NextRequest, ctx: { params: Promise<{ id: string 
   return new Response(null, { status: res.status, headers: res.headers });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.blob(id) });
-export const HEAD = withAuth(handleHEAD, { action: "read", resource: (_req, { id }) => refs.blob(id) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => refs.blob(id) }));
+export const HEAD = withDb(withAuth(handleHEAD, { action: "read", resource: (_req, { id }) => refs.blob(id) }));

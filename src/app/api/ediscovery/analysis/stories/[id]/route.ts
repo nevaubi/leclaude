@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
@@ -7,7 +8,7 @@ import type { Story, StoryFact } from "@/modules/ediscovery/analysis/types";
 export const runtime = "nodejs";
 
 /** GET → { story, sources: { docs, depositions } } */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const s = getStory(id);
   if (!s) return jsonError(`No story ${id}`, 404);
@@ -17,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 /**
  * PATCH { title?, theme? } | { fact: Partial<StoryFact> } (upsert) | { removeFactId } | { addFacts: StoryFact[] } | { facts: StoryFact[] } (reorder/replace) → { story }
  */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PATCH__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<{ title?: string; theme?: string; fact?: Partial<StoryFact>; removeFactId?: string; addFacts?: StoryFact[]; facts?: StoryFact[] }>(req);
   if (!body) return jsonError("Body required");
@@ -32,7 +33,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch (e) { return errorResponse(e); }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function DELETE__handler(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return Response.json({ ok: deleteStory(id) });
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));
+
+export const DELETE = withDb(withDb(DELETE__handler));

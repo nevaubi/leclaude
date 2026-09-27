@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError } from "@/lib/ai/sse";
 import { bootstrap, errorResponse, parseBody } from "@/modules/workflows/api-utils";
 import { startRun } from "@/modules/workflows/engine";
@@ -38,4 +39,4 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   } catch (e) { return errorResponse(e); }
 }
 
-export const POST = withAuth(handlePOST, { action: "run", resource: async (req, { id }) => ({ ...refs.workflow(id), matterId: await bodyMatterId(req) }) });
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: async (req, { id }) => ({ ...refs.workflow(id), matterId: await bodyMatterId(req) }) }));

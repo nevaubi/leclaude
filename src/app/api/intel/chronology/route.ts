@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -36,5 +37,5 @@ async function handlePOST(req: NextRequest) {
   return Response.json(exportChronologyToTimeline(body.matterId, { minConfidence }));
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
-export const POST = withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "timeline", matterId: await bodyMatterId(req) }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: async (req) => ({ kind: "timeline", matterId: await bodyMatterId(req) }) }));

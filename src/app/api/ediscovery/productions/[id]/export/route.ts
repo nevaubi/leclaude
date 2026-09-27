@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { audit } from "@/lib/integrity/audit";
@@ -7,7 +8,7 @@ import { buildProductionZip, productionLoadFiles } from "@/modules/ediscovery/pr
 export const runtime = "nodejs";
 
 /** GET ?format=dat|opt|zip — load files or the whole volume (DAT, OPT, redacted text, image-surrogate PDFs, QC report). */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const format = req.nextUrl.searchParams.get("format") ?? "zip";
   try {
@@ -24,3 +25,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new Response(new Uint8Array(bytes), { headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${filename}"`, "Content-Length": String(bytes.byteLength) } });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { aiConfig } from "@/lib/ai/config";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
  * "metadata" mode builds one event per document deterministically (no key needed). AI events are self-corrected against
  * the documents, near-duplicates are merged into the existing chronology, and low-confidence events are gated for review.
  */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<{ matterId?: string; docIds?: string[]; mode?: "ai" | "metadata"; verify?: boolean }>(req);
   const m = matterFrom(req, body);
   if ("error" in m) return m.error;
@@ -39,3 +40,5 @@ export async function POST(req: NextRequest) {
     }
   });
 }
+
+export const POST = withDb(withDb(POST__handler));

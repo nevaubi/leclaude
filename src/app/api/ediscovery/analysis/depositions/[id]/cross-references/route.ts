@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -7,7 +8,7 @@ import { findCrossReferences, groupCrossReferences } from "@/modules/ediscovery/
 export const runtime = "nodejs";
 
 /** GET → { references: CrossReference[], groups } — documents referenced in the testimony by Bates, exhibit, subject or date. */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const dep = getDeposition(id);
   if (!dep) return jsonError(`No deposition ${id}`, 404);
@@ -16,3 +17,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const references = findCrossReferences(dep, docs).filter((r) => r.confidence >= min);
   return Response.json({ references, groups: groupCrossReferences(references), total: references.length });
 }
+
+export const GET = withDb(withDb(GET__handler));

@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/integrity/audit";
@@ -7,7 +8,7 @@ import { production, productionCsv } from "@/modules/ediscovery/service";
 export const runtime = "nodejs";
 
 /** ?matter= → production summary JSON; ?format=csv → load file (DAT-style CSV) for producible documents. */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   if (req.nextUrl.searchParams.get("format") === "csv") {
@@ -19,3 +20,5 @@ export async function GET(req: NextRequest) {
   }
   return Response.json(production(m.matterId));
 }
+
+export const GET = withDb(withDb(GET__handler));

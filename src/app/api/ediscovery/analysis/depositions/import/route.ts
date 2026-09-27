@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, matterFrom } from "@/modules/ediscovery/api-utils";
@@ -11,7 +12,7 @@ const MAX_BYTES = 25 * 1024 * 1024;
 type Body = Omit<ImportTranscriptInput, "matterId" | "text"> & { matterId?: string; text?: string; preview?: boolean };
 
 /** GET ?matter= → { imports: TranscriptImportRecord[] } */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   return Response.json({ imports: listImports(m.matterId) });
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
  *      — or multipart/form-data with `file` (.txt/.ptx/.asc/.docx) plus the same fields.
  * preview → 200 { parsed } (nothing written); otherwise 201 { deposition, summary, parsed, record }.
  */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   try {
     let body: Body = {};
     let text = "";
@@ -54,3 +55,7 @@ export async function POST(req: NextRequest) {
 }
 
 function safeJson(v: string) { try { return JSON.parse(v); } catch { return undefined; } }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));

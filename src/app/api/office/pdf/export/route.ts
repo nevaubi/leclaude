@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { exportPdf, safeName, type ExportRequest } from "@/modules/office/pdf/service";
@@ -23,4 +24,4 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
-export const POST = withAuth(handlePOST, { action: "export", resource: officeDocFromBody });
+export const POST = withDb(withAuth(handlePOST, { action: "export", resource: officeDocFromBody }));

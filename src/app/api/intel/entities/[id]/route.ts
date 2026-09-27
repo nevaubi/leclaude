@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { currentUser } from "@/lib/current-user";
@@ -42,5 +43,5 @@ async function handlePOST(req: NextRequest, { params }: Ctx) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) });
-export const POST = withAuth(handlePOST, { action: "write", resource: (_req, { id }) => ({ kind: "intel", id }) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { id }) => ({ kind: "intel", id }) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: (_req, { id }) => ({ kind: "intel", id }) }));

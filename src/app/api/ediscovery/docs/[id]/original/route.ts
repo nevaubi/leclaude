@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -30,4 +31,4 @@ async function handleGET(_req: NextRequest, { params }: { params: Promise<{ id: 
   });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, p: { id: string }) => refs.edoc(p.id) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, p: { id: string }) => refs.edoc(p.id) }));

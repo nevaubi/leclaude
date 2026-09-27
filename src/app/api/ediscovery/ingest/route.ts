@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -70,6 +71,6 @@ async function handlePOST(req: NextRequest) {
   } catch (e) { return errorResponse(e); }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.matter(matterParam(req)) });
-export const PATCH = withAuth(handlePATCH, { action: "write", resource: async (req) => refs.matter((await bodyMatterId(req)) ?? matterParam(req)) });
-export const POST = withAuth(handlePOST, { action: "write", resource: (req) => refs.matter(matterParam(req)) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => refs.matter(matterParam(req)) }));
+export const PATCH = withDb(withAuth(handlePATCH, { action: "write", resource: async (req) => refs.matter((await bodyMatterId(req)) ?? matterParam(req)) }));
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: (req) => refs.matter(matterParam(req)) }));

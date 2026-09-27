@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { audit } from "@/lib/integrity/audit";
@@ -8,14 +9,14 @@ import type { SearchTermReportRequest } from "@/modules/ediscovery/types";
 export const runtime = "nodejs";
 
 /** GET ?matter= → { reports } (recent saved reports). */
-export async function GET(req: NextRequest) {
+async function GET__handler(req: NextRequest) {
   const m = matterFrom(req);
   if ("error" in m) return m.error;
   return Response.json({ reports: listTermReports(m.matterId) });
 }
 
 /** POST { matterId, terms[], view?, filters?, save? } (+ ?format=csv) → SearchTermReport | CSV */
-export async function POST(req: NextRequest) {
+async function POST__handler(req: NextRequest) {
   const body = await readJson<SearchTermReportRequest & { save?: boolean }>(req);
   if (!body?.terms?.length) return jsonError("`terms` is required");
   const m = matterFrom(req, body);
@@ -29,3 +30,7 @@ export async function POST(req: NextRequest) {
     return Response.json(report);
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const POST = withDb(withDb(POST__handler));

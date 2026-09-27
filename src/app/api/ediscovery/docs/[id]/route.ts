@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
@@ -9,7 +10,7 @@ import type { CodingPatch } from "@/modules/ediscovery/types";
 export const runtime = "nodejs";
 
 /** GET → { doc, row, family, reviewerName, analysis: AIAnalysis & { provenance? } | null, provenance: doc.aiProvenance } */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const detail = getDocument(id, { recordView: req.nextUrl.searchParams.get("view") !== "0" });
   if (!detail) return jsonError(`No document ${id}`, 404);
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
  * PATCH { coding, reviewerId?, batchId?, qc? } → { doc: { id, coding, aiProvenance }, qc? } (audited as coding.change).
  * With `batchId` + `qc: true` the call is a QC decision: the first-pass coding is snapshotted against the new call before it is saved.
  */
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function PATCH__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<{ coding?: CodingPatch; reviewerId?: string; batchId?: string; qc?: boolean }>(req);
   if (!body?.coding) return jsonError("`coding` is required");
@@ -37,3 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return errorResponse(e);
   }
 }
+
+export const GET = withDb(withDb(GET__handler));
+
+export const PATCH = withDb(withDb(PATCH__handler));

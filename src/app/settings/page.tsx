@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import * as React from "react";
 import type { Metadata } from "next";
 import { Settings as SettingsIcon } from "lucide-react";
@@ -26,7 +27,8 @@ export const metadata: Metadata = { title: "Settings" };
  * edited here; model and provider configuration is read from the environment
  * and reported by presence, never by value.
  */
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  await pageDb();
   const ai = aiRuntimeStatus();
   const d = db();
   const me = currentUser((id) => d.people.get(id)?.name);

@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Research" };
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ q?: string; tool?: string; thread?: string }> }) {
+  await pageDb();
   const sp = await searchParams;
   const d = db();
   const matters = d.matters.list({ where: (m) => m.status !== "closed", sortBy: "shortName" }).map((m) => ({ id: m.id, shortName: m.shortName, name: m.name, caption: m.caption }));

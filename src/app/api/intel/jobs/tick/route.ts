@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { intelConfig } from "@/modules/intel/config";
@@ -39,5 +40,5 @@ async function handlePOST(req: NextRequest) { return tick(req); }
 /** Vercel cron jobs use GET. */
 async function handleGET(req: NextRequest) { return tick(req); }
 
-export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.intel() });
-export const GET = withAuth(handleGET, { action: "run", resource: () => refs.intel() });
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: () => refs.intel() }));
+export const GET = withDb(withAuth(handleGET, { action: "run", resource: () => refs.intel() }));

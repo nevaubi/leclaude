@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { listActivity } from "@/modules/library/service";
 import { withAuth } from "@/lib/auth/route";
@@ -10,4 +11,4 @@ async function handleGET(req: NextRequest) {
   return Response.json({ activity: listActivity({ itemId: sp.get("item") || undefined, limit: Math.min(Number(sp.get("limit") ?? 40) || 40, 200) }) });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.library() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.library() }));

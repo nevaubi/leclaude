@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { z } from "zod";
 import { jsonError } from "@/lib/ai/sse";
 import { bootstrap, parseBody } from "@/modules/workflows/api-utils";
@@ -21,4 +22,4 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const POST = withAuth(handlePOST, { action: "read", resource: async (req) => refs.blob(await bodyString(req, "blobId")) });
+export const POST = withDb(withAuth(handlePOST, { action: "read", resource: async (req) => refs.blob(await bodyString(req, "blobId")) }));

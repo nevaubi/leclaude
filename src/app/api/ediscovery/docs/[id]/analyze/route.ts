@@ -1,10 +1,11 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { errorResponse, readJson } from "@/modules/ediscovery/api-utils";
 import { analyzeDocument } from "@/modules/ediscovery/ai";
 
 export const runtime = "nodejs";
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function POST__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await readJson<{ force?: boolean }>(req);
   try {
@@ -14,3 +15,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return errorResponse(e);
   }
 }
+
+export const POST = withDb(withDb(POST__handler));

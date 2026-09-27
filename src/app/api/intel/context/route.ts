@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { currentUser } from "@/lib/current-user";
@@ -33,4 +34,4 @@ async function handleGET(req: NextRequest) {
   }
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (req) => refs.intel(queryParam(req, "matterId")) }));

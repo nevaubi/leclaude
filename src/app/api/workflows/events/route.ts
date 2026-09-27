@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { z } from "zod";
 import { errorResponse, parseBody } from "@/modules/workflows/api-utils";
 import { dispatchInboundEvent } from "@/modules/workflows/inbound";
@@ -26,4 +27,4 @@ async function handlePOST(req: Request) {
   } catch (e) { return errorResponse(e); }
 }
 
-export const POST = withAuth(handlePOST, { action: "run", resource: async (req) => ({ kind: "workflow", matterId: await bodyMatterId(req) }) });
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: async (req) => ({ kind: "workflow", matterId: await bodyMatterId(req) }) }));

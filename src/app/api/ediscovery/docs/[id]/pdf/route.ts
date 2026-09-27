@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
@@ -14,7 +15,7 @@ export const runtime = "nodejs";
  * `?applied=1` burns the current redactions in (what a production would carry); by default the
  * sheets are clean so the overlay can show and remove the stored redactions.
  */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function GET__handler(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const doc = db().edocs.get(id);
   if (!doc) return jsonError(`No document ${id}`, 404);
@@ -24,3 +25,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new Response(new Uint8Array(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${doc.bates}${applied ? "-redacted" : ""}.pdf"`, "Cache-Control": "no-store", "X-Page-Map": pageMap.join(",") } });
   } catch (e) { return errorResponse(e); }
 }
+
+export const GET = withDb(withDb(GET__handler));

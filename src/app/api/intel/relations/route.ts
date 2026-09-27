@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
@@ -33,5 +34,5 @@ async function handlePOST(req: NextRequest) {
   return Response.json(buildRelations({ docIds: Array.isArray(body.docIds) ? body.docIds : undefined, reset: body.reset === true }));
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: () => refs.intel() });
-export const POST = withAuth(handlePOST, { action: "run", resource: () => refs.intel() });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: () => refs.intel() }));
+export const POST = withDb(withAuth(handlePOST, { action: "run", resource: () => refs.intel() }));

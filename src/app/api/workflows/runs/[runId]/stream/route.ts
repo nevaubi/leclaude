@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { jsonError, sseResponse } from "@/lib/ai/sse";
 import { bootstrap } from "@/modules/workflows/api-utils";
 import { subscribeRunEvents } from "@/modules/workflows/events";
@@ -49,4 +50,4 @@ async function handleGET(_req: Request, { params }: { params: Promise<{ runId: s
   });
 }
 
-export const GET = withAuth(handleGET, { action: "read", resource: (_req, { runId }) => refs.workflowRun(runId) });
+export const GET = withDb(withAuth(handleGET, { action: "read", resource: (_req, { runId }) => refs.workflowRun(runId) }));

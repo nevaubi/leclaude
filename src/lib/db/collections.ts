@@ -1,5 +1,6 @@
 import "server-only";
 import { getSqlite, cacheRegistry } from "./sqlite";
+import { markDirty } from "./sync";
 
 export interface HasId { id: string }
 
@@ -80,6 +81,7 @@ export class Collection<T extends HasId> {
       .prepare("INSERT INTO docs (collection, id, json, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(collection, id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at")
       .run(this.name, doc.id, JSON.stringify(doc), existing?.created_at ?? now, now);
     this.cache().set(doc.id, doc);
+    markDirty("docs", this.name, doc.id);
     return doc;
   }
 
@@ -97,7 +99,7 @@ export class Collection<T extends HasId> {
       throw e;
     }
     const c = this.cache();
-    for (const d of docs) c.set(d.id, d);
+    for (const d of docs) { c.set(d.id, d); markDirty("docs", this.name, d.id); }
   }
 
   update(id: string, patch: Partial<T> | ((doc: T) => T)): T | null {
@@ -110,10 +112,12 @@ export class Collection<T extends HasId> {
   delete(id: string): boolean {
     const res = getSqlite().prepare("DELETE FROM docs WHERE collection = ? AND id = ?").run(this.name, id);
     this.cache().delete(id);
+    markDirty("docs", this.name, id);
     return Number(res.changes) > 0;
   }
 
   clear() {
+    for (const id of this.cache().keys()) markDirty("docs", this.name, id);
     getSqlite().prepare("DELETE FROM docs WHERE collection = ?").run(this.name);
     this.cache().clear();
   }

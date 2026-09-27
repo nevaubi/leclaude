@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { Radar } from "lucide-react";
 import { PageTopbar } from "@/components/shell/page-topbar";
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: "Insights · Intelligence" };
 
 /** Every insight (trend, cluster, pattern, chronology, profile, anomaly, alert, digest) with flags, trust badges and evidence. */
 export default async function InsightsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await pageDb();
   intelAnalysisBootstrap();
   const sp = await searchParams;
   const me = currentUser();

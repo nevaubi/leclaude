@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { parsePageRange } from "@/modules/office/pdf/model";
@@ -30,4 +31,4 @@ async function handlePOST(req: NextRequest, { params }: Params) {
   }
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeDocFromParams }));

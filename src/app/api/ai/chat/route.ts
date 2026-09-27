@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import type { ResponseInput, ResponseInputItem } from "openai/resources/responses/responses";
 import { runAgent } from "@/lib/ai/agent";
 import { AIConfigError } from "@/lib/ai/config";
@@ -19,7 +20,7 @@ interface Body {
 }
 
 /** General-purpose firm assistant with the full research toolset (used by Home and the palette). */
-export async function POST(req: Request) {
+async function POST__handler(req: Request) {
   let body: Body;
   try { body = (await req.json()) as Body; } catch { return jsonError("Invalid JSON"); }
   if (!body?.message) return jsonError("`message` is required");
@@ -46,3 +47,5 @@ export async function POST(req: Request) {
     }
   });
 }
+
+export const POST = withDb(withDb(POST__handler));

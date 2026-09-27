@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -15,6 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function WorkflowBuilderPage({ params }: { params: Promise<{ id: string }> }) {
+  await pageDb();
   const { id } = await params;
   ensureScheduler();
   const workflow = getWorkflow(id);

@@ -1,3 +1,4 @@
+import { pageDb } from "@/lib/db/request";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { SlidesEditorPage } from "@/modules/office/slides/editor";
@@ -14,6 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 /** Slides editor: /office/slides/[id]; "new" creates (optionally from ?template=<id>&matter=<id>). */
 export default async function Page({ params, searchParams }: Props) {
+  await pageDb();
   const { id } = await params;
   const sp = await searchParams;
   const matters = db().matters.list({ sortBy: "shortName" });

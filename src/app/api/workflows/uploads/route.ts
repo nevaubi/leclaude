@@ -1,3 +1,4 @@
+import { withDb } from "@/lib/db/request";
 import { blobs } from "@/lib/db";
 import { jsonError } from "@/lib/ai/sse";
 import { audit } from "@/lib/integrity/audit";
@@ -41,4 +42,4 @@ async function handlePOST(req: Request) {
   return Response.json(out.length === 1 ? { ...out[0], files: out } : { files: out }, { status: 201 });
 }
 
-export const POST = withAuth(handlePOST, { action: "write", resource: () => ({ kind: "blob" }) });
+export const POST = withDb(withAuth(handlePOST, { action: "write", resource: () => ({ kind: "blob" }) }));
