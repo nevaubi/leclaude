@@ -1,6 +1,15 @@
+import "server-only";
 /** Shared prompt fragments so every agent speaks with one voice. */
 
-export const FIRM_NAME = process.env.NEXT_PUBLIC_FIRM_NAME ?? "Seeger Weiss LLP";
+import { getWorkspace } from "@/lib/workspace";
+
+/** The firm name from the workspace (first-run setup), read at use; interpolates as a string in prompts. */
+export function firmName(): string {
+  try { return getWorkspace().firmName; } catch { return (process.env.NEXT_PUBLIC_FIRM_NAME ?? "").trim() || "the firm"; }
+}
+
+/** Live value for template literals (`${FIRM_NAME}`); prefer firmName() in new code. */
+export const FIRM_NAME = { toString: firmName, valueOf: firmName } as unknown as string;
 
 export const LEGAL_STYLE_RULES = `Writing standards:
 - Write like a careful senior litigator: precise, plain, no filler, no hype. Prefer active voice and short sentences.
