@@ -4,7 +4,8 @@ import type { ResponseInput, ResponseInputItem } from "openai/resources/response
 import { db } from "@/lib/db";
 import { AIConfigError } from "@/lib/ai/config";
 import { classifyFailure, createEmitter, isAbortError, STOP_LABEL, type FailureKind, type ResearchStopState, type RunMetrics, type RunTerminalState } from "@/lib/ai/events";
-import { FIRM_NAME, LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
+import { LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
+import { firmLabel } from "../firm";
 import type { VerificationResult } from "@/lib/ai/verify";
 import { audit } from "@/lib/integrity/audit";
 import { attachProvenance } from "@/lib/integrity/record";
@@ -253,7 +254,7 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
       const courts = resolveCourts(settings.jurisdiction, settings.courts);
       const range = datePresetRange(settings.datePreset, { from: settings.dateFrom, to: settings.dateTo });
       synthesisInstructions = [
-        `You are the ${FIRM_NAME} legal research agent writing the synthesis for a research thread. ${todayLine()}`,
+        `You are the legal research agent for ${firmLabel()}, writing the synthesis for a research thread. ${todayLine()}`,
         matterLine,
         `Jurisdiction: ${j.label}${courts ? ` (courts: ${courts})` : ""}.${range.from ? ` Date range from ${range.from}.` : ""}${range.to ? ` Through ${range.to}.` : ""}`,
         LEGAL_STYLE_RULES,

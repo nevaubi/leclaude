@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { burnIn } from "@/modules/office/pdf/service";
 import { normalizeModel } from "@/modules/office/pdf/model";
 import { saveOfficeDoc } from "@/modules/office/shared/docs-service";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromParams } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -15,7 +17,7 @@ type Params = { params: Promise<{ id: string }> };
  * stamps/markups, Bates numbers, form values, page operations.
  * Body: { content?: model (saved first), applyRedactions?, flattenAnnotations?, flattenForms?, bates?, rasterizedPages?: { [sourcePage]: pngDataUrl }, label? }.
  */
-export async function POST(req: NextRequest, { params }: Params) {
+async function handlePOST(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = (await req.json().catch(() => null)) as { content?: unknown; applyRedactions?: boolean; flattenAnnotations?: boolean; flattenForms?: boolean; bates?: boolean; rasterizedPages?: Record<number, string>; label?: string } | null;
   if (!body) return jsonError("Invalid body");
@@ -28,3 +30,5 @@ export async function POST(req: NextRequest, { params }: Params) {
     return jsonError(`Apply failed: ${(e as Error).message}`, 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });

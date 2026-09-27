@@ -81,13 +81,13 @@ export function NewMatterDialog({ open, onOpenChange, onCreated }: NewMatterDial
             <DialogFooter><Button size="sm" variant="ghost" onClick={() => onOpenChange(false)}>Done</Button></DialogFooter>
           </>
         ) : (
-          <form onSubmit={submit} noValidate>
+          <form onSubmit={submit} noValidate className="grid gap-4">
             <DialogHeader>
               <DialogTitle>New matter</DialogTitle>
               <DialogDescription>Only the name and practice area are required; everything else can be filled in later.</DialogDescription>
             </DialogHeader>
-            <div className="py-3">
-              <MatterFields draft={draft} onChange={setDraft} errors={shown} team={team} idPrefix="new-matter" />
+            <div>
+              <MatterFields draft={draft} onChange={setDraft} errors={shown} team={team} idPrefix="new-matter" collapseDetails />
               {shown.form && <p className="mt-3 text-[12px] text-destructive" role="alert">{shown.form}</p>}
             </div>
             <DialogFooter>

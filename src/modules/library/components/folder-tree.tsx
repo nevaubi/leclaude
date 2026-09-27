@@ -88,7 +88,7 @@ export function FolderTree({ className }: { className?: string }) {
             );
           })}
         </div>
-        <div className="mb-1 mt-1 px-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Folders</div>
+        <div className="mb-1 mt-1 px-2 text-[11px] font-semibold text-muted-foreground">Folders</div>
         {!tree ? (
           <div className="space-y-1.5 px-1">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-6" />)}</div>
         ) : (
@@ -142,7 +142,7 @@ function TreeNode({ node, depth, expanded, toggle, activeId, onOpen, onDrop, dra
         >
           <ChevronRight className={cn("size-3.5 transition-transform", isOpen && "rotate-90")} />
         </button>
-        <TypeIcon type="folder" open={active || isOpen} className={cn("size-4", node.matterId && "text-chart-2")} />
+        <TypeIcon type="folder" open={active || isOpen} />
         <span className="flex-1 truncate">{node.name}</span>
         <span className={cn("tabular text-[11px]", active ? "text-sidebar-primary/70" : "text-muted-foreground/80")}>{node.totalCount || ""}</span>
       </div>

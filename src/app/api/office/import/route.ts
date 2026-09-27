@@ -10,6 +10,8 @@ import { extractPlainText } from "@/lib/ai/toolkit/internal";
 import { audit } from "@/lib/integrity/audit";
 import { contentHash, sha256 } from "@/lib/integrity/hash";
 import { suffixedName } from "@/lib/integrity/dedupe";
+import { withAuth } from "@/lib/auth/route";
+import { officeUploadTarget } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -24,7 +26,7 @@ const KIND_BY_EXT: Record<string, OfficeKind> = { docx: "word", doc: "word", rtf
  * (same bytes or same text) already imported into the same matter is not imported twice: the response is
  * 409 { duplicate: true, existing: { id, title, kind, url, libraryItemId }, message } unless allowDuplicate=1.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) return jsonError("`file` is required (multipart/form-data)");
@@ -75,3 +77,5 @@ function duplicateResponse(existing: { id: string; title: string; kind: OfficeKi
   audit("import", { kind: "officeDoc", id: existing.id, label: existing.title, matterId: existing.matterId }, { duplicate: true, message });
   return Response.json({ duplicate: true, existing: { id: existing.id, title: existing.title, kind: existing.kind, url: `/office/${existing.kind}/${existing.id}`, libraryItemId: li?.id ?? null }, message: `${message}: "${existing.title}". Open the existing document or re-upload with allowDuplicate=1.` }, { status: 409 });
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: officeUploadTarget });

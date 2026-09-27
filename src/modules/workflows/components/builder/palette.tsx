@@ -82,8 +82,8 @@ function PaletteItem({ spec, disabled, onAdd }: { spec: NodeTypeSpec; disabled: 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-xs font-medium">{spec.label}</span>
-          {spec.usesAI && <span className="rounded bg-primary/10 px-1 text-[9px] font-semibold uppercase tracking-wider text-primary">AI</span>}
-          {spec.usesNetwork && <span className="rounded bg-info/10 px-1 text-[9px] font-semibold uppercase tracking-wider text-info">net</span>}
+          {spec.usesAI && <span className="text-[10.5px] text-muted-foreground">AI</span>}
+          {spec.usesNetwork && <span className="text-[10.5px] text-muted-foreground">web</span>}
         </div>
         <div className="line-clamp-1 text-[10.5px] leading-snug text-muted-foreground" title={spec.description}>{spec.description}</div>
       </div>

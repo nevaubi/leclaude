@@ -74,7 +74,7 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         </div>
         <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
           {q.trim() ? <SearchResults matterId={matterId} q={q} onOpen={openHit} /> : (
-            deps.loading && !deps.data ? <ListSkeleton rows={5} /> : !list.length ? <div className="p-4"><EmptyState icon={ScrollText} title="No depositions" description="Depositions for this matter will appear here once noticed or transcribed." /></div> : (
+            deps.loading && !deps.data ? <ListSkeleton rows={5} /> : !list.length ? <div className="p-4"><EmptyState icon={ScrollText} title="No depositions yet" description="Import a transcript (.txt, .ptx, .asc or .docx) to read it by page and line, flag testimony and designate ranges." compact /></div> : (
               <ul className="p-1.5">
                 {list.map((d) => <DepositionRow key={d.id} d={d} active={d.id === selectedId} onClick={() => { setSelectedId(d.id); setJumpIndex(null); }} />)}
               </ul>
@@ -92,7 +92,7 @@ export function DepositionsTab({ matterId, onOpenDocument }: AnalysisTabProps) {
         {selectedId ? (
           <DepositionView key={selectedId} id={selectedId} matterId={matterId} jumpIndex={jumpIndex} onJumped={() => setJumpIndex(null)} aiConfigured={!!overview.data?.aiConfigured} onOpenDocument={onOpenDocument} onChanged={deps.refresh} />
         ) : (
-          <div className="flex h-full items-center justify-center p-8">{deps.loading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : <EmptyState icon={ScrollText} title="Select a deposition" description="Choose a witness on the left to read the transcript, flag testimony and designate ranges." />}</div>
+          <div className="flex h-full items-center justify-center p-8">{deps.loading ? <Loader2 className="size-5 animate-spin text-muted-foreground" /> : !list.length ? <EmptyState icon={ScrollText} title="No transcripts in this matter" description="Imported transcripts are parsed into page:line Q/A, speakers, objections and exhibits." action={<Button size="sm" onClick={() => setImportOpen(true)}><Upload className="size-4" /> Import transcript</Button>} /> : <EmptyState icon={ScrollText} title="Select a deposition" description="Choose a witness on the left to read the transcript, flag testimony and designate ranges." />}</div>
         )}
       </div>
       <OutlineDialog open={outlineOpen} onOpenChange={setOutlineOpen} matterId={matterId} depositions={list} aiConfigured={!!overview.data?.aiConfigured} />
@@ -137,12 +137,12 @@ function SearchResults({ matterId, q, onOpen }: { matterId: string; q: string; o
   if (!hits.length) return <div className="p-4 text-center text-xs text-muted-foreground">No testimony matches “{debounced}”.</div>;
   return (
     <div>
-      <div className="px-3 pt-2 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{hits.length} hit{hits.length === 1 ? "" : "s"} across transcripts</div>
+      <div className="px-3 pt-2 pb-1 text-[12px] font-medium text-muted-foreground">{hits.length} hit{hits.length === 1 ? "" : "s"} across transcripts</div>
       <ul className="px-1.5 pb-2">
         {hits.map((h) => (
           <li key={`${h.depositionId}:${h.index}:${h.field}`}>
             <button type="button" onClick={() => onOpen(h.depositionId, h.index)} className="w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent cursor-pointer">
-              <div className="flex items-center gap-1.5 text-[11px]"><span className="font-medium">{h.witnessName}</span><span className="font-mono text-muted-foreground">{formatPageLine(h.page, h.line)}</span><span className="rounded bg-muted px-1 text-[9.5px] uppercase text-muted-foreground">{h.field === "answer" ? "A" : h.field === "question" ? "Q" : h.field}</span></div>
+              <div className="flex items-center gap-1.5 text-[11px]"><span className="font-medium">{h.witnessName}</span><span className="font-mono text-muted-foreground">{formatPageLine(h.page, h.line)}</span><span className="text-[10.5px] text-muted-foreground">{h.field === "answer" ? "A" : h.field === "question" ? "Q" : h.field}</span></div>
               <div className="mt-0.5 line-clamp-2 text-[11.5px] text-muted-foreground">{h.snippet}</div>
             </button>
           </li>
@@ -332,7 +332,7 @@ function DepositionView({ id, matterId, jumpIndex, onJumped, aiConfigured, onOpe
                 {find && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10.5px] tabular text-muted-foreground">{findHits.length ? `${findPos + 1}/${findHits.length}` : "0/0"}</span>}
               </div>
               <div className="ml-1 flex flex-wrap items-center gap-1">
-                <button type="button" onClick={() => setFlagFilter(null)} className={cn("h-6 rounded border px-2 text-[11px] transition-colors cursor-pointer", !flagFilter ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent")}>All</button>
+                <button type="button" onClick={() => setFlagFilter(null)} className={cn("h-6 rounded border px-2 text-[11px] transition-colors cursor-pointer", !flagFilter ? "border-foreground/25 bg-accent text-foreground" : "text-muted-foreground hover:bg-accent")}>All</button>
                 {summaryCounts.map((f) => { const Icon = FLAG_STYLES[f.id].icon; return <button key={f.id} type="button" onClick={() => setFlagFilter(flagFilter === f.id ? null : f.id)} className={cn("inline-flex h-6 items-center gap-1 rounded border px-2 text-[11px] transition-colors cursor-pointer", flagFilter === f.id ? FLAG_STYLES[f.id].cls : "text-muted-foreground hover:bg-accent")}><Icon className="size-3" />{f.label} <span className="tabular">{f.count}</span></button>; })}
               </div>
               <div className="flex-1" />
@@ -405,25 +405,25 @@ function DigestPanel({ dep, digesting, noKey, onRun, onJump }: { dep: Deposition
   const Cite = ({ text }: { text: string }) => {
     const m = text.match(/^(\d+:\d+)\s*[—–-]\s*(.*)$/s);
     if (!m) return <span>{text}</span>;
-    return <><button type="button" onClick={() => onJump(m[1])} className="mr-1.5 rounded border border-chart-2/25 bg-chart-2/10 px-1 font-mono text-[10.5px] text-chart-2 hover:bg-chart-2/20 cursor-pointer">{m[1]}</button><span>{m[2]}</span></>;
+    return <><button type="button" onClick={() => onJump(m[1])} className="mr-1.5 rounded border border-chart-2/25 bg-chart-2/10 px-1 font-mono text-[10.5px] text-chart-2 hover:bg-accent cursor-pointer">{m[1]}</button><span>{m[2]}</span></>;
   };
   const withCites = (text: string) => {
     const parts = text.split(/(\b\d{1,3}:\d{2}\b)/g);
-    return parts.map((p, i) => (/^\d{1,3}:\d{2}$/.test(p) ? <button key={i} type="button" onClick={() => onJump(p)} className="rounded border border-chart-2/25 bg-chart-2/10 px-1 font-mono text-[10.5px] text-chart-2 hover:bg-chart-2/20 cursor-pointer">{p}</button> : <React.Fragment key={i}>{p}</React.Fragment>));
+    return parts.map((p, i) => (/^\d{1,3}:\d{2}$/.test(p) ? <button key={i} type="button" onClick={() => onJump(p)} className="rounded border border-chart-2/25 bg-chart-2/10 px-1 font-mono text-[10.5px] text-chart-2 hover:bg-accent cursor-pointer">{p}</button> : <React.Fragment key={i}>{p}</React.Fragment>));
   };
   return (
     <div className="space-y-4 p-3 text-[12.5px]">
       <section>
-        <h4 className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Summary <ProvenanceBadge record={d} compact={false} className="normal-case tracking-normal" /></h4>
+        <h4 className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">Summary <ProvenanceBadge record={d} compact={false} className="normal-case tracking-normal" /></h4>
         <p className="leading-relaxed">{withCites(d.summary)}</p>
       </section>
-      {d.themes.length > 0 && <section><h4 className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Themes</h4><div className="flex flex-wrap gap-1">{d.themes.map((t) => <Badge key={t} variant="secondary" className="font-normal">{t}</Badge>)}</div></section>}
+      {d.themes.length > 0 && <section><h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Themes</h4><div className="flex flex-wrap gap-1">{d.themes.map((t) => <Badge key={t} variant="secondary" className="font-normal">{t}</Badge>)}</div></section>}
       <section>
-        <h4 className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Key admissions ({d.keyAdmissions.length})</h4>
+        <h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Key admissions ({d.keyAdmissions.length})</h4>
         <ul className="space-y-1.5">{d.keyAdmissions.map((k, i) => <li key={i} className="rounded-md border-l-2 border-success/60 bg-success/5 px-2 py-1 leading-relaxed"><Cite text={k} /></li>)}</ul>
       </section>
-      {d.credibilityNotes?.length ? <section><h4 className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Credibility</h4><ul className="list-disc space-y-1 pl-4 leading-relaxed">{d.credibilityNotes.map((n, i) => <li key={i}>{withCites(n)}</li>)}</ul></section> : null}
-      {d.followUps?.length ? <section><h4 className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Follow-up questions</h4><ol className="list-decimal space-y-1 pl-4 leading-relaxed">{d.followUps.map((n, i) => <li key={i}>{withCites(n)}</li>)}</ol></section> : null}
+      {d.credibilityNotes?.length ? <section><h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Credibility</h4><ul className="list-disc space-y-1 pl-4 leading-relaxed">{d.credibilityNotes.map((n, i) => <li key={i}>{withCites(n)}</li>)}</ul></section> : null}
+      {d.followUps?.length ? <section><h4 className="mb-1 text-[12px] font-medium text-muted-foreground">Follow-up questions</h4><ol className="list-decimal space-y-1 pl-4 leading-relaxed">{d.followUps.map((n, i) => <li key={i}>{withCites(n)}</li>)}</ol></section> : null}
     </div>
   );
 }
@@ -434,12 +434,12 @@ function DesignationsPanel({ detail, onJump, onRemove, onUpdate, onStart }: { de
   const list = detail.designations;
   const totals = React.useMemo(() => designationTotals(list), [list]);
   if (!list.length) return <div className="p-3"><EmptyState icon={Highlighter} title="No designations" description="Press D (or click Designate), then click the first and last Q/A of the range. Mark counters against a designation, record objections, and export CSV or Word for the trial-presentation vendor." action={<Button size="sm" variant="outline" onClick={onStart}><Highlighter className="size-4" /> Start designating</Button>} /></div>;
-  const PURPOSE: Record<Designation["purpose"], string> = { affirmative: "bg-chart-2/12 text-chart-2 border-chart-2/30", counter: "bg-chart-3/15 text-chart-3 border-chart-3/30", impeachment: "bg-destructive/12 text-destructive border-destructive/30", objection: "bg-muted text-muted-foreground border-border" };
+  const PURPOSE: Record<Designation["purpose"], string> = { affirmative: "border-border text-foreground/80", counter: "border-border text-foreground/80", impeachment: "border-destructive/30 text-destructive", objection: "bg-muted text-muted-foreground border-border" };
   const targets = list.filter((x) => x.purpose === "affirmative" || x.purpose === "impeachment");
   return (
     <div>
       <div className="grid grid-cols-4 gap-px border-b bg-border text-[11px]">
-        {([["Lines", totals.lines.all], ["Affirmative", totals.lines.affirmative], ["Counter", totals.lines.counter], ["≈ min", totals.estimatedMinutes]] as [string, number][]).map(([k, v]) => <div key={k} className="bg-background px-2 py-1.5"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div><div className="tabular font-medium">{v}</div></div>)}
+        {([["Lines", totals.lines.all], ["Affirmative", totals.lines.affirmative], ["Counter", totals.lines.counter], ["≈ min", totals.estimatedMinutes]] as [string, number][]).map(([k, v]) => <div key={k} className="bg-background px-2 py-1.5"><div className="text-[11px] text-muted-foreground">{k}</div><div className="tabular font-medium">{v}</div></div>)}
       </div>
       {(totals.danglingCounters > 0 || totals.detachedCounters > 0 || totals.objections.pending > 0) && <div className="border-b bg-warning/10 px-3 py-1 text-[11px] text-warning-foreground dark:text-warning">{[totals.danglingCounters ? `${totals.danglingCounters} counter${totals.danglingCounters === 1 ? "" : "s"} without a designation` : "", totals.detachedCounters ? `${totals.detachedCounters} counter${totals.detachedCounters === 1 ? "" : "s"} far from its designation` : "", totals.objections.pending ? `${totals.objections.pending} objection${totals.objections.pending === 1 ? "" : "s"} pending ruling` : ""].filter(Boolean).join(" · ")}</div>}
     <ul className="divide-y">
@@ -482,7 +482,7 @@ function DesignationsPanel({ detail, onJump, onRemove, onUpdate, onStart }: { de
   );
 }
 
-const RULING_CLS: Record<ObjectionRuling, string> = { pending: "text-muted-foreground", sustained: "border-success/40 bg-success/10 text-success", overruled: "border-destructive/40 bg-destructive/10 text-destructive" };
+const RULING_CLS: Record<ObjectionRuling, string> = { pending: "text-muted-foreground", sustained: "border-foreground/25 bg-accent text-foreground", overruled: "border-destructive/40 text-destructive" };
 
 function ObjectionsPanel({ detail, onJump, onRule }: { detail: DepositionDetail; onJump: (index: number) => void; onRule: (index: number, ruling: ObjectionRuling) => void }) {
   const s = detail.objections;
@@ -493,11 +493,11 @@ function ObjectionsPanel({ detail, onJump, onRule }: { detail: DepositionDetail;
   return (
     <div className="space-y-4 p-3">
       <div className="grid grid-cols-3 gap-2">
-        {[["Total", s.total], ["Sustained", s.rulings.sustained], ["Overruled", s.rulings.overruled]].map(([k, v]) => <div key={String(k)} className="rounded-md border bg-card px-2 py-1.5"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div><div className="text-base font-semibold tabular">{v}</div></div>)}
+        {[["Total", s.total], ["Sustained", s.rulings.sustained], ["Overruled", s.rulings.overruled]].map(([k, v]) => <div key={String(k)} className="rounded-md border bg-card px-2 py-1.5"><div className="text-[11px] text-muted-foreground">{k}</div><div className="text-base font-semibold tabular">{v}</div></div>)}
       </div>
       <p className="text-[11px] text-muted-foreground">{s.rulings.pending === s.total ? `All ${s.total} objections are pending — record the court's rulings on designated testimony below.` : `${s.rulings.pending} of ${s.total} pending.`}</p>
       <section>
-        <h4 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">By basis</h4>
+        <h4 className="mb-1.5 text-[12px] font-medium text-muted-foreground">By basis</h4>
         <ul className="space-y-1">{s.byBasis.map((b) => (
           <li key={b.basis} className="flex items-center gap-2 text-xs">
             <ObjectionBadge basis={b.basis} className="w-32 justify-start" />
@@ -507,11 +507,11 @@ function ObjectionsPanel({ detail, onJump, onRule }: { detail: DepositionDetail;
         ))}</ul>
       </section>
       <section>
-        <h4 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">By attorney</h4>
+        <h4 className="mb-1.5 text-[12px] font-medium text-muted-foreground">By attorney</h4>
         <ul className="space-y-1">{s.byAttorney.map((a) => <li key={a.attorney} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5"><PersonAvatar name={a.attorney} size="xs" />{a.attorney}</span><span className="tabular text-muted-foreground">{a.count}</span></li>)}</ul>
       </section>
       <section>
-        <h4 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">On the record</h4>
+        <h4 className="mb-1.5 text-[12px] font-medium text-muted-foreground">On the record</h4>
         <ul className="space-y-0.5">{rows.map(({ qa, i }) => {
           const ruling = rulings[i] ?? "pending";
           return (
@@ -558,7 +558,7 @@ function FlagsPanel({ transcript, onJump }: { transcript: DepositionQA[]; onJump
     <div className="divide-y">
       {groups.map((g) => (
         <section key={g.id} className="px-3 py-2">
-          <h4 className="mb-1 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><FlagBadge flag={g.id} /> {g.items.length}</h4>
+          <h4 className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground"><FlagBadge flag={g.id} /> {g.items.length}</h4>
           <ul className="space-y-0.5">{g.items.map(({ qa, i }) => <li key={i}><button type="button" onClick={() => onJump(i)} className="flex w-full items-start gap-2 rounded px-1.5 py-1 text-left text-[11.5px] hover:bg-accent cursor-pointer"><span className="w-12 shrink-0 font-mono text-muted-foreground">{formatPageLine(qa.page, qa.line)}</span><span className="line-clamp-2 text-foreground/90">{qa.answer}</span></button></li>)}</ul>
         </section>
       ))}

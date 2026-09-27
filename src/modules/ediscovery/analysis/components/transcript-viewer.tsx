@@ -77,7 +77,7 @@ export function TranscriptViewer(props: TranscriptViewerProps) {
               <div className={cn("relative flex flex-col items-end gap-1 border-r px-2 py-2 font-mono text-[10.5px] text-muted-foreground tabular", inDesignation && "border-r-2 border-r-chart-2")}>
                 <span className={cn(active && "font-semibold text-foreground")}>{formatPageLine(qa.page, qa.line)}</span>
                 {inDesignation && <Tip label={`Designated ${inDesignation.purpose}`}><span><Highlighter className="size-3 text-chart-2" /></span></Tip>}
-                {designating && <span className="text-[9px] uppercase tracking-wider text-primary">{selection?.start && !selection.end ? "end" : "start"}</span>}
+                {designating && <span className="text-[10.5px] text-primary">{selection?.start && !selection.end ? "end" : "start"}</span>}
               </div>
               <div className="min-w-0 px-3 py-2">
                 <div className="flex items-start gap-2">
@@ -98,7 +98,7 @@ export function TranscriptViewer(props: TranscriptViewerProps) {
                 </div>
                 <div className="mt-1.5 flex min-h-[18px] flex-wrap items-center gap-1 pl-6">
                   {qa.exhibit && (
-                    <button type="button" onClick={(e) => { e.stopPropagation(); onOpenExhibit?.(qa.exhibit!); }} className={cn("inline-flex items-center gap-1 rounded border px-1.5 py-px font-mono text-[10.5px] leading-4 transition-colors", exhibitDocIds?.[qa.exhibit] ? "cursor-pointer border-chart-1/30 bg-chart-1/8 text-chart-1 hover:bg-chart-1/15" : "border-border bg-muted text-muted-foreground")} title={exhibitDocIds?.[qa.exhibit] ? "Open the exhibit in the review viewer" : "Exhibit not in this workspace"}>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onOpenExhibit?.(qa.exhibit!); }} className={cn("inline-flex items-center gap-1 rounded border px-1.5 py-px font-mono text-[10.5px] leading-4 transition-colors", exhibitDocIds?.[qa.exhibit] ? "cursor-pointer border-foreground/25 bg-accent text-foreground hover:bg-accent" : "border-border bg-muted text-muted-foreground")} title={exhibitDocIds?.[qa.exhibit] ? "Open the exhibit in the review viewer" : "Exhibit not in this workspace"}>
                       <Paperclip className="size-3" /> Ex. {qa.exhibit}
                     </button>
                   )}
@@ -129,7 +129,7 @@ function FlagMenu({ qa, index, onToggleFlag, onSaveNote }: { qa: DepositionQA; i
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-2" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-1 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Flags</div>
+        <div className="mb-1 px-1 text-[12px] font-medium text-muted-foreground">Flags</div>
         <div className="grid grid-cols-1 gap-0.5">
           {QA_FLAGS.map((f) => {
             const on = qa.flags?.includes(f.id);
@@ -145,7 +145,7 @@ function FlagMenu({ qa, index, onToggleFlag, onSaveNote }: { qa: DepositionQA; i
           })}
         </div>
         <div className="mt-2 border-t pt-2">
-          <div className="mb-1 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Note</div>
+          <div className="mb-1 px-1 text-[12px] font-medium text-muted-foreground">Note</div>
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Why this matters, what to confront it with…" className="text-xs" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { onSaveNote(index, note); setOpen(false); } }} />
           <div className="mt-1.5 flex justify-end gap-1">
             {qa.note && <Button size="xs" variant="ghost" onClick={() => { onSaveNote(index, ""); setOpen(false); }}>Clear</Button>}

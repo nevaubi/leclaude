@@ -6,7 +6,10 @@ import { MATTERS, PEOPLE } from "@/lib/seed/ids";
 import { createOfficeDoc, saveOfficeDoc } from "@/modules/office/shared/docs-service";
 import { settingsForTemplate } from "./constants";
 import { cloneNode, findNodeById, inlineFromMarkdown, makeTable, type PMNode } from "./doc-model";
-import { captionBlock, captionFromMatter, certificateOfService, signatureBlock, FIRM } from "./sections";
+import { captionBlock, captionFromMatter, certificateOfService, signatureBlock, type FirmInfo } from "./sections";
+
+/** Letterhead of the sample firm (demo dataset only; templates use placeholders). */
+const FIRM: FirmInfo = { name: "Seeger Weiss LLP", address1: "1201 Main Street, Suite 1900", address2: "Columbia, South Carolina 29201", phone: "(803) 555-0140", email: "jwhitfield@seegerweiss.com" };
 import { buildDoc, motionBriefDoc } from "./templates";
 import { buildTrackedInline, markBlocksInserted } from "./tracked-diff";
 
@@ -163,7 +166,7 @@ export function seedWord(db: Database) {
         "Even if the waiver applied, the invoice value of cargo lost in the carrier's custody is the direct and natural result of the breach — the very thing Apex was paid to protect — not consequential loss. [Authority distinguishing direct from consequential damages for lost goods] [VERIFY]. At most, only the lost-customer damages in Count III implicate the waiver, and those are properly reserved for trial.",
         "# CONCLUSION",
         "Apex's motion should be denied in its entirety. In the alternative, the Court should deny the motion as to Counts I and II and defer ruling on Count III pending trial.",
-        signatureBlock({ date: "October 9, 2026", attorney: "Daniel Okafor", barNo: "ARDC No. 6312847", forParty: "Plaintiff Northgate Logistics, Inc." }),
+        signatureBlock({ date: "October 9, 2026", attorney: "Daniel Okafor", barNo: "ARDC No. 6312847", forParty: "Plaintiff Northgate Logistics, Inc.", firm: FIRM }),
         certificateOfService({ date: "October 9, 2026", documentTitle: "Memorandum in Opposition", attorney: "Daniel Okafor" }),
       ]),
       versions: [

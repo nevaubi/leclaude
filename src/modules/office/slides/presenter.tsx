@@ -78,7 +78,7 @@ export function Presenter({ deck, startIndex, onExit }: { deck: DeckContent; sta
       {notesOpen && (
         <aside className={cn("flex w-[360px] shrink-0 flex-col border-l border-white/10 bg-[#111] p-4")} onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-white/50">Slide {index + 1} of {slides.length}</div>
+            <div className="text-[11px] font-medium text-white/50">Slide {index + 1} of {slides.length}</div>
             <div className="flex items-center gap-1 font-mono text-lg tabular">
               {mm}:{ss}
               <button className="rounded p-1 text-white/60 hover:text-white cursor-pointer" onClick={() => setRunning((v) => !v)} aria-label="Pause timer">{running ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}</button>
@@ -86,9 +86,9 @@ export function Presenter({ deck, startIndex, onExit }: { deck: DeckContent; sta
             </div>
           </div>
           <div className="mt-1 truncate text-sm font-semibold">{slide ? slideTitle(slide) || "(untitled)" : ""}</div>
-          <div className="mt-3 text-[11px] font-medium uppercase tracking-wider text-white/50">Notes</div>
+          <div className="mt-3 text-[11px] font-medium text-white/50">Notes</div>
           <div className="mt-1 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap text-[15px] leading-relaxed text-white/90 scrollbar-thin">{slide?.notes.trim() || <span className="text-white/40">No speaker notes for this slide.</span>}</div>
-          <div className="mt-3 text-[11px] font-medium uppercase tracking-wider text-white/50">Next</div>
+          <div className="mt-3 text-[11px] font-medium text-white/50">Next</div>
           <div className="mt-1 overflow-hidden rounded border border-white/10 bg-black">{next ? <ScaledSlide slide={next} theme={deck.theme} width={328} lite /> : <div className="p-4 text-xs text-white/40">End of deck</div>}</div>
           <div className="mt-1 truncate text-xs text-white/60">{next ? slideTitle(next) : ""}</div>
           <div className="mt-3 text-[10px] text-white/40">← → Space navigate · N notes · T timer · Esc exit</div>

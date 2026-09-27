@@ -73,7 +73,10 @@ export interface PdfEditorState {
   flashAnnotation: (id: string) => void;
 }
 
-export const CURRENT_USER = "Jordan Whitfield";
+/** Author for annotations made in this editor; set from the workspace user by the editor ("You" until loaded). */
+let annotationAuthor = "You";
+export function setAnnotationAuthor(name: string) { if (name.trim()) annotationAuthor = name.trim(); }
+export function currentAnnotationAuthor() { return annotationAuthor; }
 const MAX_HISTORY = 80;
 
 export const usePdfStore = create<PdfEditorState>((set, get) => ({
@@ -126,7 +129,7 @@ export const usePdfStore = create<PdfEditorState>((set, get) => ({
   pushHistory: () => set((s) => ({ history: [...s.history.slice(-MAX_HISTORY + 1), s.model], future: [] })),
   addAnnotation: (input) => {
     const s = get();
-    const a: PdfAnnotation = { id: input.id ?? newAnnotationId(), author: CURRENT_USER, createdAt: new Date().toISOString(), color: input.color ?? s.color, opacity: input.opacity ?? defaultOpacity(input.type), ...input } as PdfAnnotation;
+    const a: PdfAnnotation = { id: input.id ?? newAnnotationId(), author: annotationAuthor, createdAt: new Date().toISOString(), color: input.color ?? s.color, opacity: input.opacity ?? defaultOpacity(input.type), ...input } as PdfAnnotation;
     s.applyOp({ op: "add_annotations", annotations: [a] });
     return a;
   },

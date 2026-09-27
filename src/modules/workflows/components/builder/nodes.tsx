@@ -40,7 +40,7 @@ function WorkflowNodeViewInner({ id, data, selected }: NodeProps<WfNode>) {
         <NodeTypeIcon type={data.wfType} size="sm" />
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-[12.5px] font-semibold">{data.label}</div>
-          <div className={cn("truncate text-[10px] font-medium uppercase tracking-wider", tone.text)}>{spec?.short ?? data.wfType}<span className="ml-1 font-mono normal-case tracking-normal text-muted-foreground/80">· {id}</span></div>
+          <div className={cn("truncate text-[11px] font-medium", tone.text)}>{spec?.short ?? data.wfType}<span className="ml-1 font-mono normal-case tracking-normal text-muted-foreground/80">· {id}</span></div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {errorCount > 0 && <span title={`${errorCount} error(s)`}><AlertTriangle className="size-3.5 text-destructive" /></span>}
@@ -52,8 +52,8 @@ function WorkflowNodeViewInner({ id, data, selected }: NodeProps<WfNode>) {
         <div className="line-clamp-2 min-h-[14px]">{nodeSummary(data.wfType, data.config)}</div>
         {(spec?.usesAI || spec?.usesNetwork) && (
           <div className="mt-1.5 flex gap-1">
-            {spec.usesAI && <span className="rounded bg-primary/10 px-1 py-px text-[9.5px] font-medium uppercase tracking-wider text-primary">AI</span>}
-            {spec.usesNetwork && <span className="rounded bg-info/10 px-1 py-px text-[9.5px] font-medium uppercase tracking-wider text-info">net</span>}
+            {spec.usesAI && <span className="text-[10.5px] text-muted-foreground">AI</span>}
+            {spec.usesNetwork && <span className="text-[10.5px] text-muted-foreground">web</span>}
           </div>
         )}
       </div>

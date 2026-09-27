@@ -64,13 +64,16 @@ export function importTranscript(input: ImportTranscriptInput): { deposition: De
   if (!witnessName) throw Object.assign(new Error("`witnessName` is required (the header did not name the witness)"), { status: 400 });
   // Witness resolution is scoped to this matter's people: a same-named person on another matter is never bound.
   const people = matterPeople(input.matterId);
-  let person: Person | null = input.witnessId ? d.people.get(input.witnessId) : resolvePersonName(witnessName, people) ?? null;
+  // A supplied witness id is honoured only when it is one of this matter's people.
+  let person: Person | null = (input.witnessId ? people.find((p) => p.id === input.witnessId) : undefined) ?? resolvePersonName(witnessName, people) ?? null;
   if (!person) {
     person = { id: `p_${nanoid(8)}`, name: witnessName, title: input.witnessTitle, role: "witness" };
     d.people.put(person);
   }
   const date = input.date ?? parsed.meta.date ?? new Date().toISOString().slice(0, 10);
   const existing = input.depositionId ? d.depositions.get(input.depositionId) : null;
+  // Replacing a transcript never reaches into another matter.
+  if (input.depositionId && (!existing || existing.matterId !== input.matterId)) throw Object.assign(new Error(`No deposition ${input.depositionId} in this matter`), { status: 404 });
   const id = existing?.id ?? `dep_${nanoid(10)}`;
   const exhibits = [...(input.exhibits ?? existing?.exhibits ?? [])];
   for (const ex of parsed.exhibits) if (!exhibits.some((e) => e.id.toLowerCase() === ex.id.toLowerCase())) exhibits.push(ex);

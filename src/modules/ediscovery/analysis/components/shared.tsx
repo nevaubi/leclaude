@@ -12,11 +12,11 @@ import { type QAFlag, type TimelineCategory, TIMELINE_CATEGORIES, CONFLICT_KINDS
 export { NoKeyCallout, ProvenanceBadge, formatShortDate, provenanceOf };
 
 export const FLAG_STYLES: Record<QAFlag, { icon: LucideIcon; cls: string; label: string }> = {
-  admission: { icon: CircleCheck, cls: "bg-success/12 text-success border-success/30", label: "Admission" },
-  contradiction: { icon: AlertTriangle, cls: "bg-destructive/12 text-destructive border-destructive/30", label: "Contradiction" },
-  evasive: { icon: HelpCircle, cls: "bg-warning/18 text-warning-foreground dark:text-warning border-warning/40", label: "Evasive" },
-  key: { icon: Flag, cls: "bg-primary/12 text-primary border-primary/30", label: "Key" },
-  privilege: { icon: Lock, cls: "bg-info/12 text-info border-info/30", label: "Privilege" },
+  admission: { icon: CircleCheck, cls: "border-border text-foreground/80", label: "Admission" },
+  contradiction: { icon: AlertTriangle, cls: "border-destructive/30 text-destructive", label: "Contradiction" },
+  evasive: { icon: HelpCircle, cls: "border-border text-foreground/80", label: "Evasive" },
+  key: { icon: Flag, cls: "border-border text-foreground/80", label: "Key" },
+  privilege: { icon: Lock, cls: "border-border text-foreground/80", label: "Privilege" },
   objection: { icon: Gavel, cls: "bg-muted text-muted-foreground border-border", label: "Objection" },
 };
 
@@ -28,15 +28,15 @@ export function FlagBadge({ flag, compact, className }: { flag: QAFlag; compact?
 
 export const OBJECTION_STYLES: Record<string, string> = {
   form: "bg-muted text-muted-foreground border-border",
-  foundation: "bg-chart-2/12 text-chart-2 border-chart-2/30",
-  speculation: "bg-chart-3/15 text-chart-3 border-chart-3/30",
-  privilege: "bg-info/12 text-info border-info/30",
-  "asked-and-answered": "bg-chart-4/12 text-chart-4 border-chart-4/30",
-  compound: "bg-chart-1/12 text-chart-1 border-chart-1/30",
-  relevance: "bg-chart-5/12 text-chart-5 border-chart-5/30",
-  argumentative: "bg-destructive/12 text-destructive border-destructive/30",
-  mischaracterizes: "bg-warning/18 text-warning-foreground dark:text-warning border-warning/40",
-  hearsay: "bg-primary/12 text-primary border-primary/30",
+  foundation: "border-border text-foreground/80",
+  speculation: "border-border text-foreground/80",
+  privilege: "border-border text-foreground/80",
+  "asked-and-answered": "border-border text-foreground/80",
+  compound: "border-border text-foreground/80",
+  relevance: "border-border text-foreground/80",
+  argumentative: "border-destructive/30 text-destructive",
+  mischaracterizes: "border-border text-foreground/80",
+  hearsay: "border-border text-foreground/80",
 };
 
 export function ObjectionBadge({ basis, by, className }: { basis: string; by?: string; className?: string }) {
@@ -69,7 +69,7 @@ export function categoryToken(cat: TimelineCategory) {
 }
 
 const DOT: Record<string, string> = { "chart-1": "bg-chart-1", "chart-2": "bg-chart-2", "chart-3": "bg-chart-3", "chart-4": "bg-chart-4", "chart-5": "bg-chart-5", primary: "bg-primary", info: "bg-info", muted: "bg-muted-foreground", success: "bg-success", warning: "bg-warning", destructive: "bg-destructive" };
-const CHIP: Record<string, string> = { "chart-1": "bg-chart-1/12 text-chart-1 border-chart-1/30", "chart-2": "bg-chart-2/12 text-chart-2 border-chart-2/30", "chart-3": "bg-chart-3/15 text-chart-3 border-chart-3/30", "chart-4": "bg-chart-4/12 text-chart-4 border-chart-4/30", "chart-5": "bg-chart-5/12 text-chart-5 border-chart-5/30", primary: "bg-primary/12 text-primary border-primary/30", info: "bg-info/12 text-info border-info/30", muted: "bg-muted text-muted-foreground border-border", success: "bg-success/12 text-success border-success/30", warning: "bg-warning/18 text-warning-foreground dark:text-warning border-warning/40", destructive: "bg-destructive/12 text-destructive border-destructive/30" };
+const CHIP: Record<string, string> = { "chart-1": "border-border text-foreground/80", "chart-2": "border-border text-foreground/80", "chart-3": "border-border text-foreground/80", "chart-4": "border-border text-foreground/80", "chart-5": "border-border text-foreground/80", primary: "border-border text-foreground/80", info: "border-border text-foreground/80", muted: "bg-muted text-muted-foreground border-border", success: "border-border text-foreground/80", warning: "border-border text-foreground/80", destructive: "border-destructive/30 text-destructive" };
 
 export function tokenDot(token: string) { return DOT[token] ?? DOT.muted; }
 export function tokenChip(token: string) { return CHIP[token] ?? CHIP.muted; }
@@ -82,15 +82,15 @@ export function CategoryChip({ category, className }: { category: TimelineCatego
 /** Citation chip: Bates → opens the document; page:line → jumps to the deposition. */
 export function CiteChip({ cite, kind, onClick, className, title, unresolved }: { cite: string; kind: "document" | "deposition" | "external" | "intel"; onClick?: () => void; className?: string; title?: string; unresolved?: boolean }) {
   const Icon = kind === "document" ? FileText : kind === "deposition" ? ScrollText : kind === "intel" ? Globe : Quote;
-  const cls = cn("inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-px font-mono text-[10.5px] leading-4 whitespace-nowrap transition-colors", kind === "document" ? "bg-chart-1/8 text-chart-1 border-chart-1/25" : kind === "deposition" ? "bg-chart-2/10 text-chart-2 border-chart-2/25" : "bg-muted text-muted-foreground border-border", unresolved && "border-dashed border-warning/60 text-warning-foreground dark:text-warning", onClick && "cursor-pointer hover:bg-accent hover:text-accent-foreground", className);
-  const inner = <><Icon className="size-3 shrink-0" /><span className="truncate">{cite}</span>{unresolved && <span className="text-[9px] uppercase tracking-wider">verify</span>}</>;
+  const cls = cn("inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-px font-mono text-[10.5px] leading-4 whitespace-nowrap transition-colors", kind === "document" ? "border-border text-foreground/80" : kind === "deposition" ? "border-border text-foreground/80" : "bg-muted text-muted-foreground border-border", unresolved && "border-dashed border-warning/60 text-warning-foreground dark:text-warning", onClick && "cursor-pointer hover:bg-accent hover:text-accent-foreground", className);
+  const inner = <><Icon className="size-3 shrink-0" /><span className="truncate">{cite}</span>{unresolved && <span className="text-[10.5px]">verify</span>}</>;
   if (onClick) return <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} className={cls} title={title ?? (unresolved ? "Cite not found in the record" : kind === "document" ? "Open document" : kind === "intel" ? "Open intelligence record" : "Open in transcript")}>{inner}</button>;
   return <span className={cls} title={title}>{inner}</span>;
 }
 
 /** Wrap a model-backed action: when no key is configured the button explains what is missing instead of failing. */
 export function KeyHint({ configured, children }: { configured: boolean; children: React.ReactElement }) {
-  return configured ? children : <Tip label={<span className="flex items-center gap-1"><KeyRound className="size-3" /> OPENAI_API_KEY required</span>}>{children}</Tip>;
+  return configured ? children : <Tip label={<span className="flex items-center gap-1"><KeyRound className="size-3" /> AI provider required</span>}>{children}</Tip>;
 }
 
 /** Quiet "by model" marker for records the model created; trust itself is carried by ProvenanceBadge. */
@@ -133,7 +133,7 @@ export function Pane({ title, count, actions, children, className, bodyClassName
 export function KeyValue({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={cn("grid grid-cols-[92px_1fr] items-baseline gap-2 text-xs", className)}>
-      <span className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
       <span className="min-w-0 break-words">{children}</span>
     </div>
   );

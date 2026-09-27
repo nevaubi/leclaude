@@ -6,6 +6,7 @@ import { configuredTenantId, hybridSearch, indexDocument, indexDocuments, indexS
 import { extractPlainText } from "@/lib/ai/toolkit/internal";
 import { currentPrincipal } from "@/lib/auth/context";
 import { accessibleMatterIds } from "@/lib/auth/scope";
+import { hasMatterAccess } from "@/lib/auth/policy";
 import { aiConfig } from "@/lib/ai/config";
 import { generateJSON, generateText } from "@/lib/ai/agent";
 import { FIRM_NAME, LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
@@ -66,10 +67,49 @@ export function syncOfficeDocs(force = false): { created: number; updated: numbe
   return { created: plan.create.length, updated: plan.update.length, orphaned: orphans };
 }
 
+// ---------------------------------------------------------------------------
+// Structure: the system folders and one folder per real matter exist in every workspace (an empty database
+// included). Structural only: no sample items are created. Idempotent; stable ids.
+// ---------------------------------------------------------------------------
+const SYSTEM_FOLDER_DEFS: { id: string; name: string; description: string; private?: boolean }[] = [
+  { id: LIBRARY_FOLDERS.firm, name: "Firm", description: "Firm-wide policies, forms and precedents." },
+  { id: LIBRARY_FOLDERS.matters, name: "Matters", description: "One folder per matter, shared with the matter team." },
+  { id: LIBRARY_FOLDERS.templates, name: "Templates", description: "Document, workbook, deck and PDF templates." },
+  { id: LIBRARY_FOLDERS.clauses, name: "Clause bank", description: "Approved clauses with fillable variables and drafting notes." },
+  { id: LIBRARY_FOLDERS.knowledge, name: "Knowledge", description: "Practice notes, checklists and research guides." },
+  { id: LIBRARY_FOLDERS.myFiles, name: "My files", description: "Your personal working folder.", private: true },
+];
+let structureSignature = "";
+
+export function ensureLibraryStructure(): { created: number } {
+  const d = db();
+  const matters = d.matters.all();
+  const sig = `${matters.map((m) => m.id).join(",")}:${d.library.count()}`;
+  if (sig === structureSignature) return { created: 0 };
+  const at = now();
+  const create: LibraryItem[] = [];
+  for (const f of SYSTEM_FOLDER_DEFS) {
+    if (d.library.has(f.id)) continue;
+    create.push({ id: f.id, parentId: null, name: f.name, type: "folder", description: f.description, ownerId: LIBRARY_USER.id, sharedWith: [f.private ? "private" : "firm"], createdAt: at, updatedAt: at });
+  }
+  for (const m of matters) {
+    const id = matterFolderId(m.id);
+    if (d.library.has(id)) continue;
+    create.push({ id, parentId: LIBRARY_FOLDERS.matters, name: m.shortName || m.name, type: "folder", matterId: m.id, description: `${m.name}${m.caption ? ` — ${m.caption}` : ""}`, practiceArea: m.practiceArea, ownerId: m.leadAttorneyId ?? LIBRARY_USER.id, sharedWith: ["matter-team"], createdAt: at, updatedAt: at });
+  }
+  if (create.length) d.library.putMany(create);
+  structureSignature = `${matters.map((m) => m.id).join(",")}:${d.library.count()}`;
+  return { created: create.length };
+}
+
 /** Library rows whose office document exists (or that are not office-backed). */
 function liveItems(): LibraryItem[] {
+  ensureLibraryStructure();
   const d = db();
-  return d.library.all().filter((i) => !i.officeDocId || d.officeDocs.has(i.officeDocId));
+  // Matter work product is visible only to principals who can open the matter (constitution §22); without a
+  // request principal (scripts, seeds) nothing is narrowed.
+  const p = safePrincipal();
+  return d.library.all().filter((i) => (!i.officeDocId || d.officeDocs.has(i.officeDocId)) && (!p || !i.matterId || hasMatterAccess(p, i.matterId)));
 }
 
 // ---------------------------------------------------------------------------

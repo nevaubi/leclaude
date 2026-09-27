@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { mergeInto } from "@/modules/office/pdf/service";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromParams } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -8,7 +10,7 @@ export const maxDuration = 120;
 type Params = { params: Promise<{ id: string }> };
 
 /** Append uploaded PDFs (multipart "files") to this document. Returns the updated model. */
-export async function POST(req: NextRequest, { params }: Params) {
+async function handlePOST(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const form = await req.formData().catch(() => null);
   if (!form) return jsonError("multipart/form-data with `files` is required");
@@ -28,3 +30,5 @@ export async function POST(req: NextRequest, { params }: Params) {
     return jsonError(`Merge failed: ${(e as Error).message}`, 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });

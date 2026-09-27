@@ -89,9 +89,9 @@ export function PinsPanel({ question, answer, jurisdictionLabel, matter, userNam
         <Tip label="Clear all pins"><Button size="icon-xs" variant="ghost" onClick={() => { clearPins(); toast.success("Pins cleared"); }} aria-label="Clear pins"><Trash2 className="size-3.5" /></Button></Tip>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-        {sourcePins.length > 0 && <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">Authorities <span className="tabular font-normal">{sourcePins.length}</span></div>}
+        {sourcePins.length > 0 && <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-1.5 text-[11.5px] font-medium text-muted-foreground backdrop-blur">Authorities <span className="tabular font-normal">{sourcePins.length}</span></div>}
         <ul className="divide-y">{sourcePins.map((p) => <PinRow key={p.id} pin={p} onRemove={() => unpin(p.id)} onNote={(n) => setPinNote(p.id, n)} onOpen={() => a.openSource(p.hit!)} />)}</ul>
-        {passagePins.length > 0 && <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">Passages <span className="tabular font-normal">{passagePins.length}</span></div>}
+        {passagePins.length > 0 && <div className="sticky top-0 z-10 border-b bg-background/95 px-3 py-1.5 text-[11.5px] font-medium text-muted-foreground backdrop-blur">Passages <span className="tabular font-normal">{passagePins.length}</span></div>}
         <ul className="divide-y">{passagePins.map((p) => <PinRow key={p.id} pin={p} onRemove={() => unpin(p.id)} onNote={(n) => setPinNote(p.id, n)} onOpen={p.hit ? () => a.openSource(p.hit!) : undefined} />)}</ul>
       </div>
     </div>

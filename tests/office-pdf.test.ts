@@ -411,7 +411,7 @@ describe("templates, import and service", () => {
       expect(m.meta.pending).toBe(true);
       expect(SPEC_BUILDERS[String(m.meta.specId)]).toBeDefined();
     }
-    const bytes = await generatePdf(SPEC_BUILDERS["subpoena-duces-tecum"]({}));
+    const bytes = await generatePdf(SPEC_BUILDERS["subpoena-duces-tecum"]({ demo: true }));
     const ex = await extractPdf(bytes);
     expect(ex.pageCount).toBeGreaterThanOrEqual(3);
     expect(ex.fields.map((f) => f.name)).toContain("svc_method");

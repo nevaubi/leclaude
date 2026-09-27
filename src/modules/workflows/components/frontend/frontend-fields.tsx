@@ -16,6 +16,7 @@ import { FolderSelect, MatterSelect, PersonSelect } from "@/components/ui/entity
 import { DEFAULT_ACCEPT, isUploadedFile, OUTPUT_FORMAT_LABEL, OUTPUT_FORMATS, type OutputFormat, type UploadedFileValue } from "../../frontend";
 import { apiJson, type WorkflowMeta } from "../../hooks";
 import { fieldControlId } from "./frontend-helpers";
+import { NewMatterDialog } from "@/modules/matters/components/new-matter-dialog";
 
 /** Upload one file through the workflow uploads route and extract its text. */
 export async function uploadForWorkflow(file: File, opts: { workflowId?: string; matterId?: string | null } = {}): Promise<UploadedFileValue> {
@@ -96,13 +97,13 @@ export function FrontendFieldControl({ field, value, onChange, error, meta, work
       );
     }
     case "matter":
-      return <Field {...common}><MatterSelect id={id} size="xs" value={typeof value === "string" && value ? value : null} onChange={(v) => onChange(v ?? "")} matters={meta?.matters.map((m) => ({ id: m.id, shortName: m.shortName, name: m.name }))} disabled={disabled} allowNone={!field.required} className="max-w-sm" /></Field>;
+      return <Field {...common}><MatterFieldControl id={id} value={typeof value === "string" && value ? value : null} onChange={(v) => onChange(v ?? "")} disabled={disabled} required={Boolean(field.required)} /></Field>;
     case "person":
       return <Field {...common}><PersonSelect id={id} size="xs" value={typeof value === "string" && value ? value : null} onChange={(v) => onChange(v ?? "")} people={meta?.people.map((p) => ({ id: p.id, name: p.name, title: p.title }))} disabled={disabled} allowNone={!field.required} className="max-w-sm" /></Field>;
     case "library-folder":
       return <Field {...common}><FolderSelect id={id} size="xs" value={typeof value === "string" && value ? value : null} onChange={(v) => onChange(v ?? "")} disabled={disabled} allowNone className="max-w-sm" /></Field>;
     case "bates-prefix":
-      return <Field {...common}><Input id={id} size="xs" value={String(value ?? "")} onChange={(e) => onChange(e.target.value.toUpperCase())} placeholder={field.placeholder ?? "MFC-"} disabled={disabled} className="w-40 font-mono" /></Field>;
+      return <Field {...common}><Input id={id} size="xs" value={String(value ?? "")} onChange={(e) => onChange(e.target.value.toUpperCase())} placeholder={field.placeholder ?? "ABC-"} disabled={disabled} className="w-40 font-mono" /></Field>;
     case "output-format": {
       const list = formats?.length ? formats : [...OUTPUT_FORMATS];
       return <Field {...common} htmlFor={undefined}><SegmentedControl size="xs" options={list.map((f) => ({ value: f, label: OUTPUT_FORMAT_LABEL[f] }))} value={(typeof value === "string" && list.includes(value as OutputFormat) ? value : list[0]) as OutputFormat} onChange={onChange} ariaLabel={field.label} /></Field>;
@@ -111,6 +112,39 @@ export function FrontendFieldControl({ field, value, onChange, error, meta, work
     default:
       return <Field {...common}><Input id={id} size="xs" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} disabled={disabled} className="max-w-md" /></Field>;
   }
+}
+
+type MatterOptionRow = { id: string; shortName: string; name?: string };
+
+/**
+ * Matter picker for start forms: lists the matters the signed-in person can open (GET /api/matters,
+ * authorized server-side) and offers to create one when there are none, so a fresh workspace can run
+ * a template without leaving the form.
+ */
+function MatterFieldControl({ id, value, onChange, disabled, required }: { id: string; value: string | null; onChange: (v: string | null) => void; disabled?: boolean; required: boolean }) {
+  const [matters, setMatters] = React.useState<MatterOptionRow[] | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [creating, setCreating] = React.useState(false);
+  const load = React.useCallback((signal?: AbortSignal) => {
+    setError(null);
+    apiJson<{ matters: MatterOptionRow[] }>("/api/matters?status=open", { signal })
+      .then((r) => setMatters(r.matters.map((m) => ({ id: m.id, shortName: m.shortName || m.name || m.id, name: m.name }))))
+      .catch((e: Error) => { if (e.name !== "AbortError") setError(e.message || "Could not load matters"); });
+  }, []);
+  React.useEffect(() => { const ac = new AbortController(); load(ac.signal); return () => ac.abort(); }, [load]);
+  if (error) return <div className="flex h-7 items-center gap-2 text-[12px] text-destructive">{error}<Button variant="ghost" size="xs" onClick={() => load()}>Retry</Button></div>;
+  if (!matters) return <div className="flex h-7 items-center gap-2 text-[12px] text-muted-foreground"><Loader2 className="size-3 animate-spin" aria-hidden /> Loading matters…</div>;
+  return (
+    <div className="flex max-w-md items-center gap-2">
+      {matters.length === 0 ? (
+        <span className="text-[12px] text-muted-foreground">No open matters yet.</span>
+      ) : (
+        <MatterSelect id={id} size="xs" value={value} onChange={onChange} matters={matters} disabled={disabled} allowNone={!required} className="max-w-sm" />
+      )}
+      <Button type="button" variant={matters.length === 0 ? "outline" : "ghost"} size="xs" onClick={() => setCreating(true)} disabled={disabled}>New matter</Button>
+      <NewMatterDialog open={creating} onOpenChange={setCreating} onCreated={(m) => { setMatters((ms) => [...(ms ?? []).filter((x) => x.id !== m.id), { id: m.id, shortName: m.shortName || m.name, name: m.name }]); onChange(m.id); }} />
+    </div>
+  );
 }
 
 function UploadedRow({ file, onRemove, disabled }: { file: UploadedFileValue; onRemove: () => void; disabled?: boolean }) {

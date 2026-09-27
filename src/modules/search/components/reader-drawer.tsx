@@ -213,18 +213,18 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
                       <NoKeyCard />
                     ) : headnotes ? (
                       <div className="space-y-4 text-sm">
-                        <section><div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Syllabus</div><p className="leading-relaxed">{headnotes.syllabus}</p></section>
+                        <section><div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Syllabus</div><p className="leading-relaxed">{headnotes.syllabus}</p></section>
                         <section>
-                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Headnotes</div>
+                          <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Headnotes</div>
                           <ol className="space-y-1.5 pl-5 list-decimal marker:text-primary marker:font-medium">{headnotes.headnotes.map((h, i) => <li key={i} className="leading-relaxed">{h}</li>)}</ol>
                         </section>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <section className="rounded-md border bg-muted/30 p-3"><div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Holding</div><p className="text-[13px] leading-relaxed">{headnotes.holding}</p></section>
-                          <section className="rounded-md border bg-muted/30 p-3"><div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Disposition</div><p className="text-[13px] leading-relaxed">{headnotes.disposition}</p></section>
+                          <section className="rounded-md border bg-muted/30 p-3"><div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Holding</div><p className="text-[13px] leading-relaxed">{headnotes.holding}</p></section>
+                          <section className="rounded-md border bg-muted/30 p-3"><div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Disposition</div><p className="text-[13px] leading-relaxed">{headnotes.disposition}</p></section>
                         </div>
                         {headnotes.keyQuotes.length > 0 && (
                           <section>
-                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Key quotations</div>
+                            <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Key quotations</div>
                             <ul className="space-y-1.5">
                               {headnotes.keyQuotes.map((q, i) => (
                                 <li key={i}>
@@ -269,7 +269,7 @@ function AskSource({ hit, result, aiConfigured }: { hit: SearchHit; result: Read
     : hit.source === "regulations" || hit.source === "federal_register" || hit.source === "statutes"
       ? ["Summarize the operative requirements.", "Who is covered and what are the deadlines?", "What penalties or enforcement mechanisms apply?"]
       : ["Summarize this document in five bullets.", "Who wrote it, to whom, and why does it matter?", "List every date and person mentioned."];
-  const noKey = !aiConfigured || agent.messages.some((m) => m.status === "error" && /OPENAI_API_KEY/i.test(m.error ?? ""));
+  const noKey = !aiConfigured || agent.messages.some((m) => m.status === "error" && /OPENAI_API_KEY|model provider is configured/i.test(m.error ?? ""));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {noKey && <div className="p-3"><NoKeyCard compact /></div>}

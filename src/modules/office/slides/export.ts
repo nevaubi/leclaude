@@ -10,6 +10,7 @@ import { hexForExport, parseMarkdownLite, plainText, resolveFontFace, type Chart
 export interface ExportOptions {
   title: string;
   author?: string;
+  company?: string;
   /** Resolve an image src to a data URL ("data:image/png;base64,…"). */
   fetchImage?: (src: string) => Promise<string | null>;
   includeHidden?: boolean;
@@ -146,8 +147,8 @@ export async function exportPptx(deck: DeckContent, opts: ExportOptions): Promis
   pptx.defineLayout({ name: "LECLAUDE_WIDE", width: PAGE_W_IN, height: PAGE_H_IN });
   pptx.layout = "LECLAUDE_WIDE";
   pptx.title = opts.title;
-  pptx.author = opts.author ?? "Seeger Weiss LLP";
-  pptx.company = "Seeger Weiss LLP";
+  pptx.author = opts.author ?? "";
+  pptx.company = opts.company ?? "";
   pptx.theme = { headFontFace: deck.theme.fonts.heading, bodyFontFace: deck.theme.fonts.body };
   const theme = deck.theme;
   for (const s of deck.slides) {

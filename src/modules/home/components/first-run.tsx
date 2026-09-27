@@ -1,0 +1,40 @@
+"use client";
+import * as React from "react";
+import Link from "next/link";
+import { Check, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useHome } from "./home-provider";
+import { firstRunSteps } from "./first-run-model";
+
+/**
+ * Home before the first matter exists: a short checklist in place of empty widgets. Steps already
+ * satisfied (a provider in the environment, a teammate added) show as done.
+ */
+export function FirstRunChecklist() {
+  const { setup, aiConfigured } = useHome();
+  const steps = firstRunSteps({ ...setup, aiConfigured });
+  const remaining = steps.filter((s) => !s.done).length;
+  return (
+    <section aria-labelledby="first-run-title" className="w-full max-w-[640px] pt-2">
+      <h2 id="first-run-title" className="text-[14px] font-semibold tracking-tight">Set up your workspace</h2>
+      <p className="mt-0.5 text-[12.5px] text-muted-foreground">{remaining === 0 ? "All set." : `${remaining} of ${steps.length} steps left. Home fills in as matters, deadlines and documents arrive.`}</p>
+      <ol className="mt-3 divide-y divide-line-quiet border-y border-line-quiet">
+        {steps.map((s, i) => (
+          <li key={s.id}>
+            <Link href={s.href} className="group flex items-start gap-3 px-1 py-2.5 hover:bg-accent/40 focus-ring rounded-sm">
+              <span className={cn("mt-px flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] tabular", s.done ? "border-transparent bg-foreground/5 text-muted-foreground" : "text-foreground")} aria-hidden>
+                {s.done ? <Check className="size-3" /> : i + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={cn("block text-[13px] font-medium", s.done && "text-muted-foreground line-through decoration-muted-foreground/40")}>{s.title}</span>
+                <span className="block text-[12px] text-muted-foreground">{s.detail}</span>
+              </span>
+              <span className="mt-0.5 shrink-0 text-[11.5px] text-muted-foreground">{s.done ? "Done" : <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />}</span>
+              <span className="sr-only">{s.done ? "completed" : "not completed"}</span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}

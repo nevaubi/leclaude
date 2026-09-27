@@ -127,9 +127,9 @@ export function VersionsDialog({ open, onOpenChange, list, get, checkpoint, rest
                       <div className="grid grid-cols-[minmax(0,1fr)_260px] gap-4">
                         <div className="overflow-hidden rounded-lg border bg-paper shadow-paper">{vDeck.slides[0] ? <ScaledSlide slide={vDeck.slides[0]} theme={vDeck.theme} width={560} /> : <div className="p-6 text-xs text-muted-foreground">Empty deck</div>}</div>
                         <div className="space-y-2 text-xs">
-                          <div className="rounded-md border p-2"><div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">This version</div><div className="mt-1 tabular">{deckStats(vDeck).slides} slides · {deckStats(vDeck).words} words · theme {vDeck.theme.name}</div></div>
-                          {diff && diff.added.length > 0 && <div className="rounded-md border p-2"><div className="text-[10px] font-medium uppercase tracking-wider text-success">Only in current</div><ul className="mt-1 space-y-0.5">{diff.added.map((t) => <li key={t} className="truncate">+ {t}</li>)}</ul></div>}
-                          {diff && diff.removed.length > 0 && <div className="rounded-md border p-2"><div className="text-[10px] font-medium uppercase tracking-wider text-destructive">Only in this version</div><ul className="mt-1 space-y-0.5">{diff.removed.map((t) => <li key={t} className="truncate">− {t}</li>)}</ul></div>}
+                          <div className="rounded-md border p-2"><div className="text-[11px] font-medium text-muted-foreground">This version</div><div className="mt-1 tabular">{deckStats(vDeck).slides} slides · {deckStats(vDeck).words} words · theme {vDeck.theme.name}</div></div>
+                          {diff && diff.added.length > 0 && <div className="rounded-md border p-2"><div className="text-[11px] font-medium text-success">Only in current</div><ul className="mt-1 space-y-0.5">{diff.added.map((t) => <li key={t} className="truncate">+ {t}</li>)}</ul></div>}
+                          {diff && diff.removed.length > 0 && <div className="rounded-md border p-2"><div className="text-[11px] font-medium text-destructive">Only in this version</div><ul className="mt-1 space-y-0.5">{diff.removed.map((t) => <li key={t} className="truncate">− {t}</li>)}</ul></div>}
                         </div>
                       </div>
                       <div className="grid grid-cols-4 gap-2">

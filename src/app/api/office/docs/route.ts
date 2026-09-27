@@ -6,18 +6,23 @@ import type { OfficeKind } from "@/lib/types/domain";
 import { db } from "@/lib/db";
 import { nanoid } from "nanoid";
 import { matterFolderId, LIBRARY_FOLDERS } from "@/modules/library/ids";
+import { withAuth } from "@/lib/auth/route";
+import { requirePrincipal } from "@/lib/auth/context";
+import { hasMatterAccess } from "@/lib/auth/policy";
+import { officeCollection } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const kind = req.nextUrl.searchParams.get("kind") as OfficeKind | null;
   const matterId = req.nextUrl.searchParams.get("matterId") ?? undefined;
   const limit = Number(req.nextUrl.searchParams.get("limit") ?? 100);
-  const docs = listOfficeDocs({ kind: kind ?? undefined, matterId, limit }).map(({ content: _c, ...rest }) => { void _c; return rest; });
+  const principal = requirePrincipal();
+  const docs = listOfficeDocs({ kind: kind ?? undefined, matterId, limit }).filter((d) => !d.matterId || hasMatterAccess(principal, d.matterId)).map(({ content: _c, ...rest }) => { void _c; return rest; });
   return Response.json({ docs });
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as { kind?: OfficeKind; title?: string; content?: unknown; matterId?: string; folderId?: string; templateId?: string; meta?: Record<string, unknown>; addToLibrary?: boolean; tags?: string[] } | null;
   if (!body?.kind || !["word", "sheet", "slides", "pdf"].includes(body.kind)) return jsonError("`kind` must be word | sheet | slides | pdf");
   let content = body.content;
@@ -37,3 +42,6 @@ export async function POST(req: NextRequest) {
   }
   return Response.json({ doc });
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: officeCollection });
+export const POST = withAuth(handlePOST, { action: "write", resource: officeCollection });

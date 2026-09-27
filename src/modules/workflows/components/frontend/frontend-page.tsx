@@ -175,7 +175,7 @@ export function WorkflowFrontendPage({ workflow, recentRuns: recentInitial, init
         <aside className="hidden min-h-0 flex-col border-l bg-card lg:flex">
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
             <section className="px-3 py-3">
-              <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>What happens</span><span className="normal-case tracking-normal tabular">{steps.length} steps</span></div>
+              <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-muted-foreground"><span>What happens</span><span className="normal-case tracking-normal tabular">{steps.length} steps</span></div>
               <ol className="divide-y divide-line-quiet">
                 {steps.map((s, i) => (
                   <li key={s.id} className="flex min-h-7 items-center gap-2 py-1 text-[12px]" style={{ paddingLeft: s.depth * 12 }}>
@@ -191,7 +191,7 @@ export function WorkflowFrontendPage({ workflow, recentRuns: recentInitial, init
               </ol>
             </section>
             <section className="border-t px-3 py-3">
-              <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><span>Recent runs</span><Link href={`/workflows?tab=runs`} className="normal-case tracking-normal text-primary hover:underline">All</Link></div>
+              <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-muted-foreground"><span>Recent runs</span><Link href={`/workflows?tab=runs`} className="normal-case tracking-normal text-primary hover:underline">All</Link></div>
               {recentRuns.length === 0 ? <div className="text-[12px] text-muted-foreground">No runs yet.</div> : (
                 <ul className="divide-y divide-line-quiet">
                   {recentRuns.map((r) => (

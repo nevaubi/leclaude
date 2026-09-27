@@ -45,7 +45,7 @@ export function ClustersView({ initial, options, hasKey }: { initial: ClusterRes
   ];
 
   if (!initial.chunks && !data) {
-    return <div className="min-h-0 flex-1 overflow-auto scrollbar-thin"><div className="mx-auto max-w-3xl p-6"><EmptySources title="Nothing to cluster yet" description="Clusters need indexed passages. Enable and run sources, then run the analysis; with an OpenAI key the passages are embedded and clustered semantically, otherwise TF-IDF vectors are used." /></div></div>;
+    return <div className="min-h-0 flex-1 overflow-auto scrollbar-thin"><div className="mx-auto max-w-3xl p-6"><EmptySources title="Nothing to cluster yet" description="Clusters need indexed passages. Enable and run sources, then run the analysis; with an embedding model configured the passages are embedded and clustered semantically, otherwise TF-IDF vectors are used." /></div></div>;
   }
 
   return (
@@ -54,14 +54,14 @@ export function ClustersView({ initial, options, hasKey }: { initial: ClusterRes
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <DataTable rows={result.clusters} columns={columns} rowId={(c) => c.id} defaultSort={{ columnId: "size", dir: "desc" }} selectionMode="single" activeId={selected} onActiveChange={setSelected} onRowClick={(c) => setSelected(c.id)} onRowActivate={(c) => setSelected(c.id)} noun="cluster" ariaLabel="Clusters" columnChooser={false} empty={<div className="p-6 text-center text-[12px] text-muted-foreground">No clusters for this scope.</div>} />
-          <div className="border-t px-3 py-1.5"><MethodNote>{result.method === "embeddings" ? "Clusters are k-means++ over the stored passage embeddings (cosine), labelled by the passages' most distinctive TF-IDF terms." : `Clusters are k-means++ over TF-IDF vectors of the passages (cosine), labelled by their most distinctive terms.${hasKey ? " Embeddings are added as the background re-index runs." : " Add OPENAI_API_KEY to embed passages and cluster by meaning."}`} Deterministic for a given scope; select a row to see its representative passages.</MethodNote></div>
+          <div className="border-t px-3 py-1.5"><MethodNote>{result.method === "embeddings" ? "Clusters are k-means++ over the stored passage embeddings (cosine), labelled by the passages' most distinctive TF-IDF terms." : `Clusters are k-means++ over TF-IDF vectors of the passages (cosine), labelled by their most distinctive terms.${hasKey ? " Embeddings are added as the background re-index runs." : " Configure an embedding model to cluster by meaning."}`} Deterministic for a given scope; select a row to see its representative passages.</MethodNote></div>
         </div>
         {cluster && (
           <Inspector title={cluster.label} subtitle={`${cluster.size} passages · ${cluster.docIds.length} records · ${Math.round(cluster.share * 100)}%`} onClose={() => setSelected(null)} closeShortcut="Esc" width={400} minWidth={320} maxWidth={640} resizable ariaLabel="Cluster details">
             <div className="space-y-3 p-3 text-[12px]">
               <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">{cluster.terms.map((t) => <span key={t} className="rounded-[var(--radius-chip)] border px-1.5 py-0.5">{t}</span>)}</div>
               <div>
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Representative passages</div>
+                <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Representative passages</div>
                 <div className="divide-hairline">
                   {cluster.topDocs.map((t) => (
                     <div key={t.chunkId} className="py-1.5">

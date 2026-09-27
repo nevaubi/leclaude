@@ -56,15 +56,15 @@ export function SearchRail({ response, loading, onSaveSearch }: { response: Sear
       <SavedSearchesSection onSave={onSaveSearch} />
       <BatchesSection />
 
-      <SectionLabel className="pt-3" action={<button type="button" onClick={() => setChartsOpen(!chartsOpen)} className="text-[10.5px] text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={chartsOpen}>{chartsOpen ? "Hide" : "Show"}</button>}>Charts</SectionLabel>
+      <SectionLabel className="pt-3" action={<button type="button" onClick={() => setChartsOpen(!chartsOpen)} className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={chartsOpen}>{chartsOpen ? "Hide" : "Show"}</button>}>Charts</SectionLabel>
       {chartsOpen && (loading || !facets ? <div className="px-3"><Skeleton className="h-20 w-full" /></div> : (
         <div className="space-y-2 px-2.5">
-          <div className="text-[10.5px] text-muted-foreground">Custodians · click to filter</div>
+          <div className="text-[11px] text-muted-foreground">Custodians · click to filter</div>
           <CustodianHistogram buckets={facets.custodian} selected={filters.custodians ?? []} onToggle={(id) => toggleFilter("custodians", id)} />
-          <div className="text-[10.5px] text-muted-foreground">Dates · click to filter</div>
+          <div className="text-[11px] text-muted-foreground">Dates · click to filter</div>
           <DateHistogram months={facets.months} years={facets.years} selectedMonths={filters.months ?? []} selectedYears={filters.years ?? []} onToggleMonth={(m) => toggleFilter("months", m)} onToggleYear={(y) => toggleFilter("years", y)} />
           {((filters.years?.length ?? 0) > 0 || (filters.months?.length ?? 0) > 0) && (
-            <div className="flex flex-wrap gap-1">{[...(filters.years ?? []), ...(filters.months ?? [])].sort().map((k) => <button key={k} onClick={() => toggleFilter(k.length === 4 ? "years" : "months", k)} className="rounded border border-primary/30 bg-primary/8 px-1.5 py-px font-mono text-[10px] text-primary hover:bg-primary/15 cursor-pointer">{k} ×</button>)}</div>
+            <div className="flex flex-wrap gap-1">{[...(filters.years ?? []), ...(filters.months ?? [])].sort().map((k) => <button key={k} onClick={() => toggleFilter(k.length === 4 ? "years" : "months", k)} className="rounded px-1 py-px font-mono text-[10.5px] text-foreground/80 hover:bg-accent cursor-pointer">{k} ×</button>)}</div>
           )}
         </div>
       ))}
@@ -78,7 +78,8 @@ export function SearchRail({ response, loading, onSaveSearch }: { response: Sear
           <FacetGroup title="Document type" facetKey="types" buckets={facets.type} filters={filters} onToggle={toggleFilter} />
           <FacetGroup title="Coding status" facetKey="statuses" buckets={facets.status} filters={filters} onToggle={toggleFilter} hideZero={false} />
           <FacetGroup title="Issue codes" facetKey="issues" buckets={facets.issues} filters={filters} onToggle={toggleFilter} renderLabel={(b) => { const ic = issueCodes.find((c) => c.code === b.value); const cls = issueColorClasses(ic?.color); return <span className="flex min-w-0 items-center gap-1.5"><span className={cn("size-1.5 shrink-0 rounded-full", cls.dot)} /><span className="font-mono text-[11px]">{b.value}</span><span className="truncate text-muted-foreground">{b.label}</span></span>; }} />
-          <FacetGroup title="Suggested score" facetKey="scores" buckets={facets.score} filters={filters} onToggle={toggleFilter} hideZero={false} />
+          {facets.score.some((b) => b.count > 0) && <FacetGroup title="Suggested score" facetKey="scores" buckets={facets.score} filters={filters} onToggle={toggleFilter} hideZero={false} />}
+          {!response?.totalWorkspace && <p className="px-3 pt-1 text-[11.5px] text-muted-foreground">Facets appear once the matter has documents.</p>}
         </>
       )}
     </div>
@@ -187,7 +188,7 @@ export function SearchRailCollapsed({ onExpand }: { onExpand: () => void }) {
           <Tip key={v.id} label={`${v.label}${n != null ? ` · ${n.toLocaleString()}` : ""}`} side="right">
             <button onClick={() => setView(v.id)} aria-label={v.label} aria-current={on ? "true" : undefined} className={cn("relative flex size-8 items-center justify-center rounded-md transition-colors cursor-pointer", on ? "bg-accent text-primary" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground")}>
               <Icon className="size-4" />
-              {n != null && n > 0 && <span className={cn("absolute -right-0.5 -top-0.5 min-w-[14px] rounded-full px-0.5 text-center text-[9px] font-medium tabular leading-[14px]", on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{n > 999 ? "1k" : n}</span>}
+              {n != null && n > 0 && <span className="absolute -right-1 -top-0.5 min-w-[14px] text-center text-[9.5px] tabular leading-[14px] text-muted-foreground">{n > 999 ? "1k" : n}</span>}
             </button>
           </Tip>
         );
@@ -196,7 +197,7 @@ export function SearchRailCollapsed({ onExpand }: { onExpand: () => void }) {
         <>
           <span className="my-1 h-px w-6 bg-border" aria-hidden />
           <Tip label={`${active} facet filter${active === 1 ? "" : "s"} active · expand to edit`} side="right">
-            <button onClick={onExpand} className="relative flex size-8 items-center justify-center rounded-md text-primary hover:bg-sidebar-accent cursor-pointer" aria-label="Active filters"><ListFilter className="size-4" /><span className="absolute -right-0.5 -top-0.5 min-w-[14px] rounded-full bg-primary px-0.5 text-center text-[9px] font-medium tabular leading-[14px] text-primary-foreground">{active}</span></button>
+            <button onClick={onExpand} className="relative flex size-8 items-center justify-center rounded-md text-primary hover:bg-sidebar-accent cursor-pointer" aria-label="Active filters"><ListFilter className="size-4" /><span className="absolute -right-1 -top-0.5 min-w-[14px] text-center text-[9.5px] font-medium tabular leading-[14px] text-foreground">{active}</span></button>
           </Tip>
         </>
       )}
@@ -212,9 +213,9 @@ function FacetGroup({ title, facetKey, buckets, filters, onToggle, hideZero = tr
   const list = showAll ? visible : visible.slice(0, 8);
   if (!visible.length) return null;
   return (
-    <div className="border-t border-border/60 px-1.5 pt-1">
-      <button onClick={() => setOpen(!open)} className="flex h-6 w-full items-center justify-between rounded px-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={open}>
-        <span>{title}{active.length > 0 && <span className="ml-1.5 font-mono text-[10px] normal-case tracking-normal text-primary">{active.length}</span>}</span>
+    <div className="px-1.5 pt-1.5">
+      <button onClick={() => setOpen(!open)} className="flex h-6 w-full items-center justify-between rounded px-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={open}>
+        <span>{title}{active.length > 0 && <span className="ml-1.5 tabular text-[11px] text-foreground">{active.length}</span>}</span>
         <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
       </button>
       {open && (

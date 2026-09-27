@@ -127,7 +127,7 @@ function BatchInspector({ id, reviewers, onClose, onChanged, onReview }: { id: s
             ...(b.completedAt ? [{ label: "Completed", value: formatDateTime(b.completedAt) }] : []),
           ]} />
           <div className="space-y-2">
-            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Assignment</div>
+            <div className="text-[12px] font-medium text-muted-foreground">Assignment</div>
             <div className="grid grid-cols-[90px_1fr] items-center gap-x-2 gap-y-1.5 text-[12px]">
               <span className="text-muted-foreground">Assignee</span>
               <Select value={b.assigneeId ?? "none"} onValueChange={(v) => void patch({ assigneeId: v === "none" ? undefined : v })}><SelectTrigger size="xs" aria-label="Assignee"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Unassigned</SelectItem>{reviewers.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select>
@@ -152,12 +152,12 @@ function BatchInspector({ id, reviewers, onClose, onChanged, onReview }: { id: s
               ]} />
               {dis.byReviewer.length > 0 && (
                 <div>
-                  <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">First-pass reviewers</div>
+                  <div className="mb-1 text-[12px] font-medium text-muted-foreground">First-pass reviewers</div>
                   <ul className="divide-y rounded-md border text-[11.5px]">{dis.byReviewer.map((r) => <li key={r.reviewerId} className="flex h-7 items-center gap-2 px-2.5"><span className="min-w-0 flex-1 truncate">{reviewers.find((x) => x.id === r.reviewerId)?.name ?? r.reviewerId}</span><span className="tabular text-muted-foreground">{r.reviewed} checked · {r.disagree} disagree</span></li>)}</ul>
                 </div>
               )}
               <div>
-                <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Disagreements · {dis.rows.length}</div>
+                <div className="mb-1 text-[12px] font-medium text-muted-foreground">Disagreements · {dis.rows.length}</div>
                 {!dis.rows.length ? <div className="rounded-md border border-dashed p-3 text-center text-[11.5px] text-muted-foreground">No disagreements recorded yet.</div> : (
                   <ul className="divide-y rounded-md border text-[11.5px]">
                     {dis.rows.map((r) => (

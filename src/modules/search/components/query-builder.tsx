@@ -46,7 +46,7 @@ export function QueryBuilder({ query, onApply }: { query: string; onApply: (q: s
           <Input value={proxB} onChange={(e) => setProxB(e.target.value)} placeholder="adequate" className="h-7 text-xs" />
         </div>
         <Label>Case name</Label><Input value={caseName} onChange={(e) => setCaseName(e.target.value)} placeholder="Meridian" className="h-7 text-xs" />
-        <Label>Judge</Label><Input value={judge} onChange={(e) => setJudge(e.target.value)} placeholder="Gergel" className="h-7 text-xs" />
+        <Label>Judge</Label><Input value={judge} onChange={(e) => setJudge(e.target.value)} placeholder="Judge surname" className="h-7 text-xs" />
       </div>
       <div className="rounded-md border bg-muted/40 p-2 font-mono text-[11px] break-words min-h-8">{built || <span className="text-muted-foreground">(empty)</span>}</div>
       <div className="flex items-center gap-2">

@@ -333,7 +333,7 @@ function BuilderInner({ workflow }: { workflow: WorkflowRecord }) {
               <RunPanel runId={activeRunId} onClose={() => { setActiveRunId(null); store.getState().setStepStatuses({}); }} onRerun={(id) => setActiveRunId(id)} onStepStatuses={onStepStatuses} />
             ) : (
               <div className="flex h-full flex-col p-3">
-                <div className="mb-2 flex items-center justify-between"><span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Run history</span><Button size="xs" onClick={openRun}><Play className="size-3" /> Run</Button></div>
+                <div className="mb-2 flex items-center justify-between"><span className="text-[11px] font-medium text-muted-foreground">Run history</span><Button size="xs" onClick={openRun}><Play className="size-3" /> Run</Button></div>
                 {isTemplate ? <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">Templates have no run history. Use the template to create your own copy and run it.</div> : <RunsTable workflowId={workflow.id} compact limit={20} className="min-h-0 flex-1" />}
               </div>
             )}

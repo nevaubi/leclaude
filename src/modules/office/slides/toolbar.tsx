@@ -37,7 +37,7 @@ export function ColorControl({ value, onChange, theme, label, icon, allowNone }:
         </PopoverTrigger>
       </Tip>
       <PopoverContent align="start" className="w-56 space-y-2 p-2">
-        <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
         <div className="grid grid-cols-3 gap-1">
           {TOKENS.map((t) => (
             <button key={t.id} onClick={() => onChange(t.id)} className={cn("flex items-center gap-1.5 rounded-md border px-1.5 py-1 text-[11px] hover:bg-accent cursor-pointer", value === t.id && "border-primary/60 bg-primary/5")}>
@@ -130,15 +130,15 @@ export function SlidesToolbar({ textEditorRef, onInsertImage, onEditData, disabl
       <ToolSep />
       <Popover open={addOpen} onOpenChange={setAddOpen}>
         <PopoverTrigger asChild><ToolMenuTrigger icon={Plus} label="Slide" aria-label="New slide" /></PopoverTrigger>
-        <PopoverContent align="start" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">New slide layout</div><LayoutGrid onPick={(l) => { st.getState().addSlide(l); setAddOpen(false); }} /></PopoverContent>
+        <PopoverContent align="start" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">New slide layout</div><LayoutGrid onPick={(l) => { st.getState().addSlide(l); setAddOpen(false); }} /></PopoverContent>
       </Popover>
       <Popover open={layoutOpen} onOpenChange={setLayoutOpen}>
         <PopoverTrigger asChild><ToolMenuTrigger icon={LayoutTemplate} label="Layout" aria-label="Apply layout" disabled={!slide} hideLabelBelow="lg" /></PopoverTrigger>
-        <PopoverContent align="start" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Apply layout to this slide{slide ? ` (${LAYOUT_LABEL[slide.layout]})` : ""}</div><LayoutGrid current={slide?.layout} onPick={(l) => { if (slide) st.getState().setLayout(slide.id, l); setLayoutOpen(false); }} /></PopoverContent>
+        <PopoverContent align="start" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">Apply layout to this slide{slide ? ` (${LAYOUT_LABEL[slide.layout]})` : ""}</div><LayoutGrid current={slide?.layout} onPick={(l) => { if (slide) st.getState().setLayout(slide.id, l); setLayoutOpen(false); }} /></PopoverContent>
       </Popover>
       <Popover open={themeOpen} onOpenChange={setThemeOpen}>
         <PopoverTrigger asChild><ToolMenuTrigger icon={Palette} label={theme.name} aria-label="Theme" hideLabelBelow="lg" /></PopoverTrigger>
-        <PopoverContent align="start" className="w-[360px] p-2"><div className="mb-1.5 px-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Theme</div><ThemeGrid current={theme.id} onPick={(id) => { st.getState().setTheme(id); setThemeOpen(false); }} /></PopoverContent>
+        <PopoverContent align="start" className="w-[360px] p-2"><div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">Theme</div><ThemeGrid current={theme.id} onPick={(id) => { st.getState().setTheme(id); setThemeOpen(false); }} /></PopoverContent>
       </Popover>
       <DropdownMenu>
         <DropdownMenuTrigger asChild><ToolMenuTrigger icon={ImagePlus} label="Insert" aria-label="Insert" disabled={!slide} hideLabelBelow="lg" /></DropdownMenuTrigger>
@@ -215,17 +215,17 @@ export function SlidesToolbar({ textEditorRef, onInsertImage, onEditData, disabl
             <PopoverContent align="start" className="w-64 space-y-3 p-3 text-xs">
               {first?.type === "line" && (
                 <>
-                  <label className="block"><span className="mb-1 block text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Line width · {style.strokeWidth ?? 2}</span><input type="range" min={1} max={12} value={style.strokeWidth ?? 2} onChange={(e) => setStyle({ strokeWidth: Number(e.target.value) })} className="w-full accent-primary" aria-label="Line width" /></label>
+                  <label className="block"><span className="mb-1 block text-[11px] font-medium text-muted-foreground">Line width · {style.strokeWidth ?? 2}</span><input type="range" min={1} max={12} value={style.strokeWidth ?? 2} onChange={(e) => setStyle({ strokeWidth: Number(e.target.value) })} className="w-full accent-primary" aria-label="Line width" /></label>
                   <div className="flex gap-1">
                     <Button size="xs" variant={style.arrowEnd ? "secondary" : "outline"} onClick={() => setStyle({ arrowEnd: !style.arrowEnd })}><MoveRight className="size-3.5" /> Arrow head</Button>
                     <Button size="xs" variant="outline" onClick={() => setStyle({ lineDir: style.lineDir === "up" ? "down" : "up" })}>{style.lineDir === "up" ? <MoveUp className="size-3.5" /> : <MoveDown className="size-3.5" />} Flip</Button>
                   </div>
                 </>
               )}
-              {first?.type !== "line" && first?.shape !== "ellipse" && <label className="block"><span className="mb-1 block text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Corner radius · {style.radius ?? 0}</span><input type="range" min={0} max={80} value={style.radius ?? 0} onChange={(e) => setStyle({ radius: Number(e.target.value) })} className="w-full accent-primary" aria-label="Corner radius" /></label>}
-              <label className="block"><span className="mb-1 block text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Opacity · {Math.round((style.opacity ?? 1) * 100)}%</span><input type="range" min={5} max={100} value={Math.round((style.opacity ?? 1) * 100)} onChange={(e) => setStyle({ opacity: Number(e.target.value) / 100 })} className="w-full accent-primary" aria-label="Opacity" /></label>
+              {first?.type !== "line" && first?.shape !== "ellipse" && <label className="block"><span className="mb-1 block text-[11px] font-medium text-muted-foreground">Corner radius · {style.radius ?? 0}</span><input type="range" min={0} max={80} value={style.radius ?? 0} onChange={(e) => setStyle({ radius: Number(e.target.value) })} className="w-full accent-primary" aria-label="Corner radius" /></label>}
+              <label className="block"><span className="mb-1 block text-[11px] font-medium text-muted-foreground">Opacity · {Math.round((style.opacity ?? 1) * 100)}%</span><input type="range" min={5} max={100} value={Math.round((style.opacity ?? 1) * 100)} onChange={(e) => setStyle({ opacity: Number(e.target.value) / 100 })} className="w-full accent-primary" aria-label="Opacity" /></label>
               {first?.type === "image" && (
-                <div><div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Image fit</div><div className="grid grid-cols-3 gap-1">{(["contain", "cover", "fill"] as const).map((f) => <Button key={f} size="xs" variant={(style.fit ?? "contain") === f ? "secondary" : "outline"} onClick={() => setStyle({ fit: f })}>{f === "contain" ? "Fit" : f === "cover" ? "Crop" : "Stretch"}</Button>)}</div></div>
+                <div><div className="mb-1 text-[11px] font-medium text-muted-foreground">Image fit</div><div className="grid grid-cols-3 gap-1">{(["contain", "cover", "fill"] as const).map((f) => <Button key={f} size="xs" variant={(style.fit ?? "contain") === f ? "secondary" : "outline"} onClick={() => setStyle({ fit: f })}>{f === "contain" ? "Fit" : f === "cover" ? "Crop" : "Stretch"}</Button>)}</div></div>
               )}
             </PopoverContent>
           </Popover>

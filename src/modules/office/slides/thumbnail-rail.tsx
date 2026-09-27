@@ -85,7 +85,7 @@ export function ThumbnailRail({ commentCounts, className }: { commentCounts: Rec
         <span className="text-[13px] font-semibold">Slides <span className="ml-1 text-[11px] font-normal tabular text-muted-foreground">{deck.slides.length}</span></span>
         <Popover open={addOpen} onOpenChange={setAddOpen}>
           <Tip label="New slide" shortcut="⌘⇧N"><PopoverTrigger asChild><Button variant="ghost" size="icon-xs" aria-label="Add slide"><Plus className="size-4" /></Button></PopoverTrigger></Tip>
-          <PopoverContent align="start" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">New slide layout</div><LayoutGrid onPick={pick} /></PopoverContent>
+          <PopoverContent align="start" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">New slide layout</div><LayoutGrid onPick={pick} /></PopoverContent>
         </Popover>
       </div>
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1.5 scrollbar-thin">
@@ -99,7 +99,7 @@ export function ThumbnailRail({ commentCounts, className }: { commentCounts: Rec
       <div className="shrink-0 border-t p-2">
         <Popover>
           <PopoverTrigger asChild><Button variant="outline" size="sm" className="w-full"><Plus className="size-3.5" /> New slide</Button></PopoverTrigger>
-          <PopoverContent align="start" side="top" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">New slide layout</div><LayoutGrid onPick={(l) => addSlide(l)} /></PopoverContent>
+          <PopoverContent align="start" side="top" className="w-[340px] p-2"><div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">New slide layout</div><LayoutGrid onPick={(l) => addSlide(l)} /></PopoverContent>
         </Popover>
       </div>
     </div>

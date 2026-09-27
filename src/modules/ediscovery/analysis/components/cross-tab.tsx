@@ -96,7 +96,7 @@ export function CrossAnalysisTab({ matterId, onOpenDocument }: AnalysisTabProps)
           <Input value={topicInput} onChange={(e) => setTopicInput(e.target.value)} placeholder="Topic — e.g. MW-7 notification, 8(e) decision, MSDS language" className="h-7 w-[300px] max-w-[50vw] pl-7 text-xs" aria-label="Topic" />
         </form>
         <div className="hidden items-center gap-1 overflow-x-auto no-scrollbar lg:flex">
-          {(overview.data?.topics ?? []).slice(0, 6).map((t) => <button key={t} type="button" onClick={() => applyTopic(t)} className={cn("h-6 shrink-0 rounded-md border px-2 text-[11px] transition-colors cursor-pointer", topic === t ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent")}>{t}</button>)}
+          {(overview.data?.topics ?? []).slice(0, 6).map((t) => <button key={t} type="button" onClick={() => applyTopic(t)} className={cn("h-6 shrink-0 rounded-md border px-2 text-[11px] transition-colors cursor-pointer", topic === t ? "border-foreground/25 bg-accent text-foreground" : "text-muted-foreground hover:bg-accent")}>{t}</button>)}
         </div>
       </TabHeader>
 
@@ -209,7 +209,7 @@ function FactMatrixSection({ matterId, topic, witnessId, aiConfigured, matrices,
       const r = await api<{ matrix: FactMatrix }>("/api/ediscovery/analysis/fact-matrix", { method: "POST", json: { matterId, topic, witnessId } });
       onChanged(); setActiveId(r.matrix.id);
       toast.success("Fact matrix built", { description: `${r.matrix.topics.length} topics × ${r.matrix.sources.length} sources · cells verified against their sources` });
-    } catch (e) { if (isNoKey(e)) toast.error("OpenAI key required", { description: "Fact matrices are built by the model and verified against the record." }); else toast.error("Matrix failed", { description: (e as Error).message }); }
+    } catch (e) { if (isNoKey(e)) toast.error("AI provider not configured", { description: "Fact matrices are built by the model and verified against the record." }); else toast.error("Matrix failed", { description: (e as Error).message }); }
     finally { setBuilding(false); }
   };
   const remove = async (m: FactMatrix) => {
@@ -245,7 +245,7 @@ function FactMatrixSection({ matterId, topic, witnessId, aiConfigured, matrices,
         <KeyHint configured={aiConfigured}><Button size="xs" onClick={build} disabled={building || !topic}>{building ? <Loader2 className="size-3.5 animate-spin" /> : <ListChecks className="size-3.5" />} Build for “{topic.slice(0, 24)}{topic.length > 24 ? "…" : ""}”</Button></KeyHint>
       </div>
       {loading && !matrices.length ? <Skeleton className="m-3 h-40" /> : !active ? (
-        <div className="flex flex-1 items-center justify-center"><EmptyState icon={Table2} title="No fact matrix yet" description={aiConfigured ? "Build one for the current topic; every cell is verified against its source, saved with the matter and exportable to CSV or Word." : "Fact matrices are built by the model. Add OPENAI_API_KEY to enable."} /></div>
+        <div className="flex flex-1 items-center justify-center"><EmptyState icon={Table2} title="No fact matrix yet" description={aiConfigured ? "Build one for the current topic; every cell is verified against its source, saved with the matter and exportable to CSV or Word." : "Fact matrices are built by the model. Configure an AI provider in Settings to enable."} /></div>
       ) : (
         <div className="relative flex min-h-0 flex-1">
           <div className="min-h-0 min-w-0 flex-1 overflow-auto scrollbar-thin">

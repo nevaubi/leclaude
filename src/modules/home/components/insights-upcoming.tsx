@@ -1,13 +1,10 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { CalendarClock } from "lucide-react";
-import { TrustBadge } from "@/components/ai/trust-badge";
 import { useHome } from "./home-provider";
 import { Section } from "./shared";
-import { EVENT_KIND_LABEL } from "../types";
 import type { UpcomingPrep } from "@/modules/intel/context/types";
-import { INSIGHT_KIND_LABEL, fmtDate } from "@/modules/intel/analysis/pure";
+import { fmtDate } from "../time";
 
 /**
  * Upcoming events with preparation material: the insights and records the
@@ -29,24 +26,37 @@ export function UpcomingPrepSection() {
   const shown = (items ?? []).filter((u) => (u.insights.length || u.records.length) && (!matterFilter || u.event.matterId === matterFilter));
   if (!shown.length) return null;
   return (
-    <Section id="upcoming-prep" title="Prepare" icon={CalendarClock} count={shown.length} description="What the intelligence layer has for your next events" actions={<Link href="/?section=calendar" className="text-[11px] text-muted-foreground hover:text-primary">Calendar</Link>}>
+    <Section id="upcoming-prep" title="Prepare" count={shown.length} description="Material from your sources for the next two weeks" actions={<Link href="/?section=calendar" className="text-[11.5px] text-muted-foreground hover:text-foreground">Calendar</Link>}>
       <ul className="divide-y divide-line-quiet">
-        {shown.slice(0, 4).map((u) => (
-          <li key={u.event.id} className="px-3 py-1.5">
-            <div className="flex items-center gap-3 text-[12.5px]">
-              <span className="w-[80px] shrink-0 tabular text-[11px] text-muted-foreground">{fmtDate(u.event.startsAt)}</span>
-              <span className="w-[70px] shrink-0 truncate text-[11px] text-muted-foreground">{EVENT_KIND_LABEL[u.event.kind]}</span>
-              <Link href={`/?event=${u.event.id}`} className="min-w-0 flex-1 truncate font-medium hover:text-primary">{u.event.title}</Link>
-              {u.matter && <span className="hidden shrink-0 text-[11px] text-muted-foreground lg:inline">{u.matter.shortName}</span>}
-              <span className="shrink-0 tabular text-[11px] text-muted-foreground">{u.event.daysUntil <= 0 ? "today" : `in ${u.event.daysUntil}d`}</span>
-            </div>
-            <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 pl-[92px] text-[11.5px]">
-              {u.insights.map((i) => <Link key={i.id} href={`/intel/insights?insight=${encodeURIComponent(i.id)}`} className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-muted-foreground hover:text-primary"><span className="text-[10px] uppercase tracking-wider">{INSIGHT_KIND_LABEL[i.kind]}</span><span className="truncate">{i.title}</span><TrustBadge provenance={i.provenance} compact /></Link>)}
-              {u.records.map((r) => <Link key={r.id} href={`/intel/documents/${encodeURIComponent(r.id)}`} className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-muted-foreground hover:text-primary"><span className="text-[10px] uppercase tracking-wider">Record</span><span className="truncate">{r.title}</span></Link>)}
-            </div>
-          </li>
-        ))}
+        {withLinks(shown.slice(0, 4)).map(({ u, link }) => {
+          return (
+            <li key={u.event.id} className="flex min-h-8 items-center gap-3 px-1 py-1 text-[12.5px]">
+              <span className="w-[52px] shrink-0 tabular text-[11.5px] text-muted-foreground">{fmtDate(u.event.startsAt, { month: "short", day: "numeric" })}</span>
+              <Link href={`/?event=${u.event.id}`} className="min-w-0 flex-1 truncate hover:text-primary">{u.event.title}{u.matter ? <span className="text-muted-foreground"> · {u.matter.shortName}</span> : null}</Link>
+              {link && <Link href={link.href} className="hidden min-w-0 max-w-[40%] truncate text-[11.5px] text-muted-foreground hover:text-foreground md:inline" title={link.title}>{link.title}</Link>}
+            </li>
+          );
+        })}
       </ul>
     </Section>
   );
+}
+
+type PrepLink = { href: string; title: string };
+
+/**
+ * At most one link per event, and never the same link on two rows: a record specific to the event
+ * first, then an insight not already shown. Rows without a distinct link show only the event.
+ */
+function withLinks(rows: UpcomingPrep[]): { u: UpcomingPrep; link: PrepLink | null }[] {
+  const used = new Set<string>();
+  return rows.map((u) => {
+    const options: PrepLink[] = [
+      ...u.records.map((r) => ({ href: `/intel/documents/${encodeURIComponent(r.id)}`, title: r.title })),
+      ...u.insights.map((i) => ({ href: `/intel/insights?insight=${encodeURIComponent(i.id)}`, title: i.title })),
+    ];
+    const link = options.find((o) => !used.has(o.href)) ?? null;
+    if (link) used.add(link.href);
+    return { u, link };
+  });
 }

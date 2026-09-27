@@ -103,12 +103,12 @@ export function TasksOverview() {
 
 function FilterChips({ filter, setFilter, overdueCount }: { filter: { mine: boolean; overdue: boolean; showDone: boolean }; setFilter: (p: Partial<{ mine: boolean; overdue: boolean; showDone: boolean }>) => void; overdueCount: number }) {
   const chip = (active: boolean, onClick: () => void, label: React.ReactNode, tone?: string) => (
-    <button onClick={onClick} className={cn("h-6 rounded-md border px-2 text-[11px] font-medium transition-colors cursor-pointer", active ? "border-primary/30 bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground", active && tone)}>{label}</button>
+    <button onClick={onClick} className={cn("h-6 rounded-md border px-2 text-[11px] font-medium transition-colors cursor-pointer", active ? "border-transparent bg-accent text-foreground" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground", active && tone)}>{label}</button>
   );
   return (
     <div className="flex items-center gap-0.5">
       {chip(filter.mine, () => setFilter({ mine: !filter.mine }), <span className="inline-flex items-center gap-1"><User className="size-3" /> Mine</span>)}
-      {chip(filter.overdue, () => setFilter({ overdue: !filter.overdue }), <span className="inline-flex items-center gap-1">Overdue{overdueCount > 0 && <span className={cn("rounded-full px-1 tabular", filter.overdue ? "bg-destructive/15" : "bg-destructive/10 text-destructive")}>{overdueCount}</span>}</span>, "border-destructive/30 bg-destructive/10 text-destructive")}
+      {chip(filter.overdue, () => setFilter({ overdue: !filter.overdue }), <span className="inline-flex items-center gap-1">Overdue{overdueCount > 0 && <span className={cn("rounded-full px-1 tabular", "text-destructive")}>{overdueCount}</span>}</span>, "border-destructive/30 bg-destructive/10 text-destructive")}
       {chip(filter.showDone, () => setFilter({ showDone: !filter.showDone }), "Done")}
     </div>
   );
@@ -153,7 +153,7 @@ function QuickAdd({ status, className, autoFocusNonce }: { status?: Task["status
 function TaskGroup({ label, tasks, tone, muted }: { label: string; tasks: Task[]; tone?: string; muted?: boolean }) {
   return (
     <div>
-      <div className={cn("flex items-center gap-1.5 px-1.5 pb-0.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground", tone)}>{label}<span className="tabular opacity-70">{tasks.length}</span></div>
+      <div className={cn("flex items-center gap-1.5 px-1.5 pb-0.5 text-[11.5px] font-medium text-muted-foreground", tone)}>{label}<span className="tabular opacity-70">{tasks.length}</span></div>
       <ul className={cn("divide-y divide-line-quiet", muted && "opacity-70")}>{tasks.map((t) => <TaskRow key={t.id} task={t} />)}</ul>
     </div>
   );

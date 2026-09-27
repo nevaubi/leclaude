@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { MATTER_SKIPPED_NOTE } from "../engine/planner";
 import { AlertCircle, Check, ChevronRight, Loader2, Monitor, SkipForward, Square, TimerOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +62,8 @@ function LaneCard({ lane, sources, streaming }: { lane: LaneView; sources: Recor
       {open && (
         <div className="border-t px-3 py-2 text-xs">
           {lane.lane.brief && <div className="mb-1.5 text-[11px] text-muted-foreground">{lane.lane.brief}</div>}
-          {lane.error && <div className={cn("mb-1.5 rounded border px-2 py-1 text-[11px]", lane.status === "done" ? "border-warning/40 bg-warning/10 text-warning-foreground dark:text-warning" : "border-destructive/30 bg-destructive/5 text-destructive")}>{lane.error}</div>}
+          {lane.lane.note?.startsWith(MATTER_SKIPPED_NOTE) && <div className="mb-1.5 text-[11px] text-muted-foreground" data-state="matter-skipped">{MATTER_SKIPPED_NOTE} Select a matter to include its documents.</div>}
+          {lane.error && <div className={cn("mb-1.5 rounded border px-2 py-1 text-[11px]", lane.status === "done" ? "border-warning/50 text-foreground" : "border-destructive/40 text-destructive")}>{lane.error}</div>}
           {shown.length > 0 ? (
             <ul className="divide-y rounded-md border">
               {shown.map((s) => {

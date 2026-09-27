@@ -168,7 +168,7 @@ function ConflictDetail({ id, depositions, onOpenDocument, onChanged }: { id: st
           {c.sides.map((s, i) => (
             <div key={i} className={cn("group relative rounded-lg border bg-card p-3", s.sourceKind === "deposition" ? "border-l-4 border-l-chart-2" : "border-l-4 border-l-chart-1")}>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{s.label}</span>
+                <span className="text-[12px] font-medium text-muted-foreground">{s.label}</span>
                 <span className="flex-1" />
                 <CiteChip cite={s.cite} kind={s.sourceKind} onClick={() => openSide(s)} />
                 {c.sides.length > 2 && <Button size="icon-xs" variant="ghost" className="opacity-0 group-hover:opacity-100" onClick={() => removeSide(i)} aria-label="Remove side"><X className="size-3.5" /></Button>}
@@ -179,11 +179,11 @@ function ConflictDetail({ id, depositions, onOpenDocument, onChanged }: { id: st
           ))}
         </div>
         <section className="mt-5">
-          <div className="mb-1 flex items-center gap-2"><h3 className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Analysis</h3>{c.createdBy === "ai" && <ModelLabel />}<span className="flex-1" />{!editingAnalysis && <Button size="xs" variant="ghost" onClick={() => { setAnalysis(c.analysis); setEditingAnalysis(true); }}>Edit</Button>}</div>
+          <div className="mb-1 flex items-center gap-2"><h3 className="text-[12px] font-medium text-muted-foreground">Analysis</h3>{c.createdBy === "ai" && <ModelLabel />}<span className="flex-1" />{!editingAnalysis && <Button size="xs" variant="ghost" onClick={() => { setAnalysis(c.analysis); setEditingAnalysis(true); }}>Edit</Button>}</div>
           {editingAnalysis ? <div><Textarea value={analysis} onChange={(e) => setAnalysis(e.target.value)} rows={6} className="text-[13px]" autoFocus /><div className="mt-1.5 flex justify-end gap-1.5"><Button size="sm" variant="ghost" onClick={() => setEditingAnalysis(false)}>Cancel</Button><Button size="sm" onClick={saveAnalysis}>Save</Button></div></div> : <p className="whitespace-pre-line rounded-lg border bg-muted/30 p-3 text-[13px] leading-relaxed">{c.analysis || "No analysis yet."}</p>}
         </section>
         <section className="mt-5">
-          <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Notes <span className="tabular">{detail.data?.notes.length ?? 0}</span></h3>
+          <h3 className="mb-1.5 text-[12px] font-medium text-muted-foreground">Notes <span className="tabular">{detail.data?.notes.length ?? 0}</span></h3>
           <ul className="space-y-2">{(detail.data?.notes ?? []).map((n) => <li key={n.id} className="flex gap-2.5 rounded-md border px-3 py-2"><PersonAvatar name={n.authorName} size="sm" className="mt-0.5" /><div className="min-w-0 flex-1"><div className="flex items-center gap-2 text-[11px]"><span className="font-medium">{n.authorName}</span><span className="text-muted-foreground">{formatShortDate(n.createdAt.slice(0, 10))}</span></div><div className="mt-0.5 whitespace-pre-line text-[12.5px] leading-relaxed">{n.body}</div></div></li>)}</ul>
           <div className="mt-2 flex gap-2">
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a note (⌘/Ctrl+Enter to save)" className="text-[12.5px]" onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void addNote(); } }} />
@@ -209,16 +209,16 @@ function SideEditor({ side, onChange, depositions, compact }: { side: Side; onCh
     <div className={cn("grid gap-2 rounded-md border p-2.5", compact && "p-2")}>
       <div className="grid grid-cols-[130px_1fr] gap-2">
         <Select value={side.sourceKind} onValueChange={(v) => onChange({ ...side, sourceKind: v as Side["sourceKind"], sourceId: "", cite: "" })}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="deposition">Testimony</SelectItem><SelectItem value="document">Document</SelectItem></SelectContent></Select>
-        <Input value={side.label} onChange={(e) => onChange({ ...side, label: e.target.value })} placeholder="Label, e.g. Hale testimony" className="h-8 text-xs" />
+        <Input value={side.label} onChange={(e) => onChange({ ...side, label: e.target.value })} placeholder="Label, e.g. witness testimony" className="h-8 text-xs" />
       </div>
       {side.sourceKind === "deposition" ? (
         <div className="grid grid-cols-[1fr_120px] gap-2">
           <Select value={side.sourceId} onValueChange={(v) => { const d = depositions.find((x) => x.id === v); onChange({ ...side, sourceId: v, label: side.label || `${d?.witnessName ?? ""} testimony` }); }}><SelectTrigger size="sm"><SelectValue placeholder="Deposition" /></SelectTrigger><SelectContent>{depositions.filter((d) => d.qaCount > 0).map((d) => <SelectItem key={d.id} value={d.id}>{d.witnessName} · {formatShortDate(d.date)}{d.volume && d.volume > 1 ? ` · Vol. ${d.volume}` : ""}</SelectItem>)}</SelectContent></Select>
-          <Input value={side.cite} onChange={(e) => onChange({ ...side, cite: e.target.value })} placeholder="Hale 46:07" className="h-8 font-mono text-xs" />
+          <Input value={side.cite} onChange={(e) => onChange({ ...side, cite: e.target.value })} placeholder="Witness 46:07" className="h-8 font-mono text-xs" />
         </div>
       ) : (
         <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-          <Input value={side.cite} onChange={(e) => onChange({ ...side, cite: e.target.value })} onBlur={(e) => lookupBates(e.target.value)} placeholder="Bates, e.g. MFC-0052210" className="h-8 font-mono text-xs" />
+          <Input value={side.cite} onChange={(e) => onChange({ ...side, cite: e.target.value })} onBlur={(e) => lookupBates(e.target.value)} placeholder="Bates number" className="h-8 font-mono text-xs" />
           <span className={cn("text-[10.5px]", batesLookup?.found ? "text-success" : batesLookup ? "text-destructive" : "text-muted-foreground")}>{batesLookup ? (batesLookup.found ? "found" : "not in workspace") : "looks up on blur"}</span>
         </div>
       )}
@@ -263,7 +263,7 @@ function NewConflictDialog({ open, onOpenChange, matterId, depositions, onCreate
       <DialogContent size="lg" className="flex max-h-[92vh] flex-col">
         <DialogHeader><DialogTitle>New conflict</DialogTitle><DialogDescription>Record an inconsistency between testimony and documents (or between witnesses) with verbatim excerpts and cites.</DialogDescription></DialogHeader>
         <div className="grid min-h-0 flex-1 gap-3 overflow-auto scrollbar-thin pr-1">
-          <div className="grid gap-1.5"><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Hale: 'late August 2002' vs. transmittal email dated 8 Jul 2002" autoFocus /></div>
+          <div className="grid gap-1.5"><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Testimony date vs. the date on the document" autoFocus /></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5"><Label>Kind</Label><Select value={kind} onValueChange={(v) => setKind(v as Conflict["kind"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{CONFLICT_KINDS.map((k) => <SelectItem key={k.id} value={k.id}>{k.label}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid gap-1.5"><Label>Severity</Label><Select value={severity} onValueChange={(v) => setSeverity(v as Conflict["severity"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="high">High</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="low">Low</SelectItem></SelectContent></Select></div>

@@ -31,7 +31,7 @@ export const FRONTEND_FIELD_TYPES: { value: FrontendFieldType; label: string; hi
   { value: "matter", label: "Matter", hint: "Sets the run's matter" },
   { value: "person", label: "Person", hint: "Firm people" },
   { value: "library-folder", label: "Library folder", hint: "Destination folder" },
-  { value: "bates-prefix", label: "Bates prefix", hint: "e.g. MFC-" },
+  { value: "bates-prefix", label: "Bates prefix", hint: "e.g. ABC-" },
   { value: "output-format", label: "Output format", hint: "docx / xlsx / pdf…" },
   { value: "label", label: "Label", hint: "Name for the output" },
 ];

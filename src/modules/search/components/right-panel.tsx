@@ -34,7 +34,7 @@ export function RightPanel(p: RightPanelProps) {
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={cn("relative flex h-11 items-center gap-1.5 px-2.5 text-[12.5px] font-medium transition-colors cursor-pointer", tab === t.id ? "text-foreground" : "text-muted-foreground hover:text-foreground")} aria-selected={tab === t.id} role="tab">
             {t.label}
-            {counts[t.id] > 0 && <span className={cn("rounded-full px-1.5 text-[10px] tabular", tab === t.id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{counts[t.id]}</span>}
+            {counts[t.id] > 0 && <span className={cn("rounded-full px-1.5 text-[10px] tabular", tab === t.id ? "text-foreground" : "text-muted-foreground")}>{counts[t.id]}</span>}
             {tab === t.id && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-t bg-primary" />}
           </button>
         ))}

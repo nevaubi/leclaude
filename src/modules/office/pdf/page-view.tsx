@@ -8,7 +8,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { STAMP_PRESETS, type PdfAnnotation, type PdfPage, type PdfPoint, type PdfRect } from "./model";
 import { cssRectToPdf, loadPdfjs, pointToPdf, rectToViewport, type PDFDocumentProxy, type PDFPageProxy, type PageViewport } from "./pdfjs";
-import { CURRENT_USER, usePdfStore, type Tool } from "./store";
+import { usePdfStore, type Tool } from "./store";
 import { mergeLineRects } from "./text-search";
 
 export interface PageViewProps {
@@ -227,7 +227,7 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
           <span>This page could not be rendered.<br /><span className="font-mono text-[10.5px] opacity-80">{renderError}</span></span>
         </div>
       )}
-      {page.blank && <div className="absolute inset-0 flex items-center justify-center text-xs uppercase tracking-wider text-muted-foreground/60">Blank page</div>}
+      {page.blank && <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground/60">Blank page</div>}
       <div ref={textRef} className={cn("textLayer absolute left-0 top-0", isDrawing || tool === "hand" ? "pointer-events-none" : "")} style={{ width, height }} onMouseUp={commitSelection} />
       {viewport && (
         <svg className="absolute left-0 top-0" width={width} height={height} style={{ pointerEvents: "none" }} aria-hidden>
@@ -283,4 +283,3 @@ function boundsOfCss(rects: { left: number; top: number; width: number; height: 
   return { left: l, top: t, width: r - l, height: b - t };
 }
 
-export const AUTHOR = CURRENT_USER;

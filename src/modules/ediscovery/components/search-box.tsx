@@ -15,15 +15,15 @@ import { useBatch } from "./use-review-data";
 import { Kbd, StateChip } from "./shared";
 
 const EXAMPLES: { q: string; hint: string }[] = [
-  { q: 'toxicology AND (rat OR bioassay) NOT marketing', hint: "Boolean with grouping" },
-  { q: '"monitoring well" custodian:hale type:email', hint: "Phrase + field prefixes" },
-  { q: "liver w/5 study", hint: "Within 5 words, either order" },
-  { q: '"rat study" pre/3 results', hint: "Ordered proximity" },
-  { q: "MFC-0041877–MFC-0041999", hint: "Bates range" },
-  { q: "from:kaine date:2001-03-01..2001-03-31", hint: "Sender + date range" },
-  { q: "priv:yes -priv:wp cc:kaine", hint: "Privilege basis, exclude" },
+  { q: 'contract AND (termination OR breach) NOT invoice', hint: "Boolean with grouping" },
+  { q: '"board meeting" custodian:smith type:email', hint: "Phrase + field prefixes" },
+  { q: "defect w/5 report", hint: "Within 5 words, either order" },
+  { q: '"test results" pre/3 draft', hint: "Ordered proximity" },
+  { q: "ABC-0000100–ABC-0000250", hint: "Bates range" },
+  { q: "from:smith date:2024-03-01..2024-03-31", hint: "Sender + date range" },
+  { q: "priv:yes -priv:wp cc:counsel", hint: "Privilege basis, exclude" },
   { q: "type:email hasattachment:yes responsive:none", hint: "Uncoded email families" },
-  { q: "family:MFC-0041877 OR dupes:near", hint: "Family members, near-dups" },
+  { q: "family:ABC-0000100 OR dupes:near", hint: "Family members, near-dups" },
 ];
 
 const GROUP_OPTIONS: { value: GroupBy; label: string; title: string }[] = [
@@ -59,7 +59,7 @@ export function SearchBox({ response, loading, onSaveSearch, onTermReport }: { r
             value={local}
             onChange={(e) => setLocal(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commit(local); if (e.key === "Escape") { setLocal(""); commit(""); (e.target as HTMLInputElement).blur(); } }}
-            placeholder={semantic ? "Describe what you are looking for — e.g. internal doubts about whether the surfactant biodegrades" : 'Search — boolean, "phrases", w/5, custodian:, from:, date:, priv:, Bates ranges'}
+            placeholder={semantic ? "Describe what you are looking for — e.g. internal concerns about product safety raised before launch" : 'Search — boolean, "phrases", w/5, custodian:, from:, date:, priv:, Bates ranges'}
             className="h-7 w-full rounded-md border border-input bg-background pl-7 pr-7 font-mono text-[12px] placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             aria-label="Search documents"
             autoComplete="off"
@@ -67,8 +67,8 @@ export function SearchBox({ response, loading, onSaveSearch, onTermReport }: { r
           />
           {local ? <button onClick={() => { setLocal(""); commit(""); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Clear search"><X className="size-3" /></button> : <kbd className="absolute right-1.5 top-1/2 hidden -translate-y-1/2 sm:inline">/</kbd>}
         </div>
-        <Tip label={aiConfigured ? "Semantic: hybrid embedding + keyword ranking" : "Semantic mode ranks with BM25 only until an OpenAI key is configured"}>
-          <Toggle pressed={semantic} onPressedChange={setSemantic} size="sm" variant="outline" className={cn("h-7 px-2 text-[11.5px]", semantic && "border-primary/40 bg-primary/8 text-primary data-[state=on]:bg-primary/8 data-[state=on]:text-primary")} aria-label="Toggle semantic search">Semantic</Toggle>
+        <Tip label={aiConfigured ? "Semantic: hybrid embedding + keyword ranking" : "Semantic mode ranks with BM25 only until an AI provider is configured"}>
+          <Toggle pressed={semantic} onPressedChange={setSemantic} size="sm" variant="outline" className={cn("h-7 border-transparent px-2 text-[12px] text-muted-foreground shadow-none hover:text-foreground", semantic && "text-foreground data-[state=on]:bg-accent data-[state=on]:text-foreground")} aria-label="Toggle semantic search">Semantic</Toggle>
         </Tip>
         <Popover>
           <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" aria-label="Search syntax help"><HelpCircle className="size-3.5" /></Button></PopoverTrigger>
@@ -80,7 +80,7 @@ export function SearchBox({ response, loading, onSaveSearch, onTermReport }: { r
                 <li key={ex.q}><button onClick={() => { setLocal(ex.q); commit(ex.q); }} className="flex w-full items-baseline justify-between gap-3 rounded px-1.5 py-0.5 text-left hover:bg-accent cursor-pointer"><code className="font-mono text-[11px]">{ex.q}</code><span className="shrink-0 text-[10.5px] text-muted-foreground">{ex.hint}</span></button></li>
               ))}
             </ul>
-            <div className="mt-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Fields</div>
+            <div className="mt-2 text-[12px] font-medium text-muted-foreground">Fields</div>
             <dl className="mt-1 grid max-h-44 grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 overflow-y-auto text-[11px] scrollbar-thin">
               {QUERY_FIELDS.map((f) => <React.Fragment key={f.field}><dt className="font-mono text-foreground">{f.field}:</dt><dd className="text-muted-foreground">{f.hint}</dd></React.Fragment>)}
             </dl>
@@ -94,9 +94,9 @@ export function SearchBox({ response, loading, onSaveSearch, onTermReport }: { r
       </div>
       {(warnings.length > 0 || (parsed && (parsed.bates.length > 0 || parsed.fields.length > 0))) && (
         <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5 text-[11px]">
-          {parsed?.bates.map((b, i) => <span key={i} className="rounded border bg-muted/60 px-1.5 py-px font-mono text-muted-foreground">Bates {b.start}{b.end !== b.start ? ` – ${b.end}` : ""}</span>)}
-          {parsed?.fields.map((f, i) => <span key={i} className="rounded border bg-muted/60 px-1.5 py-px font-mono text-muted-foreground">{f.field}:{f.value}</span>)}
-          {warnings.map((w, i) => <span key={i} className="inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-1.5 py-px text-warning-foreground dark:text-warning"><AlertTriangle className="size-3" />{w}</span>)}
+          {parsed?.bates.map((b, i) => <span key={i} className="font-mono text-muted-foreground">Bates {b.start}{b.end !== b.start ? ` – ${b.end}` : ""}</span>)}
+          {parsed?.fields.map((f, i) => <span key={i} className="font-mono text-muted-foreground">{f.field}:{f.value}</span>)}
+          {warnings.map((w, i) => <span key={i} className="inline-flex items-center gap-1 text-warning-foreground dark:text-warning"><AlertTriangle className="size-3" />{w}</span>)}
         </div>
       )}
     </div>
@@ -120,7 +120,7 @@ export function BatchModeStrip({ onNext, rows }: { onNext: () => void; rows: unk
   if (!batchId) return null;
   const remaining = qcMode ? Math.max(0, (b?.progress.qcSampled ?? 0) - (b?.progress.qcDone ?? 0)) : b?.progress.remaining ?? 0;
   return (
-    <div className="flex h-8 shrink-0 flex-wrap items-center gap-2 border-b bg-primary/5 px-3 text-[11.5px]" role="status" aria-label="Batch review mode">
+    <div className="flex h-8 shrink-0 flex-wrap items-center gap-2 border-b bg-muted/40 px-3 text-[11.5px]" role="status" aria-label="Batch review mode">
       <span className="font-medium">{qcMode ? "QC sample" : "Batch"}:</span>
       <span className="min-w-0 truncate">{b?.name ?? "…"}</span>
       {b && <span className="tabular text-muted-foreground">{qcMode ? `${b.progress.qcDone} of ${b.progress.qcSampled} checked` : `${b.progress.coded} of ${b.progress.total} coded`} · {remaining} left</span>}

@@ -1,4 +1,3 @@
-import { MATTERS } from "@/lib/seed/ids";
 import { CURRENT_USER } from "@/lib/current-user";
 
 /** Stable ids for the system folders. Safe to import from client components. */
@@ -36,7 +35,7 @@ export function matterIdFromFolderId(id: string): string | null {
   return isMatterFolderId(id) ? id.slice("lib_folder_matter_".length) : null;
 }
 
-export const SYSTEM_FOLDER_IDS = new Set<string>([...SYSTEM_FOLDER_ORDER, NEWS_CLIPPINGS_FOLDER, ...Object.values(MATTERS).map(matterFolderId)]);
+export const SYSTEM_FOLDER_IDS = new Set<string>([...SYSTEM_FOLDER_ORDER, NEWS_CLIPPINGS_FOLDER]);
 
 export function isSystemFolder(id: string) {
   return SYSTEM_FOLDER_IDS.has(id) || isMatterFolderId(id);

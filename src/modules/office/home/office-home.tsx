@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpDown, ChevronRight, FileText, Import, KeyRound, LayoutGrid, LayoutTemplate, List, Loader2, Search, Upload, X } from "lucide-react";
+import { ArrowUpDown, ChevronRight, FileText, Import, LayoutTemplate, Loader2, Search, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
@@ -10,15 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tip } from "@/components/ui/tooltip";
-import { EmptyState } from "@/components/ui/misc";
+import { EmptyState, StatusDot } from "@/components/ui/misc";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { OfficeKind } from "@/lib/types/domain";
 import { useUploads, isFileDrag } from "@/modules/library/components/use-uploads";
-import { SegmentedControl } from "@/modules/office/shared/office-chrome";
 import { KIND_META, OFFICE_KINDS, type OfficeDocSummary, type OfficeHomeData } from "./types";
-import { NewTiles, KIND_ICON } from "./new-tiles";
-import { DocCard, DocRow, DocRowHeader, duplicateOfficeDoc, type DocActions } from "./doc-card";
+import { NewTiles } from "./new-tiles";
+import { OfficeAppIcon } from "../shared/office-app-icon";
+import { DocRow, DocRowHeader, duplicateOfficeDoc, type DocActions } from "./doc-card";
 import { TemplatesSection } from "./templates-section";
 
 type Sort = "updated" | "title" | "kind" | "created";
@@ -41,13 +41,9 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
   const [query, setQuery] = React.useState("");
   const [matterId, setMatterId] = React.useState<string>("");
   const [sort, setSort] = React.useState<Sort>("updated");
-  const [viewMode, setViewMode] = React.useState<"grid" | "list">("list");
   const [fileOver, setFileOver] = React.useState(false);
-  const [hydrated, setHydrated] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
-  React.useEffect(() => { setHydrated(true); try { const v = localStorage.getItem("leclaude:office-home:view"); if (v === "list" || v === "grid") setViewMode(v); } catch {} }, []);
-  React.useEffect(() => { if (hydrated) { try { localStorage.setItem("leclaude:office-home:view", viewMode); } catch {} } }, [viewMode, hydrated]);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -108,8 +104,6 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.closest("[role=dialog]"))) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === "1") setViewMode("grid");
-      if (e.key === "2") setViewMode("list");
       if (e.key.toLowerCase() === "i") { e.preventDefault(); fileRef.current?.click(); }
       if (e.key.toLowerCase() === "n") { e.preventDefault(); router.push(`/office/${kind ?? "word"}/new${matterId ? `?matter=${matterId}` : ""}`); }
     };
@@ -119,8 +113,8 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
 
   const total = data.docs.length;
   const kindTabs = React.useMemo(() => [
-    { id: "all" as KindTab, label: <>All <span className="ml-1 text-[11px] tabular text-muted-foreground">{total}</span></> },
-    ...OFFICE_KINDS.map((k) => ({ id: k as KindTab, label: <>{KIND_META[k].plural} <span className="ml-1 text-[11px] tabular text-muted-foreground">{data.counts[k]}</span></>, icon: KIND_ICON[k] })),
+    { id: "all" as KindTab, label: <>All <span className="text-[11px] tabular text-muted-foreground">{total}</span></> },
+    ...OFFICE_KINDS.map((k) => ({ id: k as KindTab, label: <><OfficeAppIcon kind={k} size={14} />{KIND_META[k].plural} <span className="text-[11px] tabular text-muted-foreground">{data.counts[k]}</span></> })),
   ], [total, data.counts]);
   const filtered = Boolean(query || matterId || kind);
 
@@ -132,13 +126,12 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
       onDrop={(e) => { if (isFileDrag(e)) { e.preventDefault(); setFileOver(false); if (e.dataTransfer.files.length) void uploads.upload(e.dataTransfer.files, { matterId: matterId || null }); } }}
     >
       <TopbarSlot>
-        <LayoutGrid className="size-4 text-muted-foreground" />
         <button onClick={() => setKind(null)} className="shrink-0 text-[13px] font-semibold hover:text-primary cursor-pointer">Office</button>
         {kind && (<><ChevronRight className="size-3.5 text-muted-foreground" /><span className="text-[13px] text-muted-foreground">{KIND_META[kind].plural}</span></>)}
         {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
         {!data.aiConfigured && (
           <Tip label="Add OPENAI_API_KEY to enable the drafting assistants. Editing, comments and versions work without it.">
-            <Link href="/settings#ai" className="hidden h-6 items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 text-[11px] text-warning-foreground md:inline-flex dark:text-warning"><KeyRound className="size-3" /> Assistants need a key</Link>
+            <Link href="/settings#ai" className="hidden items-center gap-1.5 text-[11.5px] text-muted-foreground hover:text-foreground md:inline-flex"><StatusDot tone="warning" /> Assistants off</Link>
           </Tip>
         )}
       </TopbarSlot>
@@ -150,21 +143,16 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
       )}
 
       <div className="mx-auto w-full max-w-[1400px] space-y-8 p-4 pb-16 md:p-6">
-        {/* Header */}
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="font-serif text-[22px] font-semibold leading-tight tracking-tight">Documents, workbooks, decks and PDFs</h1>
-            <p className="mt-1 text-[13px] text-muted-foreground">Browser-native editors with a drafting assistant in each. Edits arrive as previewed proposals; review flags citations and risk; ask answers from the document, the matter and the library.</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
+        {/* New: one compact row per editor */}
+        <section aria-labelledby="office-new" className="space-y-2">
+          <div className="flex items-center gap-2">
+            <h1 id="office-new" className="text-[15px] font-semibold">New</h1>
+            <span className="flex-1" />
             <input ref={fileRef} type="file" multiple accept={ALL_ACCEPT} className="hidden" onChange={(e) => { if (e.target.files?.length) void uploads.upload(e.target.files, { matterId: matterId || null }); e.target.value = ""; }} />
-            <Tip label="Import a file into the matching editor" shortcut="I"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploads.busy}>{uploads.busy ? <Loader2 className="size-4 animate-spin" /> : <Import className="size-4" />} Import</Button></Tip>
-            <Tip label={`New ${kind ? KIND_META[kind].lower : "document"}`} shortcut="N"><Button size="sm" asChild><Link href={`/office/${kind ?? "word"}/new${matterId ? `?matter=${matterId}` : ""}`}><FileText className="size-4" /> New {kind ? KIND_META[kind].lower : "document"}</Link></Button></Tip>
+            <Tip label="Import .docx, .xlsx, .pptx or .pdf into the matching editor" shortcut="I"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploads.busy}>{uploads.busy ? <Loader2 className="size-3.5 animate-spin" /> : <Import className="size-3.5" />} Import</Button></Tip>
           </div>
-        </div>
-
-        {/* New tiles */}
-        <NewTiles templates={data.templates} counts={data.counts} activeKind={kind} matterId={matterId || null} />
+          <NewTiles templates={data.templates} activeKind={kind} matterId={matterId || null} />
+        </section>
 
         {/* Recent documents */}
         <section className="space-y-3" aria-labelledby="office-recent">
@@ -185,18 +173,20 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
               <DropdownMenuTrigger asChild><Button variant="outline" size="sm" aria-label={`Sort by ${SORT_LABEL[sort]}`}><ArrowUpDown className="size-3.5" /><span className="hidden lg:inline">{SORT_LABEL[sort]}</span></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end"><DropdownMenuLabel>Sort by</DropdownMenuLabel><DropdownMenuRadioGroup value={sort} onValueChange={(v) => setSort(v as Sort)}>{(Object.keys(SORT_LABEL) as Sort[]).map((s) => <DropdownMenuRadioItem key={s} value={s}>{SORT_LABEL[s]}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent>
             </DropdownMenu>
-            <SegmentedControl ariaLabel="View" size="sm" value={hydrated ? viewMode : "list"} onChange={setViewMode} options={[{ id: "list", label: "", icon: List, title: "List", shortcut: "2" }, { id: "grid", label: "", icon: LayoutGrid, title: "Grid", shortcut: "1" }]} />
           </div>
-          <SegmentedControl ariaLabel="Document type" size="sm" value={(kind ?? "all") as KindTab} onChange={(v) => setKind(v === "all" ? null : v)} options={kindTabs} />
+          <div className="flex flex-wrap items-center gap-x-1 border-b border-line-quiet" role="tablist" aria-label="Document type">
+            {kindTabs.map((t) => {
+              const on = (kind ?? "all") === t.id;
+              return <button key={t.id} type="button" role="tab" aria-selected={on} onClick={() => setKind(t.id === "all" ? null : (t.id as OfficeKind))} className={cn("-mb-px flex h-8 cursor-pointer items-center gap-1.5 border-b-2 px-2 text-[12.5px] transition-colors", on ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{t.label}</button>;
+            })}
+          </div>
 
           {loading && !data.docs.length ? (
             <div className="space-y-1">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-11 rounded-md" />)}</div>
           ) : docs.length === 0 ? (
-            <EmptyState compact icon={FileText} title={filtered ? "No documents match" : "No documents yet"} description={query || matterId ? "Try clearing the search or matter filter." : "Create one from a tile above, or drop a file anywhere on this page to import it."} action={<Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}><Import className="size-3.5" /> Import a file</Button>} />
-          ) : (hydrated ? viewMode : "list") === "grid" ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{docs.map((d) => <DocCard key={d.id} doc={d} actions={actions} />)}</div>
+            <EmptyState compact icon={FileText} title={filtered ? "No documents match" : "No documents yet"} description={query || matterId ? "Try clearing the search or matter filter." : "Start a blank document above, or drop a file anywhere on this page to import it."} action={filtered ? undefined : <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}><Import className="size-3.5" /> Import a file</Button>} />
           ) : (
-            <div className="overflow-hidden rounded-lg border bg-card" role="table" aria-label="Recent documents">
+            <div className="overflow-hidden" role="table" aria-label="Recent documents">
               <DocRowHeader />
               {docs.map((d) => <DocRow key={d.id} doc={d} actions={actions} />)}
             </div>
@@ -214,7 +204,6 @@ export function OfficeHome({ initial, kind: initialKind }: { initial: OfficeHome
           <TemplatesSection templates={data.templates} kind={kind} matterId={matterId || null} query={query} />
         </section>
 
-        <p className="text-[11.5px] text-muted-foreground">In every editor: <span className="font-medium text-foreground">Draft</span> proposes edits you apply as tracked changes · <span className="font-medium text-foreground">Review</span> flags citations, defined terms and risk · <span className="font-medium text-foreground">Ask</span> answers with paragraph, cell or slide references. Press <kbd>⌘/</kbd> inside an editor to open the assistant.</p>
       </div>
     </div>
   );

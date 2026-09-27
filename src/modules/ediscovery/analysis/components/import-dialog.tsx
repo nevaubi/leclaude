@@ -109,15 +109,15 @@ export function ImportTranscriptDialog({ open, onOpenChange, matterId, depositio
             {mode === "file" ? (
               <FileDrop files={files} onChange={(f, rejected) => { setFiles(f.slice(-1)); if (rejected.length) toast.error(`${rejected[0].name}: ${rejected[0].reason}`); }} accept={ACCEPT} multiple={false} maxFiles={1} maxSize={25 * 1024 * 1024} label="Drop the transcript here" help=".txt, .ptx, .asc or .docx · up to 25 MB" />
             ) : (
-              <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={12} className="font-mono text-[11.5px]" placeholder={"0024:05   Q.   When did you first see the report?\n0024:06   A.   In March of 2001.\n0024:07        MR. WHITFIELD:  Objection, form."} aria-label="Transcript text" />
+              <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={12} className="font-mono text-[11.5px]" placeholder={"0024:05   Q.   When did you first see the report?\n0024:06   A.   In March of 2001.\n0024:07        MR. SMITH:  Objection, form."} aria-label="Transcript text" />
             )}
             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-              <Field label="Witness" required htmlFor="imp-witness"><Input id="imp-witness" size="xs" value={meta.witnessName} onChange={(e) => set("witnessName", e.target.value)} placeholder="Karen Liu" /></Field>
-              <Field label="Title" htmlFor="imp-title"><Input id="imp-title" size="xs" value={meta.witnessTitle} onChange={(e) => set("witnessTitle", e.target.value)} placeholder="Director of Marketing" /></Field>
+              <Field label="Witness" required htmlFor="imp-witness"><Input id="imp-witness" size="xs" value={meta.witnessName} onChange={(e) => set("witnessName", e.target.value)} placeholder="Witness name" /></Field>
+              <Field label="Title" htmlFor="imp-title"><Input id="imp-title" size="xs" value={meta.witnessTitle} onChange={(e) => set("witnessTitle", e.target.value)} placeholder="Title or role" /></Field>
               <Field label="Date" htmlFor="imp-date"><Input id="imp-date" size="xs" type="date" value={meta.date} onChange={(e) => set("date", e.target.value)} /></Field>
               <Field label="Volume" htmlFor="imp-vol"><Input id="imp-vol" size="xs" type="number" min={1} value={meta.volume} onChange={(e) => set("volume", e.target.value)} /></Field>
-              <Field label="Taken by" htmlFor="imp-taken"><Input id="imp-taken" size="xs" value={meta.takenBy} onChange={(e) => set("takenBy", e.target.value)} placeholder="Rebecca Klein" /></Field>
-              <Field label="Defended by" htmlFor="imp-def"><Input id="imp-def" size="xs" value={meta.defendingBy} onChange={(e) => set("defendingBy", e.target.value)} placeholder="Jordan Whitfield" /></Field>
+              <Field label="Taken by" htmlFor="imp-taken"><Input id="imp-taken" size="xs" value={meta.takenBy} onChange={(e) => set("takenBy", e.target.value)} placeholder="Examining attorney" /></Field>
+              <Field label="Defended by" htmlFor="imp-def"><Input id="imp-def" size="xs" value={meta.defendingBy} onChange={(e) => set("defendingBy", e.target.value)} placeholder="Defending attorney" /></Field>
               <Field label="Location" htmlFor="imp-loc" className="col-span-2"><Input id="imp-loc" size="xs" value={meta.location} onChange={(e) => set("location", e.target.value)} /></Field>
               <Field label="Replace existing" help="Optional: replace a scheduled or rough transcript instead of adding a deposition." htmlFor="imp-replace" className="col-span-2">
                 <select id="imp-replace" value={replaceId} onChange={(e) => setReplaceId(e.target.value)} className="control h-7 w-full rounded-md border bg-background px-2 text-[12.5px]">
@@ -128,7 +128,7 @@ export function ImportTranscriptDialog({ open, onOpenChange, matterId, depositio
             </div>
           </div>
           <div className="min-w-0 space-y-3">
-            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Preview</div>
+            <div className="text-[12px] font-medium text-muted-foreground">Preview</div>
             {previewing ? <div className="flex h-24 items-center justify-center text-xs text-muted-foreground"><Loader2 className="mr-2 size-4 animate-spin" /> Reading…</div> : !preview ? <div className="rounded-md border border-dashed p-6 text-center text-xs text-muted-foreground">Add a file or paste text to see what the parser recognises.</div> : (
               <>
                 <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1 text-[12px]">
@@ -140,7 +140,7 @@ export function ImportTranscriptDialog({ open, onOpenChange, matterId, depositio
                   {preview.meta.caseCaption && <><dt className="text-muted-foreground">Caption</dt><dd className="truncate">{preview.meta.caseCaption}</dd></>}
                 </dl>
                 <div>
-                  <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Parse issues ({preview.issues.length})</div>
+                  <div className="mb-1 text-[12px] font-medium text-muted-foreground">Parse issues ({preview.issues.length})</div>
                   {!issues.length ? <div className="text-[11.5px] text-muted-foreground">None.</div> : (
                     <div className="max-h-40 overflow-auto rounded-md border scrollbar-thin">
                       <table className="w-full text-[11.5px]">
@@ -153,7 +153,7 @@ export function ImportTranscriptDialog({ open, onOpenChange, matterId, depositio
                   )}
                 </div>
                 <div>
-                  <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">First testimony</div>
+                  <div className="mb-1 text-[12px] font-medium text-muted-foreground">First testimony</div>
                   <ol className="max-h-48 space-y-1.5 overflow-auto rounded-md border p-2 text-[11.5px] scrollbar-thin">
                     {preview.transcript.slice(0, 5).map((qa, i) => <li key={i} className="grid grid-cols-[48px_1fr] gap-2"><span className="font-mono text-muted-foreground">{formatPageLine(qa.page, qa.line)}</span><span><span className="text-muted-foreground">Q.</span> {qa.question}<br /><span className="text-muted-foreground">A.</span> {qa.answer}{qa.objection && <span className="ml-1 text-muted-foreground">· objection ({qa.objection.basis})</span>}</span></li>)}
                   </ol>

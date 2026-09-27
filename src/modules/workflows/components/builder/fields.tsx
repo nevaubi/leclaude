@@ -48,7 +48,7 @@ export function VariablePicker({ groups, onPick, className }: { groups: Variable
           {filtered.length === 0 && <div className="p-3 text-center text-xs text-muted-foreground">No variables match.</div>}
           {filtered.map((g) => (
             <div key={g.label} className="mb-1">
-              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{g.label}</div>
+              <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">{g.label}</div>
               {g.items.map((it) => (
                 <button key={it.path} type="button" onClick={() => { onPick(`{{${it.path}}}`); setOpen(false); setQ(""); }} className="flex w-full flex-col items-start rounded px-2 py-1 text-left hover:bg-accent cursor-pointer">
                   <span className="font-mono text-[11px] text-foreground">{`{{${it.path}}}`}</span>

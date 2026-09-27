@@ -1,12 +1,14 @@
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { createFromBlob } from "@/modules/office/pdf/service";
+import { withAuth } from "@/lib/auth/route";
+import { officeCollection } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /** Open an existing blob as a PDF document (creates or reuses the document). Body: { blobId, matterId?, title? }. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as { blobId?: string; matterId?: string; title?: string; folderId?: string } | null;
   if (!body?.blobId) return jsonError("`blobId` is required");
   try {
@@ -17,3 +19,5 @@ export async function POST(req: NextRequest) {
     return jsonError(msg, /not found/i.test(msg) ? 404 : 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: officeCollection });

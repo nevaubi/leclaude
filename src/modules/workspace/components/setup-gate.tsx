@@ -1,12 +1,9 @@
 "use client";
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { isSetupExempt } from "../gate";
 
-/** Paths that stay reachable before first-run setup. */
-export function isSetupExempt(pathname: string | null | undefined): boolean {
-  if (!pathname) return false;
-  return pathname === "/setup" || pathname.startsWith("/setup/") || pathname.startsWith("/api/");
-}
+export { isSetupExempt };
 
 /**
  * First-run gate. Until the workspace has an owner, every page redirects to /setup; the page content is not

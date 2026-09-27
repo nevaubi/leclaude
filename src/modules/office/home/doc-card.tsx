@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import type { OfficeDocument } from "@/lib/types/domain";
 import { KIND_META, type OfficeDocSummary } from "./types";
-import { KIND_BG, KIND_COLOR, KIND_ICON } from "./new-tiles";
+import { OfficeAppIcon } from "../shared/office-app-icon";
 
 export interface DocActions {
   rename: (doc: OfficeDocSummary, title: string) => Promise<void>;
@@ -93,7 +93,6 @@ export function MatterChip({ name, className }: { name: string; className?: stri
 
 export function DocCard({ doc, actions }: { doc: OfficeDocSummary; actions: DocActions }) {
   const router = useRouter();
-  const Icon = KIND_ICON[doc.kind];
   const { renaming, setRenaming, input } = useRename(doc, actions);
   return (
     <ContextMenu>
@@ -106,7 +105,7 @@ export function DocCard({ doc, actions }: { doc: OfficeDocSummary; actions: DocA
           className="group flex h-[152px] cursor-pointer flex-col rounded-lg border bg-card p-3 outline-none transition-colors hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring/60"
         >
           <div className="flex items-start gap-2.5">
-            <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md", KIND_BG[doc.kind], KIND_COLOR[doc.kind])}><Icon className="size-4" /></span>
+            <OfficeAppIcon kind={doc.kind} size={20} className="mt-0.5" />
             <div className="min-w-0 flex-1">
               {input ?? <div className="line-clamp-2 text-[13px] font-medium leading-snug" title={doc.title}>{doc.title}</div>}
               <div className="mt-0.5 text-[11px] text-muted-foreground">{KIND_META[doc.kind].label}{doc.templateId ? " · from template" : ""}{doc.folderName ? ` · ${doc.folderName}` : ""}</div>
@@ -144,7 +143,7 @@ export const DOC_ROW_GRID = "grid items-center gap-3 grid-cols-[minmax(0,1fr)_mi
 
 export function DocRowHeader() {
   return (
-    <div className={cn(DOC_ROW_GRID, "h-8 border-b bg-muted/40 px-3 text-[11px] font-medium text-muted-foreground")} role="row">
+    <div className={cn(DOC_ROW_GRID, "h-8 border-b px-3 text-[11.5px] text-muted-foreground")} role="row">
       <span>Title</span>
       <span>Matter</span>
       <span className="hidden lg:block">Owner</span>
@@ -158,7 +157,6 @@ export function DocRowHeader() {
 
 export function DocRow({ doc, actions }: { doc: OfficeDocSummary; actions: DocActions }) {
   const router = useRouter();
-  const Icon = KIND_ICON[doc.kind];
   const { renaming, setRenaming, input } = useRename(doc, actions);
   return (
     <ContextMenu>
@@ -168,17 +166,16 @@ export function DocRow({ doc, actions }: { doc: OfficeDocSummary; actions: DocAc
           tabIndex={0}
           onClick={() => { if (!renaming) router.push(docHref(doc)); }}
           onKeyDown={(e) => { if (e.key === "Enter" && !renaming) router.push(docHref(doc)); if (e.key === "F2") { e.preventDefault(); setRenaming(true); } }}
-          className={cn(DOC_ROW_GRID, "group h-11 cursor-pointer border-b px-3 text-[13px] outline-none transition-colors last:border-b-0 hover:bg-accent/40 focus-visible:bg-accent/40")}
+          className={cn(DOC_ROW_GRID, "group h-9 cursor-pointer border-b border-line-quiet px-3 text-[13px] outline-none transition-colors last:border-b-0 hover:bg-accent/40 focus-visible:bg-accent/40")}
         >
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md", KIND_BG[doc.kind], KIND_COLOR[doc.kind])} title={KIND_META[doc.kind].label}><Icon className="size-3.5" /></span>
+            <span title={KIND_META[doc.kind].label} className="inline-flex"><OfficeAppIcon kind={doc.kind} size={16} /></span>
             <div className="min-w-0 flex-1">
-              {input ?? <div className="truncate font-medium" title={doc.title}>{doc.title}</div>}
-              <div className="truncate text-[11px] text-muted-foreground">{KIND_META[doc.kind].label}{doc.folderName ? ` · ${doc.folderName}` : ""}{doc.commentCount > 0 ? ` · ${doc.commentCount} comment${doc.commentCount === 1 ? "" : "s"}` : ""}</div>
+              {input ?? <div className="truncate" title={doc.title}>{doc.title}</div>}
             </div>
           </div>
-          <div className="min-w-0">{doc.matterShortName ? <MatterChip name={doc.matterShortName} /> : <span className="text-muted-foreground">—</span>}</div>
-          <div className="hidden min-w-0 items-center gap-1.5 truncate text-[12px] lg:flex">{doc.ownerName ? <><PersonAvatar name={doc.ownerName} size="xs" /><span className="truncate">{doc.ownerName}</span></> : <span className="text-muted-foreground">—</span>}</div>
+          <div className="min-w-0 truncate text-[12px] text-muted-foreground" title={doc.matterShortName}>{doc.matterShortName ?? "—"}</div>
+          <div className="hidden min-w-0 truncate text-[12px] text-muted-foreground lg:block">{doc.ownerName ?? "—"}</div>
           <div className="text-[12px] text-muted-foreground"><RelativeTime value={doc.updatedAt} /></div>
           <div className="hidden text-[12px] tabular text-muted-foreground lg:block" title={`Content version ${doc.contentVersion} · ${doc.versionCount} saved`}>v{doc.contentVersion} · {doc.versionCount}</div>
           <div className="hidden text-right text-[12px] tabular text-muted-foreground lg:block">{doc.size ? formatBytes(doc.size) : "—"}</div>

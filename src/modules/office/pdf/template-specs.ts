@@ -4,8 +4,9 @@
  * paper for Seeger Weiss LLP matters (AFFF MDL, Northgate v. Apex, …).
  */
 import type { Block, CaptionSpec, DocSpec } from "./generate";
+import { GENERIC_SPEC_BUILDERS, type GenericSpecContext } from "./template-specs-generic";
 
-export interface SpecContext { matterId?: string; title?: string; date?: Date }
+export interface SpecContext extends GenericSpecContext { /** Regenerate the sample-dataset content (seeded demo documents only). */ demo?: boolean }
 
 const AFFF_COURT = ["United States District Court", "District of South Carolina", "Charleston Division"];
 const AFFF_LEFT = ["IN RE: AQUEOUS FILM-FORMING FOAMS PRODUCTS LIABILITY LITIGATION", "", "This Document Relates to: **All Cases**"];
@@ -410,8 +411,8 @@ export function custodialExcerptSpec(ctx: SpecContext = {}): DocSpec {
   };
 }
 
-/** Registry used by templates.ts and seed.ts to regenerate a document from its spec id. */
-export const SPEC_BUILDERS: Record<string, (ctx: SpecContext) => DocSpec> = {
+/** The sample-dataset versions (demo seed and tests). Gallery documents use the generic specs. */
+const DEMO_SPEC_BUILDERS: Record<string, (ctx: SpecContext) => DocSpec> = {
   "deposition-notice": (ctx) => depositionNoticeSpec(ctx),
   "protective-order": (ctx) => protectiveOrderSpec(ctx),
   "cmo-excerpt": (ctx) => cmoSpec(ctx),
@@ -421,3 +422,12 @@ export const SPEC_BUILDERS: Record<string, (ctx: SpecContext) => DocSpec> = {
   "northgate-msa-excerpt": (ctx) => northgateMsaSpec(ctx),
   "custodial-excerpt": (ctx) => custodialExcerptSpec(ctx),
 };
+
+/**
+ * Registry used by service.ts to generate a document from its spec id. Seeded sample documents
+ * (`ctx.demo`) regenerate their sample content; everything else gets the generic, placeholder version
+ * (filled from the matter record when there is one), so a gallery template never carries sample facts.
+ */
+export const SPEC_BUILDERS: Record<string, (ctx: SpecContext) => DocSpec> = Object.fromEntries(
+  Object.keys(DEMO_SPEC_BUILDERS).map((id) => [id, (ctx: SpecContext) => (!ctx.demo && GENERIC_SPEC_BUILDERS[id] ? GENERIC_SPEC_BUILDERS[id](ctx) : DEMO_SPEC_BUILDERS[id](ctx))]),
+);

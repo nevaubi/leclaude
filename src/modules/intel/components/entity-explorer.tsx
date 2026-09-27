@@ -174,7 +174,7 @@ function EntityInspector({ id, item, onClose, onWatch }: { id: string; item?: En
             {(e.flags?.length ?? 0) > 0 && <FlagList flags={e.flags ?? []} max={5} />}
             {data.tendencies.length > 0 && (
               <div>
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Motion outcomes</div>
+                <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Motion outcomes</div>
                 <div className="divide-hairline">
                   {data.tendencies.slice(0, 6).map((t) => (
                     <div key={t.motion} className="flex h-6 items-center gap-2 text-[12px]"><span className="min-w-0 flex-1 truncate">{t.label}</span><span className="tabular text-muted-foreground">{t.granted}/{t.denied}/{t.partial}</span><span className="w-10 text-right tabular">{t.grantRate == null ? "—" : `${Math.round(t.grantRate * 100)}%`}</span></div>
@@ -185,7 +185,7 @@ function EntityInspector({ id, item, onClose, onWatch }: { id: string; item?: En
             )}
             {data.related.length > 0 && (
               <div>
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Related</div>
+                <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Related</div>
                 <div className="divide-hairline">
                   {data.related.slice(0, 8).map((r) => (
                     <div key={`${r.relation}-${r.entity.id}`} className="flex h-6 items-center gap-2 text-[12px]"><span className="w-[92px] shrink-0 truncate text-muted-foreground">{r.direction === "out" ? r.relation.replace(/_/g, " ") : `← ${r.relation.replace(/_/g, " ")}`}</span><EntityLink id={r.entity.id} type={r.entity.type} name={r.entity.name} className="min-w-0 flex-1" /><span className="tabular text-[11px] text-muted-foreground">×{r.weight}</span></div>
@@ -195,7 +195,7 @@ function EntityInspector({ id, item, onClose, onWatch }: { id: string; item?: En
             )}
             {data.recent.length > 0 && (
               <div>
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Recent records</div>
+                <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Recent records</div>
                 <div className="divide-hairline">
                   {data.recent.map((d) => (
                     <div key={d.id} className="flex min-h-7 items-center gap-2 py-0.5 text-[12px]"><DateText value={d.date} className="w-[86px] shrink-0 text-[11px]" /><DocLink doc={d} className="min-w-0 flex-1" /><ConfidenceText value={d.confidence} /></div>

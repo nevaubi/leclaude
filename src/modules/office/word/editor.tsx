@@ -42,8 +42,8 @@ import { buildSnapshot } from "./snapshot";
 import { StatusBar } from "./status-bar";
 import { applyParagraphStyle, WordToolbar, type InsertAction } from "./toolbar";
 import { VersionsDialog } from "./versions-dialog";
+import { useWorkspaceUserName } from "../shared/use-workspace-user";
 
-const CURRENT_USER = "Jordan Whitfield";
 const SUGGESTIONS = {
   draft: [
     "Draft a model 8-page comprehensive mock report on the current state of the case with headings, a timeline table and next steps",
@@ -150,7 +150,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
       Typography, CharacterCount,
       Placeholder.configure({ placeholder: "Start drafting, or press ⌘/ to ask the assistant…" }),
       BlockId, ParagraphAttrs, PageBreak, FootnoteMark, CommentMark, SmallCaps,
-      TrackChanges.configure({ enabled: true, author: CURRENT_USER }),
+      TrackChanges.configure({ enabled: true, author: "You" }),
       ParagraphGutter, FindHighlights,
     ],
     editorProps: {
@@ -190,6 +190,12 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     tc.enabled = false;
     try { e.commands.setContent(content, { emitUpdate: false }); } finally { tc.enabled = was; }
   }, []);
+
+  // Tracked changes are attributed to the signed-in user (read once from the workspace).
+  const authorName = useWorkspaceUserName();
+  React.useEffect(() => {
+    if (editor && !editor.isDestroyed) (editor.storage as unknown as { trackChanges: TrackChangesStorage }).trackChanges.author = authorName;
+  }, [editor, authorName]);
 
   // ---- load document into editor ----------------------------------------------
   React.useEffect(() => {

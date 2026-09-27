@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { checkpoint, getVersion, listVersions, restoreVersion } from "@/modules/office/shared/docs-service";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromParams } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, { params }: Params) {
+async function handleGET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const versionId = req.nextUrl.searchParams.get("versionId");
   if (versionId) {
@@ -15,7 +17,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   return Response.json({ versions: listVersions(id) });
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+async function handlePOST(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = (await req.json().catch(() => null)) as { action: "checkpoint" | "restore"; label?: string; versionId?: string } | null;
   if (!body) return jsonError("Invalid body");
@@ -29,3 +31,6 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
   return jsonError("Unknown action");
 }
+
+export const GET = withAuth(handleGET, { action: "read", resource: officeDocFromParams });
+export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });

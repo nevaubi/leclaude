@@ -5,7 +5,8 @@ import { AIConfigError } from "@/lib/ai/config";
 import { classifyFailure, isAbortError, type FailureKind } from "@/lib/ai/events";
 import { matterContextTool } from "@/lib/ai/toolkit/internal";
 import type { Matter } from "@/lib/types/domain";
-import { FIRM_NAME, LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
+import { LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
+import { firmLabel } from "../firm";
 import { jurisdictionByKey } from "../jurisdictions";
 import { formatBluebook, normalizeWebCitation } from "../normalize";
 import { providerMessage } from "../service";
@@ -166,7 +167,7 @@ export async function runLane(lane: ResearchLane, ctx: LaneContext, slot: { queu
       const j = jurisdictionByKey(ctx.settings.jurisdiction);
       const matterLine = ctx.matter ? `Matter: ${ctx.matter.name} (${ctx.matter.caption ?? ctx.matter.shortName}); client ${ctx.matter.client} (${ctx.matter.clientSide}); ${ctx.matter.court ?? ""}; stage ${ctx.matter.stage ?? "n/a"}; matter id ${ctx.matter.id}.` : "No matter selected.";
       const instructions = [
-        `You are the "${lane.name}" research lane for ${FIRM_NAME}: ${lane.brief}. ${todayLine()}`,
+        `You are the "${lane.name}" research lane for ${firmLabel()}: ${lane.brief}. ${todayLine()}`,
         matterLine,
         `Jurisdiction: ${j.label}.`,
         `Method: the structured search already ran (results below). Run at most two more targeted searches if the results miss the point, then READ up to ${lane.maxReads} of the most relevant sources with read_source (or fetch_url for web pages) before writing anything. ${lane.kind === "contrary" ? "Your job is adverse authority: look for decisions that reject, distinguish or limit the proposition, and for any circuit split." : lane.kind === "record" ? "Cite the record with Bates numbers or docket entry numbers; separate what the record shows from outside authority." : lane.kind === "regulatory" ? "Prefer the current CFR text and the Federal Register action that adopted it; note effective dates." : lane.kind === "secondary" ? "Prefer official agency pages, court websites, and the firm library over commentary; never rely on a snippet for a holding." : "Prefer binding authority in the selected jurisdiction; note posture and standard of review."}`,

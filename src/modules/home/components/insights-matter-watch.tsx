@@ -1,7 +1,6 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Gavel } from "lucide-react";
 import { useHome } from "./home-provider";
 import { Section } from "./shared";
 import type { MatterActivity } from "@/modules/intel/context/types";
@@ -28,21 +27,21 @@ export function MatterWatchSection() {
   if (!shown.length) return null;
   const total = shown.reduce((n, a) => n + a.total, 0);
   return (
-    <Section id="matter-watch" title="Matter watch" icon={Gavel} count={total} description="Docket and regulatory activity on your matters in the last 30 days" actions={<Link href="/intel/chronologies" className="text-[11px] text-muted-foreground hover:text-primary">Chronologies</Link>}>
+    <Section id="matter-watch" title="Matter watch" count={total} description="Docket and regulatory activity on your matters in the last 30 days" actions={<Link href="/intel/chronologies" className="text-[11px] text-muted-foreground hover:text-primary">Chronologies</Link>}>
       <div className="grid gap-x-6 @3xl:grid-cols-2">
         {shown.slice(0, 4).map((a) => {
           const rows = [...a.docket.map((d) => ({ ...d, lane: "Docket" })), ...a.regulatory.map((d) => ({ ...d, lane: "Regulatory" })), ...a.other.map((d) => ({ ...d, lane: DOC_KIND_LABEL[d.kind] }))].sort((x, y) => (y.date ?? "").localeCompare(x.date ?? "")).slice(0, 5);
           return (
             <div key={a.matterId} className="min-w-0">
-              <div className="flex h-7 items-center gap-2 border-b border-line-quiet px-3 text-[11.5px]"><Link href={`/intel/chronologies?matterId=${a.matterId}`} className="font-medium hover:text-primary">{a.shortName}</Link><span className="tabular text-muted-foreground">{a.total} record{a.total === 1 ? "" : "s"}</span><span className="flex-1" />{a.lastAt && <span className="tabular text-muted-foreground">latest {fmtDate(a.lastAt)}</span>}</div>
+              <div className="flex h-7 items-center gap-2 border-b border-line-quiet px-1 text-[11.5px]"><Link href={`/intel/chronologies?matterId=${a.matterId}`} className="font-medium hover:text-primary">{a.shortName}</Link><span className="tabular text-muted-foreground">{a.total} record{a.total === 1 ? "" : "s"}</span><span className="flex-1" />{a.lastAt && <span className="tabular text-muted-foreground">latest {fmtDate(a.lastAt)}</span>}</div>
               <ul className="divide-y divide-line-quiet">
                 {rows.map((d) => (
                   <li key={d.id}>
-                    <Link href={`/intel/documents/${encodeURIComponent(d.id)}`} className="flex min-h-7 items-center gap-3 px-3 py-0.5 text-[12px] hover:bg-accent/50">
+                    <Link href={`/intel/documents/${encodeURIComponent(d.id)}`} className="flex min-h-7 items-center gap-3 px-1 py-0.5 text-[12px] hover:bg-accent/40">
                       <span className="w-[80px] shrink-0 tabular text-[11px] text-muted-foreground">{fmtDate(d.date)}</span>
                       <span className="w-[70px] shrink-0 truncate text-[11px] text-muted-foreground">{d.lane}</span>
                       <span className="min-w-0 flex-1 truncate" title={d.title}>{d.title}</span>
-                      {d.flags.length > 0 && <span className="shrink-0 text-[10.5px] text-warning-foreground dark:text-warning">flagged</span>}
+                      {d.flags.length > 0 && <span className="shrink-0 text-[11px] text-muted-foreground">flagged</span>}
                     </Link>
                   </li>
                 ))}

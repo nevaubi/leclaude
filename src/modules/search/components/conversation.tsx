@@ -60,7 +60,7 @@ export function Conversation({ state, sources, userName, matter, aiConfigured, o
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin" onScroll={(e) => { const el = e.currentTarget; setStick(el.scrollHeight - el.scrollTop - el.clientHeight < 120); }}>
       <div className="mx-auto w-full max-w-[760px] px-6 pb-8 pt-6">
         {state.stale && (
-          <div role="status" className="mb-4 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 font-sans text-xs" data-state="stale">
+          <div role="status" className="mb-4 flex items-start gap-2 rounded-md border border-warning/50 px-3 py-2 font-sans text-xs" data-state="stale">
             <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-warning-foreground dark:text-warning" />
             <div><span className="font-semibold">Thread changed.</span> {state.stale}</div>
           </div>
@@ -137,12 +137,12 @@ export function MetricsLine({ metrics }: { metrics: RunMetrics }) {
 }
 
 const OUTCOME_TONE: Record<RunTerminalState, string> = {
-  succeeded: "border-success/40 bg-success/10",
-  partial: "border-warning/40 bg-warning/10",
-  budget_exhausted: "border-warning/40 bg-warning/10",
-  verification_failed: "border-destructive/40 bg-destructive/5",
-  cancelled: "border-border bg-muted/40",
-  failed: "border-destructive/40 bg-destructive/5",
+  succeeded: "border-border",
+  partial: "border-warning/50",
+  budget_exhausted: "border-warning/50",
+  verification_failed: "border-destructive/40",
+  cancelled: "border-border",
+  failed: "border-destructive/40",
 };
 
 /** Explicit outcome for a persisted turn that did not fully succeed (constitution §14, §34, §35). */
@@ -341,7 +341,7 @@ function Turn({ question, message, sources, userName, matter, aiConfigured, onSa
           )}
           {message.followUps && message.followUps.length > 0 && (
             <div className="mt-5 font-sans">
-              <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Suggested follow-ups</div>
+              <div className="mb-1.5 text-[11.5px] font-medium text-muted-foreground">Suggested follow-ups</div>
               <div className="flex flex-wrap gap-1.5">
                 {message.followUps.map((q) => (
                   <button key={q} onClick={() => a.askFollowUp(q)} className="group inline-flex max-w-full items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-left text-[12px] text-foreground/90 transition-colors hover:border-primary/40 hover:bg-accent cursor-pointer">
@@ -392,8 +392,8 @@ function VerdictSummary({ message }: { message: ResearchMessage }) {
 
 function DeniedCard({ error, onNewThread }: { error: ResearchError; onNewThread: () => void }) {
   return (
-    <div role="alert" data-state="denied" className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 font-sans">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-destructive/10 text-destructive"><Lock className="size-4" /></span>
+    <div role="alert" data-state="denied" className="flex items-start gap-3 rounded-md border p-4 font-sans">
+      <span className="flex size-8 shrink-0 items-center justify-center text-muted-foreground"><Lock className="size-4" /></span>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="text-[13px] font-semibold">Permission denied</div>
         <div className="text-xs text-muted-foreground">{error.message || "You do not have access to this matter or thread."}{error.status ? ` (HTTP ${error.status})` : ""}</div>
@@ -406,7 +406,7 @@ function DeniedCard({ error, onNewThread }: { error: ResearchError; onNewThread:
 
 function FailureCard({ reason, failure, onRetry }: { reason: string; failure?: string; onRetry: () => void }) {
   return (
-    <div role="alert" data-state="failed" className="mb-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 font-sans text-xs">
+    <div role="alert" data-state="failed" className="mb-3 flex items-start gap-2 rounded-md border border-destructive/40 px-3 py-2 font-sans text-xs">
       <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
       <div className="min-w-0 flex-1"><span className="font-semibold">Run failed.</span> {reason}{failure ? <span className="text-muted-foreground"> ({failure})</span> : null}</div>
       <Button size="xs" variant="outline" onClick={onRetry}><RotateCcw className="size-3" /> Retry</Button>

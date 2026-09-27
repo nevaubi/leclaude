@@ -8,7 +8,8 @@ import type { ToolContext, ToolDef } from "@/lib/ai/tools";
 import { fetchUrlTool } from "@/lib/ai/toolkit/web";
 import { getOpinionTextTool, getCfrSectionTool, getFederalRegisterDocumentTool, verifyCitationsTool, COURT_GROUPS } from "@/lib/ai/toolkit/legal";
 import { getLibraryItemTool, getEdiscoveryDocumentTool } from "@/lib/ai/toolkit/internal";
-import { FIRM_NAME, LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
+import { LEGAL_STYLE_RULES, todayLine } from "@/lib/ai/prompts";
+import { firmLabel } from "./firm";
 import type { LibraryItem } from "@/lib/types/domain";
 import { formatBluebook } from "./normalize";
 import { ASK_SOURCE_INSTRUCTIONS, EXPAND_QUERY_INSTRUCTIONS, HEADNOTE_INSTRUCTIONS } from "./prompts";
@@ -299,7 +300,7 @@ export interface AskSourceBody { message: string; history?: { role: "user" | "as
 
 export async function askAboutSource(body: AskSourceBody, send: (e: AgentEvent) => void, signal?: AbortSignal) {
   const instructions = [
-    `You are the ${FIRM_NAME} research agent. ${todayLine()}`,
+    `You are the research agent for ${firmLabel()}. ${todayLine()}`,
     ASK_SOURCE_INSTRUCTIONS,
     LEGAL_STYLE_RULES,
     `SOURCE: ${body.source.title}${body.source.cite ? ` — ${body.source.cite}` : ""}${body.source.url ? ` — ${body.source.url}` : ""}\n"""\n${body.text.slice(0, 70_000)}\n"""`,

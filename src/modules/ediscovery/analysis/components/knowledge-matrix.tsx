@@ -70,7 +70,7 @@ export function KnowledgeMatrix({ matterId, maps, loading, aiConfigured, topics,
         <span className="text-[11px] tabular text-muted-foreground">{rows.length} people · {maps.length} topic{maps.length === 1 ? "" : "s"}</span>
         <span className="flex-1" />
         <form className="flex items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); void run(); }}>
-          <Input size="xs" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic — e.g. PFOS persistence and half-life" className="w-[280px]" aria-label="Topic to map" list="km-topics" />
+          <Input size="xs" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic — e.g. knowledge of the defect" className="w-[280px]" aria-label="Topic to map" list="km-topics" />
           <datalist id="km-topics">{topics.map((t) => <option key={t} value={t} />)}</datalist>
           <KeyHint configured={aiConfigured}><Button size="xs" type="submit" disabled={running || !topic.trim()}>{running ? <Loader2 className="size-3.5 animate-spin" /> : <ListChecks className="size-3.5" />} Map topic</Button></KeyHint>
         </form>

@@ -293,10 +293,24 @@ export function matterPeople(matterId: string): Person[] {
   const matter = d.matters.get(matterId);
   for (const t of matter?.teamIds ?? []) ids.add(t);
   const people = d.people.all();
-  // Also include anyone named in a header of this matter's documents, but only by exact, unique full name: a surname or
-  // a near-miss never pulls a person from another matter into this one (constitution §23, no closest-name binding).
-  for (const doc of docs) for (const n of [doc.from ?? "", ...(doc.to ?? []), ...(doc.cc ?? [])]) { const p = resolveExactPersonName(n, people); if (p) ids.add(p.id); }
+  // Also include people named in a header of this matter's documents, but only by exact, unique full name, and never a
+  // person anchored to a different matter (its custodian, deponent, relationship member or team): a surname, a near-miss
+  // or a namesake from another matter is not bound here (constitution §23, no closest-name or cross-matter binding).
+  const elsewhere = anchoredElsewhere(matterId);
+  const free = people.filter((p) => ids.has(p.id) || !elsewhere.has(p.id));
+  for (const doc of docs) for (const n of [doc.from ?? "", ...(doc.to ?? []), ...(doc.cc ?? [])]) { const p = resolveExactPersonName(n, free); if (p) ids.add(p.id); }
   return people.filter((p) => ids.has(p.id));
+}
+
+/** People tied to some other matter by record (custodian, deponent, relationship, team), excluding this matter's own. */
+function anchoredElsewhere(matterId: string): Set<string> {
+  const d = db();
+  const out = new Set<string>();
+  for (const doc of d.edocs.all()) if (doc.matterId !== matterId) out.add(doc.custodianId);
+  for (const dep of d.depositions.all()) if (dep.matterId !== matterId) out.add(dep.witnessId);
+  for (const r of d.relationships.all()) if (r.matterId !== matterId) { out.add(r.fromId); out.add(r.toId); }
+  for (const m of d.matters.all()) if (m.id !== matterId) for (const t of m.teamIds ?? []) out.add(t);
+  return out;
 }
 
 export function graph(matterId: string): GraphData {

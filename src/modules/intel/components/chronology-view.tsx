@@ -84,7 +84,7 @@ export function ChronologyView({ initial, options, entityName }: { initial: Chro
           </div>
           {months.map((m) => (
             <section key={m.month}>
-              <div className="sticky top-0 z-10 flex h-7 items-center border-b bg-background text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{m.label}<span className="ml-2 tabular normal-case tracking-normal">{m.entries.length}</span></div>
+              <div className="sticky top-0 z-10 flex h-7 items-center border-b bg-background text-[11.5px] font-medium text-muted-foreground">{m.label}<span className="ml-2 tabular normal-case tracking-normal">{m.entries.length}</span></div>
               <div className="divide-hairline">
                 {m.entries.slice().reverse().map((e, i) => {
                   const ev = e.evidence[0];

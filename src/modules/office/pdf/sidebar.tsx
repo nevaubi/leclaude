@@ -133,9 +133,9 @@ function OutlineTab() {
   ));
   return (
     <div className="p-2">
-      <div className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Document outline</div>
+      <div className="mb-1 px-1 text-[11px] font-medium text-muted-foreground">Document outline</div>
       {outline.length ? <ul className="mb-3">{renderItems(outline)}</ul> : <div className="mb-3 px-2 py-2 text-xs text-muted-foreground">This PDF has no outline.</div>}
-      <div className="mb-1 flex items-center justify-between px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"><span>Bookmarks</span><span className="tabular">{bookmarks.length}</span></div>
+      <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-medium text-muted-foreground"><span>Bookmarks</span><span className="tabular">{bookmarks.length}</span></div>
       <div className="mb-2 flex gap-1">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} placeholder={`Bookmark page ${currentPage}…`} className="h-7 text-xs" />
         <Button size="sm" className="h-7" onClick={add}><Bookmark className="size-3.5" /> Add</Button>
@@ -172,7 +172,7 @@ function SearchTab({ onRedact, onHighlight }: { onRedact: () => void; onHighligh
       {search.running && <div className="px-3 py-2 text-xs text-muted-foreground">Searching…</div>}
       {groups.map(([page, hits]) => (
         <div key={page}>
-          <div className="sticky top-[37px] bg-muted/60 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground backdrop-blur">Page {page} · {hits.length}</div>
+          <div className="sticky top-[37px] bg-muted/60 px-3 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">Page {page} · {hits.length}</div>
           <ul>
             {hits.map((h) => (
               <li key={h.i}><button onClick={() => { store.getState().setSearch({ index: h.i }); const hit = store.getState().search.hits[h.i]; store.getState().scrollTo(hit.display, boundsOf(hit.match.rects) ?? undefined); }} className={cn("w-full px-3 py-1.5 text-left text-[12px] leading-snug hover:bg-accent cursor-pointer", h.i === search.index && "bg-accent")}>{renderSnippet(h.snippet)}</button></li>
@@ -204,7 +204,7 @@ function FormsTab() {
   const changed = Object.keys(values).length;
   return (
     <div className="p-2">
-      <div className="mb-2 flex items-center justify-between px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"><span>{fields.length} field{fields.length === 1 ? "" : "s"}{changed ? ` · ${changed} edited` : ""}</span>{changed > 0 && <button className="flex items-center gap-1 normal-case tracking-normal hover:text-foreground cursor-pointer" onClick={() => store.getState().setModel({ ...model, formValues: undefined })}><RotateCcw className="size-3" /> Reset</button>}</div>
+      <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-medium text-muted-foreground"><span>{fields.length} field{fields.length === 1 ? "" : "s"}{changed ? ` · ${changed} edited` : ""}</span>{changed > 0 && <button className="flex items-center gap-1 normal-case tracking-normal hover:text-foreground cursor-pointer" onClick={() => store.getState().setModel({ ...model, formValues: undefined })}><RotateCcw className="size-3" /> Reset</button>}</div>
       {Array.from(byPage.entries()).map(([page, list]) => (
         <div key={page ?? "x"} className="mb-3">
           <button className="mb-1 px-1 text-[11px] font-medium text-muted-foreground hover:text-foreground cursor-pointer" onClick={() => page && store.getState().scrollTo(sourceToDisplay(model, page) ?? 1, list[0]?.rect)}>Page {page ? sourceToDisplay(model, page) ?? "?" : "?"}</button>

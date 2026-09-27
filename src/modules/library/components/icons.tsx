@@ -1,46 +1,41 @@
 "use client";
-import { FileSpreadsheet, FileText, FileType, Folder, FolderOpen, LayoutTemplate, Link2, Presentation, StickyNote, TextQuote, type LucideIcon } from "lucide-react";
+import { Folder, FolderOpen, LayoutTemplate, Link2, StickyNote, TextQuote, FileText, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LibraryItemType } from "@/lib/types/domain";
+import { OfficeAppIcon, officeKindForType } from "@/modules/office/shared/office-app-icon";
 
-export const TYPE_ICON: Record<LibraryItemType, LucideIcon> = { folder: Folder, docx: FileText, xlsx: FileSpreadsheet, pptx: Presentation, pdf: FileType, template: LayoutTemplate, clause: TextQuote, link: Link2, note: StickyNote };
+/** Line icons for the non-office types; office types (docx/xlsx/pptx/pdf) render their application mark. */
+export const TYPE_ICON: Record<LibraryItemType, LucideIcon> = { folder: Folder, docx: FileText, xlsx: FileText, pptx: FileText, pdf: FileText, template: LayoutTemplate, clause: TextQuote, link: Link2, note: StickyNote };
 
-/** Token-based colors per type (chart tokens keep dark mode consistent). */
+/** Quiet by default: every line icon is muted; the application marks carry the only colour. */
 export const TYPE_COLOR: Record<LibraryItemType, string> = {
-  folder: "text-warning",
-  docx: "text-chart-1",
-  xlsx: "text-chart-4",
-  pptx: "text-chart-5",
-  pdf: "text-destructive",
-  template: "text-chart-2",
-  clause: "text-primary",
-  link: "text-info",
-  note: "text-chart-3",
+  folder: "text-muted-foreground",
+  docx: "text-muted-foreground",
+  xlsx: "text-muted-foreground",
+  pptx: "text-muted-foreground",
+  pdf: "text-muted-foreground",
+  template: "text-muted-foreground",
+  clause: "text-muted-foreground",
+  link: "text-muted-foreground",
+  note: "text-muted-foreground",
 };
 
-export const TYPE_BG: Record<LibraryItemType, string> = {
-  folder: "bg-warning/12",
-  docx: "bg-chart-1/12",
-  xlsx: "bg-chart-4/12",
-  pptx: "bg-chart-5/12",
-  pdf: "bg-destructive/10",
-  template: "bg-chart-2/12",
-  clause: "bg-primary/10",
-  link: "bg-info/12",
-  note: "bg-chart-3/15",
-};
+/** Kept for callers that expect a background class; the look is tile-free now. */
+export const TYPE_BG: Record<LibraryItemType, string> = { folder: "", docx: "", xlsx: "", pptx: "", pdf: "", template: "", clause: "", link: "", note: "" };
+
+const PX = { sm: 16, md: 20, lg: 28 } as const;
 
 export function TypeIcon({ type, open, className }: { type: LibraryItemType; open?: boolean; className?: string }) {
+  const office = officeKindForType(type);
+  if (office) return <OfficeAppIcon kind={office} size={16} className={className} />;
   const Icon = type === "folder" && open ? FolderOpen : TYPE_ICON[type];
-  return <Icon className={cn("size-4 shrink-0", TYPE_COLOR[type], className)} />;
+  return <Icon className={cn("size-4 shrink-0", TYPE_COLOR[type], className)} aria-hidden />;
 }
 
+/** Larger mark for cards and the preview header; no background tile. */
 export function TypeGlyph({ type, size = "md", className }: { type: LibraryItemType; size?: "sm" | "md" | "lg"; className?: string }) {
+  const office = officeKindForType(type);
+  if (office) return <OfficeAppIcon kind={office} size={PX[size]} className={className} />;
   const Icon = TYPE_ICON[type];
-  const sz = size === "sm" ? "size-7 [&>svg]:size-3.5" : size === "lg" ? "size-12 [&>svg]:size-6" : "size-9 [&>svg]:size-4.5";
-  return (
-    <span className={cn("inline-flex shrink-0 items-center justify-center rounded-lg", sz, TYPE_BG[type], TYPE_COLOR[type], className)}>
-      <Icon />
-    </span>
-  );
+  return <Icon className={cn("shrink-0", TYPE_COLOR[type], className)} style={{ width: PX[size], height: PX[size] }} aria-hidden />;
 }

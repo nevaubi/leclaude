@@ -5,12 +5,14 @@
 import type { Matter } from "@/lib/types/domain";
 import { makeHeading, makeParagraph, makeTable, newId, type PMNode, type DocSection } from "./doc-model";
 
-export const FIRM = {
-  name: "Seeger Weiss LLP",
-  address1: "1201 Main Street, Suite 1900",
-  address2: "Columbia, South Carolina 29201",
-  phone: "(803) 555-0140",
-  email: "jwhitfield@seegerweiss.com",
+/** Firm letterhead used by templates: placeholders the drafter fills in (no firm or person is assumed). */
+export interface FirmInfo { name: string; address1: string; address2: string; phone: string; email: string }
+export const FIRM: FirmInfo = {
+  name: "[FIRM NAME]",
+  address1: "[STREET ADDRESS]",
+  address2: "[CITY, STATE ZIP]",
+  phone: "[PHONE]",
+  email: "[EMAIL]",
 };
 
 export type TemplateSectionId = "signature_block" | "certificate_of_service" | "table_of_authorities_placeholder" | "caption_block" | "notary_block" | "verification" | "proposed_order" | "definitions" | "exhibit_list";
@@ -35,14 +37,15 @@ export interface CaptionInfo {
   caseNo: string;
   judge?: string;
   documentTitle: string;
-  extra?: string; // "MDL No. 2873" / "This document relates to: …"
+  extra?: string; // "This document relates to: …"
 }
 
 export function captionFromMatter(m: Matter | null | undefined, documentTitle: string): CaptionInfo {
-  if (!m) return { court: "IN THE UNITED STATES DISTRICT COURT\nFOR THE DISTRICT OF SOUTH CAROLINA", division: "CHARLESTON DIVISION", plaintiff: "[PLAINTIFF]", defendant: "[DEFENDANT]", caseNo: "Case No. [X:XX-cv-XXXXX]", judge: "[JUDGE]", documentTitle };
+  if (!m) return { court: "IN THE [NAME OF COURT]\nFOR THE [DISTRICT]", division: "[DIVISION]", plaintiff: "[PLAINTIFF]", defendant: "[DEFENDANT]", caseNo: "Case No. [X:XX-cv-XXXXX]", judge: "[JUDGE]", documentTitle };
   const court = (m.court ?? "[COURT]").toUpperCase().replace(/^U\.S\. DISTRICT COURT FOR THE/, "IN THE UNITED STATES DISTRICT COURT\nFOR THE");
-  if (m.id === "m_afff_2873") {
-    return { court, division: "CHARLESTON DIVISION", plaintiff: "IN RE: AQUEOUS FILM-FORMING FOAMS PRODUCTS LIABILITY LITIGATION", defendant: "", caseNo: "MDL No. 2:18-mn-2873-RMG", judge: m.judge, documentTitle, extra: "This Document Relates To: [CASE NAME], No. 2:[XX]-cv-[XXXXX]-RMG" };
+  if (/^in re\b/i.test(m.name)) {
+    // Consolidated / MDL captions: "In re: …" with the docket number on the right and a relates-to line.
+    return { court, plaintiff: m.name.toUpperCase(), defendant: "", caseNo: m.caption ? m.caption.replace(/\s*\(.*\)$/, "") : "Case No. [NUMBER]", judge: m.judge, documentTitle, extra: "This Document Relates To: [ALL CASES / CASE NAME]" };
   }
   const [p, d] = (m.name.includes(" v. ") ? m.name.split(" v. ") : [m.client, "[DEFENDANT]"]);
   return { court, plaintiff: p.trim(), defendant: (d ?? "").trim(), caseNo: m.caption ? m.caption.replace(/\s*\(.*\)$/, "") : "Case No. [X:XX-cv-XXXXX]", judge: m.judge, documentTitle };
@@ -62,19 +65,20 @@ export function captionBlock(c: CaptionInfo): PMNode[] {
   ];
 }
 
-export function signatureBlock(opts: { date?: string; attorney?: string; barNo?: string; title?: string; forParty?: string } = {}): PMNode[] {
+export function signatureBlock(opts: { date?: string; attorney?: string; barNo?: string; title?: string; forParty?: string; firm?: FirmInfo } = {}): PMNode[] {
   const date = opts.date ?? "[DATE]";
+  const firm = opts.firm ?? FIRM;
   return [
     makeParagraph(`Dated: ${date}`),
     makeParagraph("Respectfully submitted,", { spacingBefore: 12 }),
-    makeParagraph(`**${FIRM.name.toUpperCase()}**`, { indent: 4, spacingBefore: 12 }),
+    makeParagraph(`**${firm.name.toUpperCase()}**`, { indent: 4, spacingBefore: 12 }),
     makeParagraph("", { indent: 4 }),
-    makeParagraph("/s/ " + (opts.attorney ?? "Jordan Whitfield"), { indent: 4, spacingBefore: 18 }),
-    makeParagraph(`${opts.attorney ?? "Jordan Whitfield"} (${opts.barNo ?? "Fed. ID No. 11842"})`, { indent: 4 }),
-    makeParagraph(FIRM.address1, { indent: 4 }),
-    makeParagraph(FIRM.address2, { indent: 4 }),
-    makeParagraph(`Telephone: ${FIRM.phone}`, { indent: 4 }),
-    makeParagraph(`Email: ${FIRM.email}`, { indent: 4 }),
+    makeParagraph("/s/ " + (opts.attorney ?? "[ATTORNEY NAME]"), { indent: 4, spacingBefore: 18 }),
+    makeParagraph(`${opts.attorney ?? "[ATTORNEY NAME]"} (${opts.barNo ?? "[BAR NO.]"})`, { indent: 4 }),
+    makeParagraph(firm.address1, { indent: 4 }),
+    makeParagraph(firm.address2, { indent: 4 }),
+    makeParagraph(`Telephone: ${firm.phone}`, { indent: 4 }),
+    makeParagraph(`Email: ${firm.email}`, { indent: 4 }),
     makeParagraph(`*${opts.title ?? "Counsel for"} ${opts.forParty ?? "[PARTY]"}*`, { indent: 4, spacingBefore: 6 }),
   ];
 }
@@ -83,8 +87,8 @@ export function certificateOfService(opts: { date?: string; documentTitle?: stri
   return [
     makeHeading("CERTIFICATE OF SERVICE", 2, { textAlign: "center" }),
     makeParagraph(`I hereby certify that on ${opts.date ?? "[DATE]"}, I electronically filed the foregoing ${opts.documentTitle ?? "[DOCUMENT TITLE]"} with the Clerk of Court using the CM/ECF system, which will send notification of such filing to all counsel of record. Any counsel not registered with CM/ECF has been served by first-class mail, postage prepaid, at the address of record.`),
-    makeParagraph(`/s/ ${opts.attorney ?? "Jordan Whitfield"}`, { indent: 4, spacingBefore: 18 }),
-    makeParagraph(opts.attorney ?? "Jordan Whitfield", { indent: 4 }),
+    makeParagraph(`/s/ ${opts.attorney ?? "[ATTORNEY NAME]"}`, { indent: 4, spacingBefore: 18 }),
+    makeParagraph(opts.attorney ?? "[ATTORNEY NAME]", { indent: 4 }),
   ];
 }
 
@@ -103,7 +107,7 @@ export function tableOfAuthoritiesPlaceholder(): PMNode[] {
   ];
 }
 
-export function notaryBlock(state = "South Carolina", county = "Richland"): PMNode[] {
+export function notaryBlock(state = "[STATE]", county = "[COUNTY]"): PMNode[] {
   return [
     makeParagraph(`STATE OF ${state.toUpperCase()}\t)`, { spacingBefore: 18 }),
     makeParagraph("\t)  ss."),
@@ -133,7 +137,7 @@ export function proposedOrder(title = "[MOTION TITLE]"): PMNode[] {
     makeParagraph("IT IS SO ORDERED."),
     makeParagraph("______________________________", { spacingBefore: 24, indent: 4 }),
     makeParagraph("United States District Judge", { indent: 4 }),
-    makeParagraph("[CITY], South Carolina\n[DATE]", { indent: 4 }),
+    makeParagraph("[CITY], [STATE]\n[DATE]", { indent: 4 }),
   ];
 }
 

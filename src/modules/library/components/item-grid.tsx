@@ -212,7 +212,6 @@ function ItemCard({ item, selected, over }: { item: LibraryItemView; selected: b
           "group relative flex h-[132px] cursor-default select-none flex-col rounded-md border bg-card p-2.5 text-left outline-none transition-colors hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring/60",
           selected && "border-primary/60 bg-accent/50 ring-2 ring-primary/30",
           over && "border-primary ring-2 ring-primary/50 bg-primary/5",
-          isFolder && "bg-muted/30",
         )}
       >
         <div className="flex items-start gap-2.5">

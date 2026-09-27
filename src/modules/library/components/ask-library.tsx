@@ -28,7 +28,7 @@ export function AskLibraryPanel({ className }: { className?: string }) {
     const folder = list?.folder?.name;
     const base = [
       "Which clause should I use for a mutual consequential-damages waiver, and what are the drafting notes?",
-      "Summarize the CMO 26 deadlines for the AFFF matter and list the open issues.",
+      "Summarize the case management deadlines for this matter and list the open issues.",
       "What does the firm citation style say about record cites and the [VERIFY] convention?",
       "Give me the deposition objection rules for instructing a witness not to answer.",
     ];

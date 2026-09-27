@@ -39,14 +39,14 @@ export function SourcesPanel({ sources }: { sources: ResearchSource[] }) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-1.5 border-b px-2 py-1.5">
         <div className="relative flex-1"><Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={`Filter ${sources.length} sources`} className="h-7 pl-7 text-xs" /></div>
-        <button onClick={() => setOnlyCited((v) => !v)} className={cn("h-7 rounded-md border px-2 text-[11px] cursor-pointer", onlyCited ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>Cited {cited}</button>
+        <button onClick={() => setOnlyCited((v) => !v)} className={cn("h-7 rounded-md border px-2 text-[11px] cursor-pointer", onlyCited ? "border-transparent bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}>Cited {cited}</button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {groups.map((g) => {
           const Icon = SOURCE_ICON[g.kind];
           return (
             <section key={g.kind}>
-              <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b bg-background/95 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur"><Icon className="size-3" /> {SOURCE_LABEL[g.kind]} <span className="tabular font-normal">{g.items.length}</span></div>
+              <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b bg-background/95 px-3 py-1.5 text-[11.5px] font-medium text-muted-foreground backdrop-blur"><Icon className="size-3" /> {SOURCE_LABEL[g.kind]} <span className="tabular font-normal">{g.items.length}</span></div>
               <ul className="divide-y">{g.items.map((s) => <SourceRow key={s.id} s={s} />)}</ul>
             </section>
           );
@@ -67,7 +67,7 @@ export function SourceRow({ s, compact }: { s: ResearchSource; compact?: boolean
   return (
     <li className={cn("group px-3 py-2 transition-colors", hover && "bg-primary/5")} onMouseEnter={() => a.setHoverN(s.n ?? null)} onMouseLeave={() => a.setHoverN(null)} data-source-state={state}>
       <div className="flex items-start gap-2">
-        <span className={cn("mt-0.5 inline-flex h-[18px] min-w-[22px] shrink-0 items-center justify-center rounded px-1 text-[10.5px] font-semibold tabular", s.n != null ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{s.n != null ? s.n : "·"}</span>
+        <span className={cn("mt-0.5 inline-flex h-[18px] min-w-[22px] shrink-0 items-center justify-center rounded px-1 text-[10.5px] font-semibold tabular", s.n != null ? "bg-accent text-foreground" : "text-muted-foreground")}>{s.n != null ? s.n : "·"}</span>
         <div className="min-w-0 flex-1">
           <button onClick={() => a.openSource(s)} className="block w-full text-left text-[12.5px] font-medium leading-snug text-foreground hover:text-primary cursor-pointer">{s.title}</button>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10.5px] text-muted-foreground">

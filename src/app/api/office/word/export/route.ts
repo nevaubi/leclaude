@@ -6,6 +6,8 @@ import { getOfficeDoc, listComments } from "@/modules/office/shared/docs-service
 import type { DocSettings } from "@/modules/office/word/constants";
 import { ensureBlockIds, type PMNode } from "@/modules/office/word/doc-model";
 import { exportDocx, exportMarkdown, exportText, imageDimensions, type ExportImage } from "@/modules/office/word/export";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromBody } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -25,7 +27,7 @@ async function fetchImage(src: string): Promise<ExportImage | null> {
 }
 
 /** Export a document. Body: { docId | content, title?, format: docx|md|txt, settings?, changes?: revisions|accepted }. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body) return jsonError("Invalid body");
   let content = body.content;
@@ -53,3 +55,5 @@ export async function POST(req: NextRequest) {
     return jsonError(`Export failed: ${(e as Error).message}`, 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "export", resource: officeDocFromBody });

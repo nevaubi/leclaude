@@ -4,7 +4,15 @@ import type { OfficeKind } from "@/lib/types/domain";
 import { aiConfig } from "@/lib/ai/config";
 import { allTemplates } from "@/modules/office/shared/template-registry";
 import { syncOfficeDocs } from "@/modules/library/service";
+import { currentPrincipal } from "@/lib/auth/context";
+import { hasMatterAccess } from "@/lib/auth/policy";
 import type { OfficeDocSummary, OfficeHomeData, OfficeTemplateSummary } from "./types";
+
+/** Matter filter for the signed-in principal: documents on a matter they cannot open are never listed. */
+function matterVisible(): (matterId: string | undefined | null) => boolean {
+  const p = currentPrincipal();
+  return (matterId) => !matterId || !p || hasMatterAccess(p, matterId);
+}
 
 export function listOfficeDocSummaries(opts: { kind?: OfficeKind; matterId?: string; q?: string; limit?: number } = {}): OfficeDocSummary[] {
   syncOfficeDocs();
@@ -19,8 +27,9 @@ export function listOfficeDocSummaries(opts: { kind?: OfficeKind; matterId?: str
   for (const l of d.library.all()) if (l.officeDocId && !libByDoc.has(l.officeDocId)) libByDoc.set(l.officeDocId, { id: l.id, parentId: l.parentId });
   const folderNames = new Map(d.library.all().filter((l) => l.type === "folder").map((l) => [l.id, l.name]));
   const q = opts.q?.trim().toLowerCase();
+  const visible = matterVisible();
   const docs = d.officeDocs.list({
-    where: (x) => (!opts.kind || x.kind === opts.kind) && (!opts.matterId || x.matterId === opts.matterId) && (!q || x.title.toLowerCase().includes(q) || (x.tags ?? []).some((t) => t.toLowerCase().includes(q))),
+    where: (x) => visible(x.matterId) && (!opts.kind || x.kind === opts.kind) && (!opts.matterId || x.matterId === opts.matterId) && (!q || x.title.toLowerCase().includes(q) || (x.tags ?? []).some((t) => t.toLowerCase().includes(q))),
     sortBy: "updatedAt",
     direction: "desc",
     limit: opts.limit,
@@ -52,7 +61,7 @@ export function officeHomeData(kind?: OfficeKind): OfficeHomeData {
   return {
     docs: kind ? all.filter((x) => x.kind === kind) : all,
     templates: listTemplateSummaries(),
-    matters: d.matters.list({ sortBy: "shortName" }).map((m) => ({ id: m.id, shortName: m.shortName, name: m.name })),
+    matters: d.matters.list({ sortBy: "shortName" }).filter((m) => matterVisible()(m.id)).map((m) => ({ id: m.id, shortName: m.shortName, name: m.name })),
     counts,
     aiConfigured: aiConfig().hasKey,
     generatedAt: new Date().toISOString(),

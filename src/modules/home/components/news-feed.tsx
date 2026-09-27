@@ -81,9 +81,12 @@ function CategoryChips({ counts }: { counts: Record<string, number> }) {
   const f = useHomeUI((s) => s.news);
   const setNews = useHomeUI((s) => s.setNews);
   const chip = (key: NewsItem["category"] | "all", label: string) => (
-    <button key={key} onClick={() => setNews({ category: key })} className={cn("flex h-6 shrink-0 items-center gap-1 rounded-[var(--radius-chip)] border px-2 text-[11px] transition-colors cursor-pointer", f.category === key ? "border-primary/30 bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}>{label}<span className="tabular opacity-60">{counts[key] ?? 0}</span></button>
+    <button key={key} onClick={() => setNews({ category: key })} className={cn("flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[11.5px] transition-colors cursor-pointer", f.category === key ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground")}>{label}<span className="tabular opacity-60">{counts[key] ?? 0}</span></button>
   );
-  return <div className="flex gap-1 overflow-x-auto no-scrollbar px-2.5 py-1.5">{chip("all", "All")}{NEWS_CATEGORIES.map((c) => chip(c, CATEGORY[c].label))}</div>;
+  // Only categories that have items (plus the active one) are offered; no row of zeros.
+  const present = NEWS_CATEGORIES.filter((c) => (counts[c] ?? 0) > 0 || f.category === c);
+  if (present.length < 2 && f.category === "all") return null;
+  return <div className="flex gap-1 overflow-x-auto no-scrollbar px-1 py-1.5">{chip("all", "All")}{present.map((c) => chip(c, CATEGORY[c].label))}</div>;
 }
 
 export function NewsOverview() {
@@ -91,12 +94,12 @@ export function NewsOverview() {
   const setFocus = useHomeUI((s) => s.setFocus);
   const shown = list.slice(0, 8);
   return (
-    <Section id="news" title="News" icon={Newspaper} count={list.length} actions={<NewsToolbar />} onExpand={() => setFocus("news")}>
+    <Section id="news" title="News" count={list.length} actions={<NewsToolbar />} onExpand={() => setFocus("news")}>
       <CategoryChips counts={counts} />
       {shown.length === 0 ? <EmptyRow icon={Newspaper} title="No news matches" hint="Try another category, or refresh to pull the latest Federal Register documents." /> : (
         <ul className="divide-y border-t">{shown.map((n, i) => <NewsCard key={n.id} item={n} index={i} />)}</ul>
       )}
-      {list.length > shown.length && <button onClick={() => setFocus("news")} className="flex w-full items-center justify-center gap-1 border-t py-2 text-[11.5px] font-medium text-primary hover:bg-accent/50 cursor-pointer"><ArrowDownWideNarrow className="size-3" /> Show all {list.length}</button>}
+      {list.length > shown.length && <button onClick={() => setFocus("news")} className="flex w-full items-center justify-center gap-1 border-t py-2 text-[11.5px] text-muted-foreground hover:text-foreground cursor-pointer">Show all {list.length}</button>}
     </Section>
   );
 }
@@ -155,7 +158,7 @@ function NewsCard({ item: n, index, full }: { item: NewsItem; index: number; ful
           <Popover>
             <PopoverTrigger asChild><Button variant="ghost" size="xs" className="h-6 px-1.5 text-[11px] text-muted-foreground"><Info className="size-3" /> Why relevant</Button></PopoverTrigger>
             <PopoverContent align="end" className="w-72 text-xs">
-              <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Why this is in your feed</div>
+              <div className="text-[11.5px] font-medium text-muted-foreground">Why this is in your feed</div>
               <p className="mt-1 leading-relaxed">{whyRelevant(n, matters.map((m) => m!.shortName))}</p>
               {matters.length > 0 && (
                 <ul className="mt-2 space-y-1">

@@ -92,7 +92,7 @@ export function SuggestedTab({ detail, analysis, onAnalysis, onApply, onApplied 
 
       <section>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><ListChecks className="size-3.5" /> Suggested coding</h3>
+          <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground"><ListChecks className="size-3.5" /> Suggested coding</h3>
           <div className="flex items-center gap-1.5">
             {analysis && <ProvenanceBadge record={analysis} compact={false} />}
             {analysis && <span className="text-[10.5px] text-muted-foreground">{new Date(analysis.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · {analysis.model}</span>}
@@ -102,7 +102,7 @@ export function SuggestedTab({ detail, analysis, onAnalysis, onApply, onApplied 
         {!analysis ? (
           doc.aiSummary ? (
             <div className="mt-2 rounded-md border bg-muted/30 p-3 text-[12.5px]">
-              <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Seeded summary <ProvenanceBadge record={doc} /></div>
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">Seeded summary <ProvenanceBadge record={doc} /></div>
               <p className="leading-relaxed">{doc.aiSummary}</p>
               {doc.aiScore != null && <div className="mt-2 flex items-center gap-2 text-[11.5px] text-muted-foreground">Predicted responsiveness <ScoreBar value={doc.aiScore} /></div>}
               {doc.aiIssues?.length ? <div className="mt-2 flex flex-wrap gap-1">{doc.aiIssues.map((c) => <IssueChip key={c} code={c} codes={issueCodes} size="xs" />)}</div> : null}
@@ -115,7 +115,7 @@ export function SuggestedTab({ detail, analysis, onAnalysis, onApply, onApplied 
           <div className="mt-2 space-y-3">
             <div className="rounded-md border p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Suggestion <ProvenanceBadge record={analysis} /></div>
+                <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">Suggestion <ProvenanceBadge record={analysis} /></div>
                 <div className="flex items-center gap-1">
                   <Tip label="Copy the suggestion into the coding panel without saving"><Button size="xs" variant="ghost" onClick={copyToPanel}><ClipboardCopy className="size-3.5" /> Copy to panel</Button></Tip>
                   <Tip label="Apply through the trust gate: verified, source-backed suggestions are saved and audited; others are held for review"><Button size="xs" onClick={() => applyGated(false)} disabled={applying}>{applying ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Apply</Button></Tip>
@@ -139,7 +139,7 @@ export function SuggestedTab({ detail, analysis, onAnalysis, onApply, onApplied 
             </div>
 
             <div>
-              <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground"><Quote className="size-3" /> Supporting quotes{quotes.length ? <span className="normal-case tracking-normal">· {verifiedQuotes} of {quotes.length} found in the text</span> : null}</div>
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground"><Quote className="size-3" /> Supporting quotes{quotes.length ? <span className="normal-case tracking-normal">· {verifiedQuotes} of {quotes.length} found in the text</span> : null}</div>
               {!quotes.length ? <p className="text-[11.5px] text-muted-foreground">No quotes were recorded for this suggestion{analysis.generatedAt ? " (re-run to collect verified excerpts)" : ""}.</p> : (
                 <ul className="divide-y rounded-md border">
                   {quotes.map((q, i) => (
@@ -154,17 +154,17 @@ export function SuggestedTab({ detail, analysis, onAnalysis, onApply, onApplied 
             </div>
 
             <div>
-              <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Summary</div>
+              <div className="mb-1 text-[12px] font-medium text-muted-foreground">Summary</div>
               <p className="text-[12.5px] leading-relaxed">{analysis.summary}</p>
             </div>
             {analysis.keyIssues.length > 0 && (
               <div>
-                <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Key issues</div>
+                <div className="mb-1 text-[12px] font-medium text-muted-foreground">Key issues</div>
                 <ul className="list-disc space-y-0.5 pl-5 text-[12.5px]">{analysis.keyIssues.map((k, i) => <li key={i}>{k}</li>)}</ul>
               </div>
             )}
             <div>
-              <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Entities</div>
+              <div className="mb-1 text-[12px] font-medium text-muted-foreground">Entities</div>
               <div className="space-y-1">
                 {(["people", "orgs", "places", "chemicals"] as const).map((k) => analysis.entities[k]?.length ? <div key={k} className="flex flex-wrap items-baseline gap-1 text-[12px]"><span className="w-16 capitalize text-[11px] text-muted-foreground">{k}</span>{analysis.entities[k]!.map((e) => <Badge key={e} variant="outline" size="sm" className="font-normal">{e}</Badge>)}</div> : null)}
               </div>
@@ -175,10 +175,10 @@ export function SuggestedTab({ detail, analysis, onAnalysis, onApply, onApplied 
 
       <section className={cn("rounded-md border p-3", doc.coding.privileged ? "border-info/40 bg-info/5" : "")}>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><ShieldAlert className="size-3.5" /> Privilege log</h3>
+          <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground"><ShieldAlert className="size-3.5" /> Privilege log</h3>
           <Button size="xs" variant="outline" onClick={draftPriv} disabled={privRunning}>{privRunning ? <Loader2 className="size-3.5 animate-spin" /> : <FileSignature className="size-3.5" />} Draft description</Button>
         </div>
-        <p className="mt-1 text-[11px] text-muted-foreground">{aiConfigured ? "Drafts a Rule 26(b)(5) description that identifies author, recipients and legal purpose without revealing the advice." : "Without an OpenAI key the description is built from a template using the coded basis, author and recipients."}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">{aiConfigured ? "Drafts a Rule 26(b)(5) description that identifies author, recipients and legal purpose without revealing the advice." : "Without an AI provider the description is built from a template using the coded basis, author and recipients."}</p>
         {privDraft && (
           <div className="mt-2 rounded-md border bg-background p-2.5 text-[12.5px]">
             <p className="leading-relaxed">{privDraft.description}</p>

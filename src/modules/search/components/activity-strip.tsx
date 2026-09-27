@@ -90,7 +90,7 @@ function StepRow({ row }: { row: ActivityRow }) {
     <li className={cn("flex items-center gap-1.5 truncate text-[11px]", row.status === "error" ? "text-destructive" : "text-muted-foreground")} title={row.failure ? `${row.label} (${FAILURE_LABEL[row.failure]})` : row.label}>
       {row.status === "running" ? <Loader2 className="size-3 shrink-0 animate-spin" /> : row.status === "error" ? <AlertCircle className="size-3 shrink-0" /> : <Check className="size-3 shrink-0" />}
       <span className="truncate">{row.label}</span>
-      {row.retrying && <span className="shrink-0 text-[10px] uppercase tracking-wide">retrying</span>}
+      {row.retrying && <span className="shrink-0 text-[11.5px]">retrying</span>}
     </li>
   );
 }

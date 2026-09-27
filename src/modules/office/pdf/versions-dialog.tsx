@@ -83,7 +83,7 @@ export function VersionsDialog({ open, onOpenChange, list, get, checkpoint, rest
                 <div className="flex items-center gap-2 border-b px-3 py-2 text-xs"><span className="font-medium">v{selectedVersion?.version ?? "…"}</span><span className="text-muted-foreground">vs current</span><div className="flex-1" /><Button size="sm" variant="outline" onClick={() => void doRestore()} disabled={busy === "restore" || loadingVersion || !selectedVersion}>{busy === "restore" ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />} Restore this version</Button></div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-4 text-xs">
                   {loadingVersion || !vm || !cur ? <Skeleton className="h-40 w-full" /> : (
-                    <table className="w-full"><thead><tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground"><th className="pb-1">Property</th><th className="pb-1">v{selectedVersion?.version}</th><th className="pb-1">Current</th></tr></thead><tbody>
+                    <table className="w-full"><thead><tr className="text-left text-[11px] text-muted-foreground"><th className="pb-1">Property</th><th className="pb-1">v{selectedVersion?.version}</th><th className="pb-1">Current</th></tr></thead><tbody>
                       <Row label="Active pages" a={vm.pages} b={cur.pages} />
                       <Row label="Deleted pages" a={vm.deleted} b={cur.deleted} />
                       <Row label="Rotated pages" a={vm.rotated} b={cur.rotated} />

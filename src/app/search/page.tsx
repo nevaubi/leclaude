@@ -6,7 +6,7 @@ import { listRuns, listSavedSearches } from "@/modules/search/service";
 import { listThreadSummaries } from "@/modules/search/engine/threads";
 import { ResearchPage } from "@/modules/search/components/research-page";
 import { Skeleton } from "@/components/ui/skeleton";
-import { currentUser } from "@/lib/current-user";
+import { currentUser, DEFAULT_USER } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Research" };
@@ -21,7 +21,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ q
   const me = currentUser((id) => d.people.get(id)?.name);
   return (
     <Suspense fallback={<SearchSkeleton />}>
-      <ResearchPage initialQuery={sp.q ?? ""} initialTool={sp.tool} initialThreadId={sp.thread} saved={saved} runs={runs} threads={threads} matters={matters} aiConfigured={aiConfig().hasKey} userName={me.name} />
+      <ResearchPage initialQuery={sp.q ?? ""} initialTool={sp.tool} initialThreadId={sp.thread} saved={saved} runs={runs} threads={threads} matters={matters} aiConfigured={aiConfig().hasKey} userName={me.id === DEFAULT_USER.id && me.name === DEFAULT_USER.name ? "You" : me.name} />
     </Suspense>
   );
 }

@@ -83,7 +83,7 @@ export function GraphView({ initial }: { initial: GraphExport }) {
             <div className="space-y-3 p-3 text-[12px]">
               <KeyValueList dense labelWidth={96} items={[{ label: "Records", value: <span className="tabular">{fmtInt(node.documents)}</span> }, { label: "Degree", value: <span className="tabular">{fmtInt(node.degree)}</span> }, { label: "Mentions", value: <span className="tabular">{fmtInt(node.mentionCount)}</span> }]} />
               <div>
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Relations ({nodeLinks.length})</div>
+                <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Relations ({nodeLinks.length})</div>
                 <div className="divide-hairline">
                   {nodeLinks.map((l) => { const other = l.source === node.id ? l.target : l.source; const t = typeOf(other); return (
                     <div key={l.id} className="py-1">

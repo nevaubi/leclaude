@@ -134,7 +134,7 @@ export function VersionsDialog({ open, onOpenChange, list, get, checkpoint, rest
                   <div className="flex-1" />
                   <Button size="sm" variant="outline" onClick={() => void doRestore()} disabled={busy === "restore" || !selectedVersion}>{busy === "restore" ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />} Restore this version</Button>
                 </div>
-                <div className="grid shrink-0 grid-cols-2 border-b bg-muted/40 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"><div className="px-3 py-1">Selected version</div><div className="border-l px-3 py-1">Current document</div></div>
+                <div className="grid shrink-0 grid-cols-2 border-b bg-muted/40 text-[11px] font-medium text-muted-foreground"><div className="px-3 py-1">Selected version</div><div className="border-l px-3 py-1">Current document</div></div>
                 <div className="min-h-0 flex-1 overflow-auto scrollbar-thin font-serif text-[12.5px] leading-relaxed">
                   {loadingVersion && <div className="p-4 text-xs text-muted-foreground">Loading…</div>}
                   {rows && (

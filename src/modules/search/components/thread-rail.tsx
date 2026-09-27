@@ -71,7 +71,7 @@ export function ThreadRail(p: ThreadRailProps) {
 function Section({ icon: Icon, title, count, children }: { icon: React.ComponentType<{ className?: string }>; title: string; count: number; children: React.ReactNode }) {
   return (
     <section className="pb-2">
-      <div className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><Icon className="size-3" /> {title} <span className="tabular font-normal">{count}</span></div>
+      <div className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[11.5px] font-medium text-muted-foreground"><Icon className="size-3" /> {title} <span className="tabular font-normal">{count}</span></div>
       <ul className="space-y-px px-1">{children}</ul>
     </section>
   );
@@ -81,7 +81,7 @@ function Empty({ children }: { children: React.ReactNode }) { return <li classNa
 
 function Row({ active, onClick, title, meta, time, onDelete, onPin, pinned }: { active: boolean; onClick: () => void; title: string; meta: string; time: string; onDelete?: () => void; onPin?: () => void; pinned?: boolean }) {
   return (
-    <li className={cn("group relative rounded-md transition-colors", active ? "bg-primary/10" : "hover:bg-sidebar-accent")}>
+    <li className={cn("group relative rounded-md transition-colors", active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60")}>
       <button onClick={onClick} className="block w-full px-2 py-1.5 pr-2 text-left cursor-pointer group-hover:pr-12">
         <div className={cn("truncate text-[12.5px]", active ? "font-medium text-primary" : "text-foreground")}>{title}</div>
         <div className="mt-0.5 flex items-center gap-1 truncate text-[10.5px] text-muted-foreground"><span className="truncate">{meta}</span>{meta && <span>·</span>}<RelTime iso={time} /></div>

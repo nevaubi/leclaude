@@ -25,14 +25,15 @@ import { activePages, annotationStats, boundsOf, emptyModel, normalizeModel, sou
 import { openPdf, type PDFDocumentProxy } from "./pdfjs";
 import { commentPage, PdfSidebar } from "./sidebar";
 import { pageText } from "./snapshot";
-import { usePdfStore, type SidebarTab, type Tool } from "./store";
+import { currentAnnotationAuthor, setAnnotationAuthor, usePdfStore, type SidebarTab, type Tool } from "./store";
+import { useWorkspaceUserName } from "../shared/use-workspace-user";
 import { ThumbnailRail } from "./thumbnail-rail";
 import { PdfToolbar } from "./toolbar";
 import { VersionsDialog } from "./versions-dialog";
 import { PdfViewer } from "./viewer";
 
 const SUGGESTIONS = {
-  draft: ["Bates-stamp MFC-0060000 onward, bottom right", "Redact every SSN and account number", "Highlight every mention of MW-7 and add a note", "Stamp CONFIDENTIAL on every page", "Summarize this order and list deadlines", "Convert to Word"],
+  draft: ["Bates-stamp ABC-0000001 onward, bottom right", "Redact every SSN and account number", "Highlight every mention of the contract date and add a note", "Stamp CONFIDENTIAL on every page", "Summarize this order and list deadlines", "Convert to Word"],
   review: ["Check for unredacted PII and privilege markers", "Is this ready to produce? Check Bates, legends and redactions", "Flag every deadline and who owns it"],
   ask: ["What does paragraph 12 require?", "Which pages mention the §8(e) notice?", "List the custodians and the relevant period for each"],
 };
@@ -95,6 +96,8 @@ function NewPdfView({ blobId, matterId }: { blobId: string | null; matterId: str
 
 // ---------------------------------------------------------------------------
 function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
+  const authorName = useWorkspaceUserName();
+  React.useEffect(() => { setAnnotationAuthor(authorName); }, [authorName]);
   const office = useOfficeDoc<PdfModel>({ id, kind: "pdf", emptyContent: emptyModel, templateId: templateId ?? null, matterId: matterId ?? null, autosaveMs: 1200 });
   const { doc, loading, error } = office;
   const officeRef = React.useRef(office);
@@ -211,7 +214,7 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
     const st = store.getState();
     const hits = st.search.hits;
     if (!hits.length) return;
-    st.applyOp({ op: "add_annotations", annotations: hits.map((h) => ({ id: `an_${Math.random().toString(36).slice(2, 10)}`, page: h.source, type, rects: h.match.rects, color: type === "redaction" ? "#111111" : st.color, opacity: type === "highlight" ? 0.4 : 1, quote: h.match.text, reason: type === "redaction" ? reason ?? st.redactionReason : undefined, author: "Jordan Whitfield", createdAt: new Date().toISOString() })) });
+    st.applyOp({ op: "add_annotations", annotations: hits.map((h) => ({ id: `an_${Math.random().toString(36).slice(2, 10)}`, page: h.source, type, rects: h.match.rects, color: type === "redaction" ? "#111111" : st.color, opacity: type === "highlight" ? 0.4 : 1, quote: h.match.text, reason: type === "redaction" ? reason ?? st.redactionReason : undefined, author: currentAnnotationAuthor(), createdAt: new Date().toISOString() })) });
     toast.success(`${type === "redaction" ? "Redacted" : "Highlighted"} ${hits.length} match${hits.length === 1 ? "" : "es"}`);
   }, [store]);
   const redactPattern = React.useCallback(async (query: string, regex: boolean, reason?: string) => {
@@ -219,7 +222,7 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
     const st = store.getState();
     const hits = await searchDocument(pdfDoc, cacheKey, st.model, query, { regex });
     if (!hits.length) { toast.message("No matches to redact"); return; }
-    st.applyOp({ op: "add_annotations", annotations: hits.map((h) => ({ id: `an_${Math.random().toString(36).slice(2, 10)}`, page: h.source, type: "redaction" as const, rects: h.match.rects, color: "#111111", opacity: 1, quote: h.match.text, reason: reason ?? st.redactionReason, author: "Jordan Whitfield", createdAt: new Date().toISOString() })) });
+    st.applyOp({ op: "add_annotations", annotations: hits.map((h) => ({ id: `an_${Math.random().toString(36).slice(2, 10)}`, page: h.source, type: "redaction" as const, rects: h.match.rects, color: "#111111", opacity: 1, quote: h.match.text, reason: reason ?? st.redactionReason, author: currentAnnotationAuthor(), createdAt: new Date().toISOString() })) });
     toast.success(`Added ${hits.length} redaction${hits.length === 1 ? "" : "s"} — apply them via Pages → Apply to source`);
     st.setSidebarTab("annotations");
   }, [pdfDoc, cacheKey, store]);

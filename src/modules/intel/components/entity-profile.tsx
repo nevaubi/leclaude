@@ -72,7 +72,7 @@ export function EntityProfileView({ profile, userId, matterNames }: { profile: E
       <div className="mx-auto max-w-[1400px] space-y-4 p-3 pb-8">
         <header className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{ENTITY_TYPE_LABEL[entity.type]}</div>
+            <div className="text-[11.5px] font-medium text-muted-foreground">{ENTITY_TYPE_LABEL[entity.type]}</div>
             <h1 className="truncate text-[17px] font-semibold tracking-tight">{entity.name}</h1>
             {entity.aliases.length > 0 && <div className="truncate text-[11.5px] text-muted-foreground" title={entity.aliases.join(" · ")}>Also: {entity.aliases.join(" · ")}</div>}
             {(entity.flags?.length ?? 0) > 0 && <FlagList flags={entity.flags ?? []} max={4} className="mt-1" />}
@@ -120,7 +120,7 @@ export function EntityProfileView({ profile, userId, matterNames }: { profile: E
                 <div className="space-y-2">
                   {months.map((m) => (
                     <div key={m.month}>
-                      <div className="mb-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{m.label}</div>
+                      <div className="mb-0.5 text-[11.5px] font-medium text-muted-foreground">{m.label}</div>
                       <div className="divide-hairline rounded-md border">
                         {m.entries.slice().reverse().map((e, i) => (
                           <div key={`${e.at}-${i}`} className="flex min-h-7 items-center gap-3 px-2 py-0.5 text-[12px]">
@@ -171,7 +171,7 @@ export function EntityProfileView({ profile, userId, matterNames }: { profile: E
                 <div className="divide-hairline">
                   {profile.insights.map((i) => (
                     <Link key={i.id} href={`/intel/insights?insight=${encodeURIComponent(i.id)}`} className="flex min-h-8 items-center gap-2 py-0.5 text-[12px] hover:bg-accent/50">
-                      <span className="w-[70px] shrink-0 text-[10.5px] uppercase tracking-wider text-muted-foreground">{INSIGHT_KIND_LABEL[i.kind]}</span>
+                      <span className="w-[70px] shrink-0 text-[11.5px] text-muted-foreground">{INSIGHT_KIND_LABEL[i.kind]}</span>
                       <span className="min-w-0 flex-1 truncate" title={i.summary}>{i.title}</span>
                       <TrustBadge provenance={i.provenance} compact />
                     </Link>

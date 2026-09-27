@@ -249,7 +249,7 @@ layout: table
 # Our proposal
 layout: quote
 quote: A resolution today at $[X] reflects the realistic range of outcomes, avoids two years of litigation, and lets both parties move on.
-by: Seeger Weiss LLP, on behalf of [CLIENT]
+by: [FIRM NAME], on behalf of [CLIENT]
 
 # Next steps
 - Mediator's proposal by [DATE]
@@ -385,8 +385,8 @@ right: Theirs
 }
 
 function boardBriefingOutline(m: Matter | null): string {
-  const name = m?.name ?? "Project Harbor — Acquisition of Bluewater Analytics, Inc.";
-  return `# Project Harbor: Board briefing
+  const name = m?.name ?? "[TRANSACTION NAME]";
+  return `# ${m?.shortName ?? "[PROJECT NAME]"}: Board briefing
 kicker: Confidential · Board of Directors · Corporate / M&A
 subtitle: ${name} — transaction status, diligence findings and approvals requested
 date: ${today()}
@@ -402,9 +402,9 @@ date: ${today()}
 # Transaction overview
 layout: two_column
 left: The deal
-- $184M enterprise value; cash and stock
-- Target: Bluewater Analytics, Inc. (ML analytics platform)
-- Rationale: product adjacency, 40+ enterprise accounts, engineering talent
+- $[__] enterprise value; [cash / stock]
+- Target: [TARGET] ([business description])
+- Rationale: [strategic rationale]
 right: Status
 - Confirmatory diligence substantially complete
 - SPA in fourth turn; open points below
@@ -413,18 +413,18 @@ right: Status
 # Structure and key terms
 layout: table
 | Term | Position | Status |
-| Consideration | $150M cash + $34M buyer stock | Agreed |
-| Escrow | 10% for 18 months | Agreed |
-| R&W insurance | $18M limit; 1% retention | Binder pending |
-| Key-employee retention | 3-year vesting; $6M pool | Agreed in principle |
-| Closing conditions | HSR clearance; top-20 customer consents | Open |
+| Consideration | $[__] cash + $[__] stock | [Status] |
+| Escrow | [__]% for [__] months | [Status] |
+| R&W insurance | $[__] limit; [__]% retention | [Status] |
+| Key-employee retention | [Vesting]; $[__] pool | [Status] |
+| Closing conditions | [Regulatory clearance]; [consents] | [Status] |
 
 # Diligence findings
-- **IP chain of title:** two early contributors lack assignment agreements — cure before signing
-- **Customer contracts:** 6 of top 20 require change-of-control consent
-- **Employment:** contractor classification exposure in two states; reserve $[X]
-- **Data privacy:** GDPR processor terms outdated; remediation plan agreed
-- **Litigation:** none pending; one demand letter resolved
+- **IP chain of title:** [finding and cure]
+- **Customer contracts:** [consents required]
+- **Employment:** [exposure; reserve $[X]]
+- **Data privacy:** [finding and remediation]
+- **Litigation:** [pending / threatened matters]
 notes: Lead with IP: it is the one finding that could move price. The rest are manageable in the SPA.
 
 # Principal risks and mitigants
@@ -459,7 +459,7 @@ function cleOutline(): string {
   return `# Rule 702 after the 2023 amendment
 kicker: CLE · Evidence · 1.0 general credit
 subtitle: What changed, what courts are doing with it, and how to brief it
-date: Seeger Weiss LLP · ${today()}
+date: [FIRM NAME] · ${today()}
 
 # Agenda
 - The text: what the amendment changed
@@ -523,7 +523,7 @@ subtitle: Materials and citations available on the firm library under Knowledge 
 
 function allHandsOutline(): string {
   return `# Firm all-hands
-kicker: Seeger Weiss LLP · Quarterly all-hands
+kicker: [FIRM NAME] · Quarterly all-hands
 subtitle: Wins, pipeline, people and what is next
 date: ${today()}
 
@@ -535,19 +535,19 @@ date: ${today()}
 - Calendar and next steps
 
 # Wins this quarter
-- Motion to dismiss granted in the Northgate indemnity dispute (7th Cir. affirmance pending)
-- Tier 2 production delivered on time across 14 custodians in the AFFF MDL
-- Project Harbor: diligence complete; signing targeted for October 30
-- Sterling Medical PAGA response filed within the cure period
+- [Win 1: result, matter, team]
+- [Win 2]
+- [Win 3]
+- [Win 4]
 notes: Name the teams. People remember who was thanked.
 
 # Matter pipeline by practice
 layout: chart
 chart: pie | Products Liability | Commercial | Corporate / M&A | Employment | Regulatory
 chart-title: Active matters by practice area
-Matters: 9, 7, 5, 4, 3
-- 28 active matters; 6 opened this quarter
-- Utilization 82% firm-wide; associates 88%
+Matters: 1, 1, 1, 1, 1
+- [__] active matters; [__] opened this quarter
+- Utilization [__]% firm-wide
 
 # New colleagues and promotions
 - Welcome [NAME], Associate (litigation)
@@ -569,15 +569,14 @@ right: Coming next
 # Calendar
 layout: timeline
 timeline:
-- Oct 14 — AFFF Tier 2 production deadline
-- Oct 30 — Project Harbor signing target
-- Nov 6 — Rebuttal expert reports (AFFF)
-- Nov 20 — Depo-Provera Science Day
-- Dec 12 — Holiday dinner
+- [Date] — [Deadline or event]
+- [Date] — [Deadline or event]
+- [Date] — [Deadline or event]
+- [Date] — [Firm event]
 
 # Thank you
 layout: section
-subtitle: Questions, ideas and feedback: knowledge@seegerweiss.com`;
+subtitle: Questions, ideas and feedback: [CONTACT]`;
 }
 
 export const SLIDES_TEMPLATES: OfficeTemplate[] = [
@@ -586,7 +585,7 @@ export const SLIDES_TEMPLATES: OfficeTemplate[] = [
   { id: "slides-mediation", kind: "slides", name: "Mediation presentation", description: "FRE 408 mediation statement: competing narratives, what a jury will see, outcome ranges, cost of continuing and a settlement framework.", category: "Litigation", practiceArea: "Litigation", tags: ["mediation", "settlement"], build: ({ matterId }) => deckFromOutline(mediationOutline(matterOf(matterId)), "counsel-slate") },
   { id: "slides-depo-prep", kind: "slides", name: "Deposition prep for witness", description: "Witness-facing preparation deck: goals, ground rules, themes, documents to know, the hard questions, objections and logistics.", category: "Litigation", practiceArea: "Litigation", tags: ["deposition", "witness", "prep"], build: ({ matterId }) => deckFromOutline(depoPrepOutline(matterOf(matterId)), "courtroom-serif") },
   { id: "slides-expert-timeline", kind: "slides", name: "Expert timeline", description: "State-of-the-science and regulatory timelines, reliance-list table, Rule 702 factors and cross-examination vulnerabilities.", category: "Litigation", practiceArea: "Products Liability", tags: ["expert", "Daubert", "timeline"], build: ({ matterId }) => deckFromOutline(expertTimelineOutline(matterOf(matterId)), "seeger-navy") },
-  { id: "slides-board-briefing", kind: "slides", name: "Board M&A briefing (Project Harbor)", description: "Deal overview, key terms table, diligence findings, risks and mitigants, timeline to closing and the resolutions requested.", category: "Transactional", practiceArea: "Corporate / M&A", tags: ["M&A", "board", "diligence"], build: ({ matterId }) => deckFromOutline(boardBriefingOutline(matterOf(matterId)), "counsel-slate") },
+  { id: "slides-board-briefing", kind: "slides", name: "Board M&A briefing", description: "Deal overview, key terms table, diligence findings, risks and mitigants, timeline to closing and the resolutions requested.", category: "Transactional", practiceArea: "Corporate / M&A", tags: ["M&A", "board", "diligence"], build: ({ matterId }) => deckFromOutline(boardBriefingOutline(matterOf(matterId)), "counsel-slate") },
   { id: "slides-cle-rule-702", kind: "slides", name: "CLE training deck (Rule 702)", description: "The 2023 amendment to Rule 702: text, before/after comparison, circuit trends table, briefing strategy and a hypothetical.", category: "Internal", tags: ["CLE", "evidence", "training"], build: () => deckFromOutline(cleOutline(), "courtroom-serif") },
   { id: "slides-all-hands", kind: "slides", name: "Firm all-hands", description: "Quarterly all-hands: wins, pipeline chart, people, initiatives and the calendar.", category: "Internal", tags: ["firm", "all-hands"], build: () => deckFromOutline(allHandsOutline(), "modern-mono") },
   { id: "slides-blank", kind: "slides", name: "Blank deck", description: "A single title slide in the firm theme.", category: "Internal", tags: ["blank"], build: ({ title }) => deckFromOutline(`# ${title ?? "Untitled deck"}\nsubtitle: \ndate: ${today()}`, "seeger-navy") },

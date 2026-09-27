@@ -3,7 +3,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Play, RefreshCw, RotateCcw, X } from "lucide-react";
+import { Loader2, Play, RefreshCw, RotateCcw, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -11,6 +11,8 @@ import { KeyValueList } from "@/components/ui/form";
 import { Inspector } from "@/components/ui/inspector";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tip } from "@/components/ui/tooltip";
 import { describeIntelSchedule } from "@/modules/intel/schedule";
 import type { IntelConfigView, IntelHealth, IntelJob, IntelJobStatus, IntelSource, IntelSweepReport } from "@/modules/intel/types";
@@ -57,6 +59,7 @@ function DataAutomationPanel({ background, dataDir, corpusFolders }: { backgroun
   const analysis = useJson<AnalysisStatus>("/api/intel/analysis");
   const [rows, setRows] = React.useState<SourceRow[]>([]);
   const [openJob, setOpenJob] = React.useState<string | null>(params?.get("job") ?? null);
+  const [configuring, setConfiguring] = React.useState<SourceRow | null>(null);
   const activeSource = params?.get("source") ?? null;
   React.useEffect(() => { if (sources.data) setRows(sources.data.sources); }, [sources.data]);
   const refreshAll = () => { sources.reload(); jobs.reload(); health.reload(); analysis.reload(); };
@@ -124,8 +127,14 @@ function DataAutomationPanel({ background, dataDir, corpusFolders }: { backgroun
     <div className="space-y-3">
       <SettingsBlock id="sources" title="Sources" description={`${rows.filter((s) => s.enabled).length} of ${rows.length} enabled · background: ${background === "off" ? "off" : background === "cron" ? "external cron" : "in-process loop"}`} actions={<Tip label="Refresh"><Button variant="ghost" size="icon-xs" onClick={refreshAll} aria-label="Refresh">{sources.loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}</Button></Tip>}>
         <DataTable rows={rows} columns={sourceColumns} rowId={(s) => s.id} defaultSort={{ columnId: "name", dir: "asc" }} virtualize={false} fill={false} selectionMode="single" activeId={activeSource} noun="source" ariaLabel="Sources" loading={sources.loading && !rows.length} error={sources.error} empty={<div className="p-4 text-center text-[12px] text-muted-foreground">No sources.</div>}
-          rowActions={(s) => <Tip label="Run now"><Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); void runNow(s); }} aria-label={`Run ${s.name} now`}><Play className="size-3.5" /></Button></Tip>} />
-        <p className="mt-1.5 text-[11px] text-muted-foreground">Schedules and scope live in the database (PATCH /api/intel/sources/&lt;id&gt;); keys live in the environment. Sources without their provider key stay disabled until the key is present.</p>
+          rowActions={(s) => (
+            <span className="flex items-center gap-0.5">
+              <Tip label="Configure"><Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); setConfiguring(s); }} aria-label={`Configure ${s.name}`}><Settings2 className="size-3.5" /></Button></Tip>
+              <Tip label="Run now"><Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); void runNow(s); }} aria-label={`Run ${s.name} now`}><Play className="size-3.5" /></Button></Tip>
+            </span>
+          )} />
+        <SourceConfigDialog source={configuring} onClose={() => setConfiguring(null)} onSaved={(src) => { setRows((list) => list.map((x) => (x.id === src.id ? { ...x, ...src } : x))); setConfiguring(null); }} />
+        <p className="mt-1.5 text-[11.5px] text-muted-foreground">Sources start disabled and unconfigured. Configure a source (queries, docket numbers, pages, folders), then enable it; provider keys live in the environment. Intelligence is built only from enabled sources.</p>
       </SettingsBlock>
 
       <SettingsBlock id="jobs" title="Jobs" description={jobs.data ? `${fmtInt(jobs.data.counts.queued)} queued · ${fmtInt(jobs.data.counts.running)} running · ${fmtInt(jobs.data.counts.failed24h)} failed (24h) · ${fmtInt(jobs.data.counts.fixed24h)} fixed by the steward (24h) · ${fmtInt(jobs.data.counts.escalated)} escalated` : "Job log"} actions={
@@ -159,18 +168,18 @@ function DataAutomationPanel({ background, dataDir, corpusFolders }: { backgroun
                   { label: "Finished", value: openRow.finishedAt ? new Date(openRow.finishedAt).toLocaleString() : "—", muted: !openRow.finishedAt },
                   { label: "Error", value: openRow.error ? `${openRow.error.code}: ${openRow.error.message}` : "—", muted: !openRow.error },
                 ]} />
-                {openRow.escalation && <div className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[11.5px]"><span className="font-medium">Escalated:</span> {openRow.escalation.reason} <span className="text-muted-foreground">({fmtDate(openRow.escalation.at)})</span></div>}
+                {openRow.escalation && <div className="rounded-md border border-destructive/40 px-2 py-1.5 text-[11.5px]"><span className="font-medium">Escalated:</span> {openRow.escalation.reason} <span className="text-muted-foreground">({fmtDate(openRow.escalation.at)})</span></div>}
                 {openRow.fixes.length > 0 && (
                   <div>
-                    <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Steward fixes</div>
+                    <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Steward fixes</div>
                     <div className="divide-hairline">{openRow.fixes.map((f, i) => <div key={i} className="py-1"><span className="font-medium">{f.action}</span> <span className="text-muted-foreground">by {f.by} · {new Date(f.at).toLocaleString()}</span><div className="text-[11.5px] text-muted-foreground">{f.note}</div></div>)}</div>
                   </div>
                 )}
                 <div>
-                  <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Log (last {openRow.log.length})</div>
+                  <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Log (last {openRow.log.length})</div>
                   <pre className="max-h-64 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[10.5px] leading-relaxed scrollbar-thin">{openRow.log.map((l) => `${l.at.slice(11, 19)} ${l.level.padEnd(5)} ${l.msg}${l.data ? ` ${JSON.stringify(l.data).slice(0, 200)}` : ""}`).join("\n")}</pre>
                 </div>
-                {openRow.result && <div><div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Result</div><pre className="max-h-40 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[10.5px] leading-relaxed scrollbar-thin">{JSON.stringify(openRow.result, null, 1).slice(0, 4000)}</pre></div>}
+                {openRow.result && <div><div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Result</div><pre className="max-h-40 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[10.5px] leading-relaxed scrollbar-thin">{JSON.stringify(openRow.result, null, 1).slice(0, 4000)}</pre></div>}
               </div>
             </Inspector>
           )}
@@ -182,7 +191,7 @@ function DataAutomationPanel({ background, dataDir, corpusFolders }: { backgroun
           {dirs.length ? (
             <ul className="divide-hairline text-[12px]">{dirs.map((d) => <li key={d} className="flex h-7 items-center gap-2"><span className="truncate font-mono text-[11px]" title={d}>{d}</span></li>)}</ul>
           ) : <p className="text-[12px] text-muted-foreground">No folders configured{corpusFolders ? ` (${corpusFolders} in the environment)` : ""}.</p>}
-          <pre className="mt-2 rounded-md border bg-muted/50 p-2 font-mono text-[11px] leading-relaxed">{`# .env.local\nLECLAUDE_CORPUS_DIRS=/srv/matters/AFFF-PFAS,/srv/matters/Depo-Provera\n# restart, then enable "Local document folders" above`}</pre>
+          <pre className="mt-2 rounded-md border bg-muted/50 p-2 font-mono text-[11px] leading-relaxed">{`# .env.local\nLECLAUDE_CORPUS_DIRS=/srv/matters/matter-a,/srv/matters/matter-b\n# restart, then enable "Local document folders" above`}</pre>
           {Object.keys(matterMap).length > 0 && <div className="mt-2 text-[11px] text-muted-foreground">Folder → matter mapping: {Object.entries(matterMap).map(([k, v]) => `${k} → ${v}`).join(" · ")}. Files under a mapped folder name are linked to that matter; PDF, DOCX, XLSX, text and Markdown are extracted; files over the size cap are skipped.</div>}
         </SettingsBlock>
 
@@ -228,5 +237,46 @@ function DataAutomationPanel({ background, dataDir, corpusFolders }: { backgroun
         </SettingsBlock>
       </div>
     </div>
+  );
+}
+
+/**
+ * Edit a source's adapter configuration as JSON. The server validates it against the adapter's schema
+ * (422 with the issues on failure); the source's schedule and on/off state are edited in the table.
+ */
+function SourceConfigDialog({ source, onClose, onSaved }: { source: SourceRow | null; onClose: () => void; onSaved: (s: SourceRow) => void }) {
+  const [text, setText] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => { if (source) { setText(JSON.stringify(source.config ?? {}, null, 2)); setError(null); } }, [source]);
+  const save = async () => {
+    if (!source) return;
+    let config: unknown;
+    try { config = JSON.parse(text); } catch (e) { setError(`Not valid JSON: ${(e as Error).message}`); return; }
+    if (!config || typeof config !== "object" || Array.isArray(config)) { setError("The configuration must be a JSON object."); return; }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/intel/sources/${encodeURIComponent(source.id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ config }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? res.statusText); // the server's message lists the schema issues
+      toast.success(`${source.name}: configuration saved`, { description: source.enabled ? "Used from the next run." : "Enable the source to start collecting." });
+      onSaved(j.source as SourceRow);
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={Boolean(source)} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle>Configure {source?.name}</DialogTitle>
+          <DialogDescription>{source?.description ?? source?.adapterName} Keys are never stored here; they are read from the environment.</DialogDescription>
+        </DialogHeader>
+        <Textarea value={text} onChange={(e) => setText(e.target.value)} className="min-h-[260px] font-mono text-[11.5px]" spellCheck={false} aria-label="Source configuration (JSON)" aria-invalid={Boolean(error)} />
+        {error && <p className="text-[11.5px] text-destructive" role="alert">{error}</p>}
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button size="sm" onClick={() => void save()} disabled={busy}>{busy && <Loader2 className="size-3.5 animate-spin" />} Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

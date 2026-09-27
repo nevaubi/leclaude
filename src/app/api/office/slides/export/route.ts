@@ -4,6 +4,8 @@ import { blobs } from "@/lib/db";
 import { getOfficeDoc } from "@/modules/office/shared/docs-service";
 import { exportOutlineText, exportPptx } from "@/modules/office/slides/export";
 import { normalizeDeck } from "@/modules/office/slides/model";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromBody } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -34,7 +36,7 @@ async function fetchImage(src: string): Promise<string | null> {
 }
 
 /** Export a deck. Body: { docId | content, title?, format: pptx | txt, includeHidden?, includeNotes? }. */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body) return jsonError("Invalid body");
   let content = body.content;
@@ -56,3 +58,5 @@ export async function POST(req: NextRequest) {
     return jsonError(`Export failed: ${(e as Error).message}`, 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "export", resource: officeDocFromBody });

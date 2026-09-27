@@ -151,7 +151,7 @@ function ProductionDetail({ id, onChanged, onDeleted }: { id: string; onChanged:
             ]} />
           </div>
           <div className="border-t px-3 py-2">
-            <div className="flex items-center justify-between"><span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">QC report</span>{qc && <span className="tabular text-[10.5px] text-muted-foreground">{formatDateTime(qc.ranAt)}</span>}</div>
+            <div className="flex items-center justify-between"><span className="text-[12px] font-medium text-muted-foreground">QC report</span>{qc && <span className="tabular text-[10.5px] text-muted-foreground">{formatDateTime(qc.ranAt)}</span>}</div>
             {!qc ? <p className="mt-1 text-[11.5px] text-muted-foreground">Not run yet. QC checks privileged documents in the set, family members left behind, unredacted PII patterns and uncoded documents; a clean report is required to finalise.</p> : qc.ok ? <p className="mt-1 flex items-center gap-1.5 text-[11.5px] text-success"><ShieldCheck className="size-3.5" /> Clean — no findings.</p> : (
               <p className="mt-1 flex items-center gap-1.5 text-[11.5px] text-warning-foreground dark:text-warning"><AlertTriangle className="size-3.5" /> {findings} finding{findings === 1 ? "" : "s"}</p>
             )}

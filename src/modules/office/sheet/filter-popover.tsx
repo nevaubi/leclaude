@@ -66,7 +66,7 @@ export function FilterPopover({ sheet, computed, col, header, x, y, onClose, onA
         <Button size="xs" variant="outline" onClick={() => onSort("desc")}><ArrowUpZA className="size-3" /> Sort Z → A</Button>
       </div>
       <div className="mb-2 space-y-1 rounded-md border p-1.5">
-        <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Condition</div>
+        <div className="text-[11px] font-medium text-muted-foreground">Condition</div>
         <select value={op} onChange={(e) => setOp(e.target.value)} className="h-7 w-full rounded-md border bg-background px-1.5 text-xs">
           <option value="">None</option>
           {CONDITIONS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}

@@ -14,15 +14,15 @@ import { useResearchActions } from "./research-context";
  */
 /** Stable component map: defined once so hover-driven re-renders never remount the chips (a remount swallows the click). */
 const COMPONENTS: Components = {
-  h1: ({ children }) => <h2 className="mt-5 mb-1.5 font-sans text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</h2>,
-  h2: ({ children }) => <h2 className="mt-5 mb-1.5 font-sans text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</h2>,
+  h1: ({ children }) => <h2 className="mt-5 mb-1.5 font-sans text-[13px] font-semibold text-foreground">{children}</h2>,
+  h2: ({ children }) => <h2 className="mt-5 mb-1.5 font-sans text-[13px] font-semibold text-foreground">{children}</h2>,
   h3: ({ children }) => <h3 className="mt-3 mb-1 font-sans text-[13px] font-semibold text-foreground">{children}</h3>,
   h4: ({ children }) => <h4 className="mt-2 font-sans text-[13px] font-medium">{children}</h4>,
   p: ({ children }) => <p className="my-2"><Sentences>{children}</Sentences></p>,
   ul: ({ children }) => <ul className="my-2 list-disc pl-5 space-y-1">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal pl-5 space-y-1">{children}</ol>,
   li: ({ children }) => <li className="[&>p]:my-0"><Sentences>{children}</Sentences></li>,
-  blockquote: ({ children }) => <blockquote className="my-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 font-sans text-[12.5px] not-italic text-foreground [&_p]:my-0">{children}</blockquote>,
+  blockquote: ({ children }) => <blockquote className="my-2 border-l-2 pl-3 font-sans text-[12.5px] not-italic text-foreground [&_p]:my-0">{children}</blockquote>,
   a: ({ href, children }) => {
     if (href?.startsWith("#cite-")) return <CiteChip n={Number(href.slice(6))} />;
     if (href === "#verify") return <VerifyFlag />;

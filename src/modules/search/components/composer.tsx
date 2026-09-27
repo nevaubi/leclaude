@@ -46,11 +46,11 @@ export function Chip({ active, children, className, onClick, icon: Icon, ...rest
     <button
       type="button"
       onClick={onClick}
-      className={cn("inline-flex h-7 max-w-[240px] items-center gap-1.5 rounded-[var(--radius-chip)] border px-2 text-[11.5px] font-medium transition-colors cursor-pointer", active ? "border-primary/40 bg-primary/10 text-primary" : "bg-background text-muted-foreground hover:border-foreground/25 hover:text-foreground", className)}
+      className={cn("inline-flex h-7 max-w-[240px] items-center gap-1.5 rounded-[var(--radius-chip)] border px-2 text-[11.5px] font-medium transition-colors cursor-pointer", active ? "border-transparent bg-accent text-foreground" : "bg-background text-muted-foreground hover:border-foreground/25 hover:text-foreground", className)}
       {...rest}
     >
       {Icon && <Icon className="size-3.5 shrink-0" />}
-      <span className="truncate">{children}</span>
+      <span className="truncate [&>svg]:ml-1 [&>svg]:inline [&>svg]:align-[-2px]">{children}</span>
     </button>
   );
 }
@@ -120,7 +120,7 @@ export function ResearchComposer(p: ComposerProps) {
         value={p.value}
         onChange={(e) => p.onChange(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
-        placeholder={p.placeholder ?? "Ask a research question — e.g. “Is the government contractor defense available to a MilSpec AFFF manufacturer in the Fourth Circuit?”"}
+        placeholder={p.placeholder ?? "Ask a research question — e.g. “What is the clear-evidence standard for impossibility preemption after Albrecht?”"}
         autoFocus={p.autoFocus}
         rows={1}
         spellCheck
@@ -133,7 +133,7 @@ export function ResearchComposer(p: ComposerProps) {
             <Chip active={Boolean(matter)} icon={Briefcase} aria-label="Matter">{matter ? matter.shortName : "Matter (optional)"}<ChevronDown className="size-3 opacity-60" /></Chip>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-72 p-1.5">
-            <div className="px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Matter context</div>
+            <div className="px-2 py-1 text-[11.5px] font-medium text-muted-foreground">Matter context</div>
             <button onClick={() => setMatter(null)} className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent cursor-pointer", !matter && "bg-accent")}>None{!matter && <Check className="ml-auto size-3.5" />}</button>
             {p.matters.map((m) => (
               <button key={m.id} onClick={() => setMatter(m.id)} className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent cursor-pointer", matter?.id === m.id && "bg-accent")}>
@@ -152,7 +152,7 @@ export function ResearchComposer(p: ComposerProps) {
         <Popover>
           <PopoverTrigger asChild><Chip active icon={Scale} aria-label="Law scope">{lawLabel}<ChevronDown className="size-3 opacity-60" /></Chip></PopoverTrigger>
           <PopoverContent align="start" className="w-72 p-2">
-            <div className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Law scope</div>
+            <div className="px-1 pb-1 text-[11.5px] font-medium text-muted-foreground">Law scope</div>
             {LAW_GROUPS.map((g) => {
               const on = g.sources.some((x) => s.sources.includes(x));
               return (
@@ -175,7 +175,7 @@ export function ResearchComposer(p: ComposerProps) {
           <PopoverContent align="start" className="max-h-80 w-72 overflow-y-auto p-1.5 scrollbar-thin">
             {(["Federal", "Circuits", "State"] as const).map((group) => (
               <div key={group}>
-                <div className="px-2 pb-0.5 pt-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{group}</div>
+                <div className="px-2 pb-0.5 pt-1.5 text-[11.5px] font-medium text-muted-foreground">{group}</div>
                 {JURISDICTIONS.filter((x) => x.group === group).map((x) => (
                   <button key={x.key} onClick={() => p.setSettings({ jurisdiction: x.key })} className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent cursor-pointer", s.jurisdiction === x.key && "bg-accent")}>
                     <span className="min-w-0 flex-1 truncate">{x.key === "all-federal" ? "All jurisdictions" : x.label}</span>
@@ -195,7 +195,7 @@ export function ResearchComposer(p: ComposerProps) {
         <Popover open={builderOpen} onOpenChange={setBuilderOpen}>
           <PopoverTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="Edit as a boolean query"><PencilLine className="size-4" /></Button></PopoverTrigger>
           <PopoverContent align="end" className="w-[420px] p-3">
-            <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Boolean query builder</div>
+            <div className="mb-2 text-[11.5px] font-medium text-muted-foreground">Boolean query builder</div>
             <QueryBuilder query={p.value} onApply={(q) => { p.onChange(q); setBuilderOpen(false); ref.current?.focus(); }} />
           </PopoverContent>
         </Popover>
@@ -205,7 +205,7 @@ export function ResearchComposer(p: ComposerProps) {
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-3">
             <div className="flex items-center justify-between">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Research lanes</div>
+              <div className="text-[11.5px] font-medium text-muted-foreground">Research lanes</div>
               <label className="flex items-center gap-1.5 text-[11.5px] cursor-pointer">Fast answer <Switch size="sm" checked={s.fast} onCheckedChange={(v) => p.setSettings({ fast: v })} aria-label="Fast answer" /></label>
             </div>
             <ul className="mt-2 space-y-1">

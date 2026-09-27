@@ -43,7 +43,7 @@ export default async function IntelDocumentPage({ params }: Props) {
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
         <div className="mx-auto max-w-[1200px] p-3 pb-8">
           <header className="mb-3">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{DOC_KIND_LABEL[doc.kind]}{source ? ` · ${source.name}` : ""}</div>
+            <div className="text-[11.5px] font-medium text-muted-foreground">{DOC_KIND_LABEL[doc.kind]}{source ? ` · ${source.name}` : ""}</div>
             <h1 className="text-[17px] font-semibold tracking-tight">{doc.title}</h1>
             {doc.summary && <p className="mt-0.5 max-w-3xl text-[12.5px] text-muted-foreground">{doc.summary}</p>}
             {doc.flags.length > 0 && <ul className="mt-1.5 space-y-0.5 text-[11.5px] text-warning-foreground dark:text-warning">{doc.flags.map((f) => <li key={f.kind}>{FLAG_LABEL[f.kind]}{f.note ? ` — ${f.note}` : ""}{f.by ? ` (${f.by}, ${fmtDate(f.at)})` : ""}</li>)}</ul>}

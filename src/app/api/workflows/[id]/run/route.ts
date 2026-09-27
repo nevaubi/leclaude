@@ -3,9 +3,10 @@ import { bootstrap, errorResponse, parseBody } from "@/modules/workflows/api-uti
 import { startRun } from "@/modules/workflows/engine";
 import { runStartSchema } from "@/modules/workflows/schema";
 import { getWorkflow, workflowForTemplate } from "@/modules/workflows/service";
-import { WORKFLOW_CURRENT_USER } from "@/modules/workflows/types";
 import { withAuth } from "@/lib/auth/route";
 import { bodyMatterId, refs } from "@/lib/auth/resources";
+import { requirePrincipal } from "@/lib/auth/context";
+import { hasMatterAccess } from "@/lib/auth/policy";
 
 export const runtime = "nodejs";
 
@@ -23,12 +24,16 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   if (!workflow) return jsonError("Workflow not found", 404);
   const body = await parseBody(req, runStartSchema);
   if (!body.ok) return body.res;
+  const principal = requirePrincipal();
+  // The run's matter can also come from the start form's matter input; it is authorized like the body's matterId.
+  const inputMatter = typeof body.data.inputs?.matter === "string" ? body.data.inputs.matter.trim() : "";
+  if (inputMatter && !hasMatterAccess(principal, inputMatter)) return jsonError("You do not have access to that matter", 403, { code: "matter_forbidden" });
   if (body.data.frontend && workflow.isTemplate) {
-    const own = workflowForTemplate(id, { ownerId: WORKFLOW_CURRENT_USER.id });
+    const own = workflowForTemplate(id, { ownerId: principal.id });
     if (own) workflow = own;
   }
   try {
-    const run = await startRun(workflow, { inputs: body.data.inputs ?? {}, matterId: body.data.matterId ?? undefined, triggeredBy: body.data.triggeredBy ?? "manual", triggeredById: WORKFLOW_CURRENT_USER.id });
+    const run = await startRun(workflow, { inputs: body.data.inputs ?? {}, matterId: body.data.matterId ?? undefined, triggeredBy: body.data.triggeredBy ?? "manual", triggeredById: principal.id });
     return Response.json({ run: { id: run.id, status: run.status, workflowId: run.workflowId, startedAt: run.startedAt }, workflow: { id: workflow.id, name: workflow.name } }, { status: 202 });
   } catch (e) { return errorResponse(e); }
 }

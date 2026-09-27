@@ -5,7 +5,6 @@ import { AlertTriangle, Calculator, CalendarClock, CheckSquare, ExternalLink, Ga
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Chip } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TrustBadge } from "@/components/ai/trust-badge";
 import type { Provenance } from "@/lib/integrity/types";
@@ -16,7 +15,7 @@ import { useHomeUI, type HomeSection } from "../store";
 import { MatterBadge } from "./shared";
 
 const KIND_ICON: Record<BriefItem["kind"], LucideIcon> = { deadline: CalendarClock, hearing: Gavel, task: CheckSquare, news: Newspaper, update: Users, matter: Scale, note: StickyNote };
-const KIND_TONE: Record<BriefItem["kind"], string> = { deadline: "text-destructive", hearing: "text-primary", task: "text-chart-3", news: "text-chart-2", update: "text-chart-4", matter: "text-primary", note: "text-muted-foreground" };
+const KIND_TONE: Record<BriefItem["kind"], string> = { deadline: "text-muted-foreground", hearing: "text-muted-foreground", task: "text-muted-foreground", news: "text-muted-foreground", update: "text-muted-foreground", matter: "text-muted-foreground", note: "text-muted-foreground" };
 
 /** Minimal inline markdown: **bold**, `code`, and [text](url). */
 function inline(text: string): React.ReactNode[] {
@@ -66,14 +65,13 @@ export function DailyBriefCard({ className }: { className?: string }) {
   };
 
   return (
-    <section className={cn("flex min-w-0 flex-col rounded-md border bg-card", className)} aria-label="Daily brief">
-      <header className="section-header h-9">
-        <ListChecks className="size-4 shrink-0 text-muted-foreground" />
+    <section className={cn("flex min-w-0 flex-col", className)} aria-label="Daily brief">
+      <header className="section-header h-9 px-1">
         <h2 className="section-title">Daily brief</h2>
         {brief.source === "ai" ? (
           <TrustBadge provenance={provenance} compact={!provenance} />
         ) : (
-          <Chip tone="quiet" icon={Calculator} title={aiConfigured ? "Computed from your calendar, tasks, news and updates. Regenerate for an AI brief." : "No OpenAI key configured. This brief is computed from your data."}>Computed</Chip>
+          <span className="text-[11.5px] text-muted-foreground" title={aiConfigured ? "Computed from your calendar, tasks, news and updates. Regenerate for an AI brief." : "No model provider is configured. This brief is computed from your data."}>Computed</span>
         )}
         <span className="hidden text-[11px] text-muted-foreground sm:inline">{relativeLabel(brief.generatedAt, now)}</span>
         <div className="flex-1" />
@@ -89,7 +87,7 @@ export function DailyBriefCard({ className }: { className?: string }) {
         </DropdownMenu>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-1 py-3">
         {briefLoading ? (
           <div className="space-y-2.5">
             <Skeleton className="h-4 w-3/4" />
@@ -97,12 +95,9 @@ export function DailyBriefCard({ className }: { className?: string }) {
           </div>
         ) : (
           <>
-            <p className="font-serif text-[14px] leading-snug text-foreground text-balance">{brief.headline}</p>
+            <p className="text-[13.5px] font-medium leading-snug text-foreground text-balance">{brief.headline}</p>
             {!aiConfigured && (
-              <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-[11.5px] text-warning-foreground dark:text-warning">
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                <span>OpenAI key required for an AI-written brief; this one is computed from deadlines, tasks and updates. <Link href="/settings#ai" className="font-medium underline underline-offset-2">Add key</Link></span>
-              </div>
+              <p className="text-[11.5px] text-muted-foreground">Computed from deadlines, tasks and updates. <Link href="/settings#ai" className="underline underline-offset-2 hover:text-foreground">Connect a model provider</Link> for a written brief.</p>
             )}
             <ol className="space-y-0.5">
               {items.map((it, i) => {
@@ -127,7 +122,7 @@ export function DailyBriefCard({ className }: { className?: string }) {
               })}
             </ol>
             {brief.items.length > SHOW && (
-              <button onClick={() => setShowAll((v) => !v)} className="self-start text-[11.5px] font-medium text-primary hover:underline underline-offset-2 cursor-pointer">{showAll ? "Show fewer" : `Show ${brief.items.length - SHOW} more`}</button>
+              <button onClick={() => setShowAll((v) => !v)} className="self-start text-[11.5px] text-muted-foreground hover:text-foreground cursor-pointer">{showAll ? "Show fewer" : `Show ${brief.items.length - SHOW} more`}</button>
             )}
             <BriefFooter />
           </>

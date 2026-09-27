@@ -193,11 +193,9 @@ export function litigationBudgetWorkbook(opts: { title?: string; phases?: { name
 // --------------------------------------------------------------- 5. Deposition schedule
 export function depositionScheduleWorkbook(opts: { title?: string; rows?: (string | number | null)[][] } = {}): Workbook {
   const rows = opts.rows ?? [
-    ["Gregory Hale", "Director, EHS (Meridian)", "Plaintiffs", "2026-10-06", "9:30 AM ET", "Charleston, SC — Veritext", "Veritext / Dana Whitcomb", "J. Whitfield", "PX-201–PX-238", "Noticed"],
-    ["Helen Voss", "Senior Toxicologist (Meridian)", "Plaintiffs", "2026-10-09", "9:00 AM ET", "Remote (Zoom)", "Veritext / Marcus Bell", "P. Raman", "PX-240–PX-262", "Noticed"],
-    ["Dr. Linda Whitfield", "Toxicology expert (defense)", "Plaintiffs", "2026-11-12", "10:00 AM CT", "Chicago, IL — firm office", "Esquire / TBD", "P. Raman", "Report, reliance list", "Tentative"],
-    ["Alan Pryce", "VP, Fire Suppression (Meridian)", "Plaintiffs", "2026-09-18", "9:30 AM ET", "Charleston, SC — Veritext", "Veritext / Dana Whitcomb", "J. Whitfield", "PX-180–PX-199", "Transcript pending"],
-    ["Dr. Raj Patel", "Hydrogeology expert (defense)", "Plaintiffs", "2026-11-19", "9:00 AM PT", "Remote (Zoom)", "Esquire / TBD", "D. Okafor", "Report, model files", "Tentative"],
+    ["[Witness name]", "[Title / affiliation]", "[Noticing party]", null, "[Time]", "[Location / remote]", "[Reporter / videographer]", "[Defending attorney]", "[Exhibit range]", "Tentative"],
+    ["[Witness name]", "[Title / affiliation]", "[Noticing party]", null, "[Time]", "[Location / remote]", "[Reporter / videographer]", "[Defending attorney]", "[Exhibit range]", "Tentative"],
+    ["[Witness name]", "[Title / affiliation]", "[Noticing party]", null, "[Time]", "[Location / remote]", "[Reporter / videographer]", "[Defending attorney]", "[Exhibit range]", "Tentative"],
   ];
   const data = rows.map((r, i) => { const n = 5 + i; return [...r.slice(0, 10), `=IF(D${n}="","",D${n}-TODAY())`]; });
   const last = 4 + rows.length;
@@ -218,11 +216,9 @@ export function depositionScheduleWorkbook(opts: { title?: string; rows?: (strin
 // --------------------------------------------------------------- 6. Privilege log
 export function privilegeLogWorkbook(): Workbook {
   const rows: (string | null)[][] = [
-    ["MFC-0041877", "MFC-0041879", "2019-03-14", "Robert Kaine (Associate General Counsel)", "Gregory Hale", "Nadia Brooks", "Email", "Attorney-client", "Email from in-house counsel providing legal advice regarding TSCA §8(e) reporting obligations", "Withheld", "Final"],
-    ["MFC-0042210", "MFC-0042214", "2019-04-02", "Helen Voss", "Robert Kaine (Associate General Counsel)", null, "Memo", "Attorney-client; Work product", "Memorandum prepared at the direction of counsel analyzing toxicology data for purposes of legal advice", "Withheld", "Final"],
-    ["MFC-0043588", "MFC-0043588", "2019-06-21", "Martin Suarez (Regulatory Affairs Counsel)", "Alan Pryce", "Robert Kaine (Associate General Counsel)", "Email", "Attorney-client", "Email reflecting legal advice on product labeling in anticipation of regulatory inquiry", "Redacted", "Draft"],
-    ["MFC-0044012", "MFC-0044019", "2020-01-30", "Outside counsel (Seeger Weiss LLP)", "Robert Kaine (Associate General Counsel)", null, "Letter", "Attorney-client; Work product", "Letter from outside litigation counsel assessing litigation exposure", "Withheld", "Final"],
-    ["MFC-0045101", "MFC-0045103", "2020-02-11", "Gregory Hale", "Robert Kaine (Associate General Counsel)", "Helen Voss", "Email", "Attorney-client", "Email requesting legal advice regarding response to state environmental agency request", "Withheld", "Final"],
+    ["[PREFIX-0000001]", "[PREFIX-0000003]", null, "[Author (title)]", "[Recipient(s)]", null, "Email", "Attorney-client", "[Describe the subject matter without revealing the advice, e.g. email requesting legal advice regarding (topic)]", "Withheld", "Draft"],
+    ["[PREFIX-0000010]", "[PREFIX-0000014]", null, "[Author (title)]", "[Recipient(s)]", null, "Memo", "Attorney-client; Work product", "[Memorandum prepared at the direction of counsel regarding (topic)]", "Withheld", "Draft"],
+    ["[PREFIX-0000020]", "[PREFIX-0000020]", null, "[Author (title)]", "[Recipient(s)]", "[CC]", "Email", "Attorney-client", "[Email reflecting legal advice regarding (topic); redacted]", "Redacted", "Draft"],
   ];
   const last = 4 + rows.length;
   const ops: SheetOp[] = [
@@ -242,11 +238,8 @@ export function privilegeLogWorkbook(): Workbook {
 // --------------------------------------------------------------- 7. Document production tracker
 export function productionTrackerWorkbook(): Workbook {
   const rows: (string | number | null)[][] = [
-    ["VOL001", "MFC-0000001", "MFC-0018420", "2026-03-31", "Hale; Voss", "TIFF + load file", "Confidential", "Produced"],
-    ["VOL002", "MFC-0018421", "MFC-0041876", "2026-05-15", "Brooks; Pryce", "TIFF + load file", "Confidential", "Produced"],
-    ["VOL003", "MFC-0041877", "MFC-0058903", "2026-07-08", "Kaine; Suarez", "Native (Excel) + TIFF", "Highly Confidential", "Produced"],
-    ["VOL004", "MFC-0058904", "MFC-0071250", "2026-09-30", "Hale (supplemental)", "TIFF + load file", "Confidential", "In QC"],
-    ["VOL005", "MFC-0071251", null, null, "Tier 2 custodians", "TIFF + load file", "Confidential", "Planned"],
+    ["VOL001", "ABC-0000001", "ABC-0001000", null, "[Custodians]", "TIFF + load file", "Confidential", "Planned"],
+    ["VOL002", "ABC-0001001", null, null, "[Custodians]", "TIFF + load file", "Confidential", "Planned"],
   ];
   const data = rows.map((r, i) => { const n = 5 + i; return [r[0], r[1], r[2], `=IF(C${n}="","",VALUE(RIGHT(C${n},7))-VALUE(RIGHT(B${n},7))+1)`, r[3], r[4], r[5], r[6], r[7]]; });
   const last = 4 + rows.length;
@@ -258,7 +251,7 @@ export function productionTrackerWorkbook(): Workbook {
     { type: "add_validation", range: `H5:H${last}`, kind: "list", list: ["Public", "Confidential", "Highly Confidential", "AEO"] },
     { type: "conditional_format", range: `I5:I${last}`, rule: { kind: "eq", value: "Produced" }, style: { fill: "#DCFCE7", color: "#166534" } },
     { type: "conditional_format", range: `I5:I${last}`, rule: { kind: "eq", value: "In QC" }, style: { fill: "#FEF3C7", color: "#92400E" } },
-    cells([[`A${last + 3}`, "Next Bates number", LABEL_STYLE], [`B${last + 3}`, `="MFC-"&TEXT(MAX(IFERROR(VALUE(RIGHT(C5:C${last},7)),0))+1,"0000000")`, { bold: true }], [`A${last + 4}`, "Pages produced to date", LABEL_STYLE], [`B${last + 4}`, `=SUMIF(I5:I${last},"Produced",D5:D${last})`, { bold: true, numFmt: INT }]]),
+    cells([[`A${last + 3}`, "Next Bates number", LABEL_STYLE], [`B${last + 3}`, `=LEFT(B5,LEN(B5)-7)&TEXT(MAX(IFERROR(VALUE(RIGHT(C5:C${last},7)),0))+1,"0000000")`, { bold: true }], [`A${last + 4}`, "Pages produced to date", LABEL_STYLE], [`B${last + 4}`, `=SUMIF(I5:I${last},"Produced",D5:D${last})`, { bold: true, numFmt: INT }]]),
   ];
   return buildWorkbook([{ name: "Productions", ops }]);
 }

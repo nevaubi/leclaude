@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
 import { ensureExtracted } from "@/modules/office/pdf/service";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromParams } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -30,5 +32,5 @@ async function handle(req: NextRequest, { params }: Params) {
   }
 }
 
-export const GET = handle;
-export const POST = handle;
+export const GET = withAuth(handle, { action: "read", resource: officeDocFromParams });
+export const POST = withAuth(handle, { action: "read", resource: officeDocFromParams });

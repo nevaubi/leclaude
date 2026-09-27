@@ -84,7 +84,7 @@ export function BatchDialog({ open, onOpenChange, onCreated, defaultSource }: { 
             )}
           </Field>
           <div className="grid grid-cols-[1fr_120px] gap-3">
-            <Field label="Name" required htmlFor="b-name"><Input id="b-name" size="sm" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="First pass — Voss custodial" /></Field>
+            <Field label="Name" required htmlFor="b-name"><Input id="b-name" size="sm" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="First pass — custodian name" /></Field>
             <Field label="Split every" help="documents per batch (blank = one batch)" htmlFor="b-size"><Input id="b-size" size="sm" type="number" min={1} value={size} onChange={(e) => setSize(e.target.value)} placeholder="e.g. 50" className="tabular" /></Field>
           </div>
           <Field label="Instructions" htmlFor="b-desc"><Textarea id="b-desc" value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-[52px] text-xs" placeholder="Protocol section, what to look for, escalation rule…" /></Field>

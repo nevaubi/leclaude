@@ -2,7 +2,8 @@ import "server-only";
 import { runAgent, strictJsonSchema } from "@/lib/ai/agent";
 import { aiConfig } from "@/lib/ai/config";
 import { researchToolset } from "@/lib/ai/toolkit";
-import { FIRM_NAME, LEGAL_STYLE_RULES } from "@/lib/ai/prompts";
+import { LEGAL_STYLE_RULES } from "@/lib/ai/prompts";
+import { firmLabel } from "@/modules/search/firm";
 import { attachProvenance, recordGeneration, verifyNarrative } from "@/lib/integrity/record";
 import type { Provenance, ProvenanceSource } from "@/lib/integrity/types";
 import { collectBriefFacts, computeFallbackBrief, briefStats, renderFactsForModel } from "./brief-fallback";
@@ -57,7 +58,7 @@ export async function generateDailyBrief(opts: { now?: Date; userId?: string; si
   const { tools } = researchToolset({ web: false, legal: false, internal: true });
 
   const instructions = [
-    `You write the morning brief for ${ctx.userName}, a partner at ${FIRM_NAME}. Today is ${facts.today}.`,
+    `You write the morning brief for ${ctx.userName || "the user"}, a lawyer at ${firmLabel()}. Today is ${facts.today}.`,
     "Produce a headline and 6–10 bullets that a busy litigator can act on before 9 a.m. Order: today's calendar, overdue and due-soon tasks, matter deadlines in the next 30 days, hearings/depositions later this week, hot news that changes strategy, then team updates that need a reply.",
     "Every bullet must be grounded in the facts provided (or in a tool result). Use names, dates, docket/CMO references and Bates numbers exactly as given. Say 'in 3 days' / 'overdue 2 days' rather than raw dates where it helps. No filler, no motivational language.",
     "Use get_matter_context only if you need a detail that is missing from the facts. Do not search the library or e-discovery unless a bullet requires it.",

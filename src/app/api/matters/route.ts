@@ -13,7 +13,8 @@ async function handleGET(req: NextRequest) {
   const raw = url.searchParams.get("status") ?? "open";
   if (!(MATTER_STATUS_FILTERS as readonly string[]).includes(raw)) return jsonError(`status must be one of ${MATTER_STATUS_FILTERS.join(", ")}`, 400, { code: "bad_status" });
   const matters = listMatters({ status: raw as MatterStatusFilter, q: url.searchParams.get("q") ?? undefined });
-  return Response.json({ matters, total: matters.length });
+  // Archived count lets the empty "open" view say that matters exist but are archived.
+  return Response.json({ matters, total: matters.length, archived: listMatters({ status: "archived" }).length });
 }
 
 /** POST /api/matters — create a matter (201). 422 with per-field messages on validation, 409 when the matter number is already used. */

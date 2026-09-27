@@ -6,6 +6,9 @@ import type { LibraryInitialData } from "@/modules/library/components/library-pr
 import { listItems, treeResponse } from "@/modules/library/service";
 import { parseFilters } from "@/modules/library/filters";
 import { matterFolderId } from "@/modules/library/ids";
+import { headers } from "next/headers";
+import { resolvePrincipal } from "@/lib/auth/principal";
+import { runWithPrincipal } from "@/lib/auth/context";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Library" };
@@ -20,8 +23,9 @@ export default async function Page({ searchParams }: Props) {
   const filters = parseFilters(sp);
   // `?matter=` alone opens the matter folder (the client mirrors this in the URL).
   if (filters.matterId && !filters.folder && filters.view === "folder" && !filters.q) { filters.folder = matterFolderId(filters.matterId); filters.matterId = undefined; }
-  const tree = treeResponse();
-  const list = filters.q ? null : listItems(filters);
+  // Resolve the principal so the first render is matter-scoped exactly like /api/library/*.
+  const principal = await resolvePrincipal(new Request("http://localhost/library", { headers: new Headers(await headers()) }));
+  const { tree, list } = runWithPrincipal(principal, () => ({ tree: treeResponse(), list: filters.q ? null : listItems(filters) }));
   const initial: LibraryInitialData = { tree, list, aiConfigured: tree.aiConfigured };
   return (
     <React.Suspense fallback={<div className="flex h-full"><Skeleton className="m-3 w-60" /><div className="flex-1 space-y-3 p-3"><Skeleton className="h-10" /><Skeleton className="h-64" /></div></div>}>

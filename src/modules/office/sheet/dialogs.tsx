@@ -88,7 +88,7 @@ export function ConditionalFormatDialog({ open, onOpenChange }: { open: boolean;
           <div className="flex items-end"><Button size="sm" onClick={add}>Add rule</Button></div>
         </div>
         <div className="mt-2">
-          <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Rules on {sheet.name} · {sheet.conditionalFormats.length}</div>
+          <div className="mb-1 text-[11px] font-medium text-muted-foreground">Rules on {sheet.name} · {sheet.conditionalFormats.length}</div>
           {sheet.conditionalFormats.length === 0 ? <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">No rules yet</div> : (
             <ul className="divide-y rounded-md border text-xs">
               {sheet.conditionalFormats.map((cf) => (

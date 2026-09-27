@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { parsePageRange } from "@/modules/office/pdf/model";
 import { loadPdf, splitToNewDocument } from "@/modules/office/pdf/service";
 import { activePages } from "@/modules/office/pdf/model";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromParams } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -10,7 +12,7 @@ export const maxDuration = 120;
 type Params = { params: Promise<{ id: string }> };
 
 /** Extract pages into a new document. Body: { pages: "1-3,5" | number[], title? }. */
-export async function POST(req: NextRequest, { params }: Params) {
+async function handlePOST(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = (await req.json().catch(() => null)) as { pages?: string | number[]; title?: string } | null;
   if (!body?.pages) return jsonError("`pages` is required");
@@ -27,3 +29,5 @@ export async function POST(req: NextRequest, { params }: Params) {
     return jsonError(`Split failed: ${(e as Error).message}`, 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });

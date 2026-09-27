@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { aiConfig } from "@/lib/ai/config";
 import { currentUser } from "@/lib/current-user";
-import { MATTERS } from "@/lib/seed/ids";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReviewPage } from "@/modules/ediscovery/components/review-page";
+import { NoMattersState } from "@/modules/ediscovery/components/no-matters";
 import { ensureReviewSeeded } from "@/modules/ediscovery/seed";
 import { REVIEW_TABS, type ReviewTab } from "@/modules/ediscovery/types";
 
@@ -18,32 +18,42 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
   ensureReviewSeeded(d);
   const counts = new Map<string, number>();
   for (const doc of d.edocs.all()) counts.set(doc.matterId, (counts.get(doc.matterId) ?? 0) + 1);
+  const user = currentUser((id) => d.people.get(id)?.name);
+  // Real matters only, newest first; a closed matter is listed only when it is linked to directly.
   const matters = d.matters
-    .list({ where: (m) => m.status !== "closed" })
-    .map((m) => ({ id: m.id, shortName: m.shortName, name: m.name, caption: m.caption, client: m.client, stage: m.stage, docCount: counts.get(m.id) ?? 0 }))
-    .sort((a, b) => b.docCount - a.docCount || a.shortName.localeCompare(b.shortName));
-  // A `?doc=` deep link (id or Bates) without `?matter=` opens in the document's own matter, not the default one.
+    .list({ where: (m) => m.status !== "closed" || m.id === sp.matter })
+    .sort((a, b) => (b.openedAt ?? "").localeCompare(a.openedAt ?? "") || a.shortName.localeCompare(b.shortName))
+    .map((m) => ({ id: m.id, shortName: m.shortName, name: m.name, caption: m.caption, client: m.client, stage: m.stage, docCount: counts.get(m.id) ?? 0 }));
+  if (!matters.length) return <NoMattersState />;
+  // A `?doc=` deep link (id or Bates) without `?matter=` opens in the document's own matter.
   // The viewer and the list cursor work on document ids, so a Bates deep link is resolved to its id here.
-  const linkedDoc = sp.doc ? d.edocs.get(sp.doc) ?? d.edocs.findOne((x) => x.bates.toLowerCase() === sp.doc!.toLowerCase()) : null;
-  const requestedMatter = sp.matter ?? linkedDoc?.matterId;
-  const matterId = requestedMatter && matters.some((m) => m.id === requestedMatter) ? requestedMatter : matters.find((m) => m.id === MATTERS.afff)?.id ?? matters[0]?.id ?? MATTERS.afff;
+  const linkedDoc = sp.doc ? d.edocs.get(sp.doc) ?? d.edocs.findOne((x) => x.bates.toLowerCase() === sp.doc!.toLowerCase() && (!sp.matter || x.matterId === sp.matter)) : null;
+  const known = (id: string | null | undefined): id is string => !!id && matters.some((m) => m.id === id);
+  // Resolution order: explicit ?matter= → the linked document's matter → the matter this user last reviewed → the newest matter.
+  const lastKey = `ediscovery:lastMatter:${user.id}`;
+  const requested = sp.matter ?? linkedDoc?.matterId;
+  const last = d.kv.get<string>(lastKey);
+  const matterId = known(requested) ? requested : known(last) ? last : matters[0].id;
+  if (known(requested) && requested !== last) d.kv.set(lastKey, requested);
   // `?tab=` is canonical; `?view=timeline` is accepted for links created by the Home module,
   // `?view=privilege` (privilege-log tasks) opens the Codes & privilege tab on the log section,
   // `?view=review` (Settings → Review queue) opens it on the "Needs review" queue and
   // `?view=production` (older links) opens the Productions tab.
-  const requested = sp.tab ?? sp.view;
+  const requestedTab = sp.tab ?? sp.view;
   const isCodesSection = (v: string | undefined): v is "privilege" | "rules" | "review" => v === "privilege" || v === "rules" || v === "review";
-  const codesSection = isCodesSection(sp.view) ? sp.view : isCodesSection(requested) ? requested : undefined;
-  const tab = (codesSection ? "codes" : requested === "production" || sp.production ? "productions" : sp.batch && !requested ? "batches" : REVIEW_TABS.some((t) => t.id === requested) ? requested : "review") as ReviewTab;
+  const codesSection = isCodesSection(sp.view) ? sp.view : isCodesSection(requestedTab) ? requestedTab : undefined;
+  const tab = (codesSection ? "codes" : requestedTab === "production" || sp.production ? "productions" : sp.batch && !requestedTab ? "batches" : REVIEW_TABS.some((t) => t.id === requestedTab) ? requestedTab : "review") as ReviewTab;
+  // Reviewers: the firm's attorneys, paralegals and staff, plus the signed-in user (always assignable).
   const reviewers = d.people
-    .find((p) => p.organization === "Seeger Weiss LLP" && (p.role === "attorney" || p.role === "paralegal" || p.role === "staff"))
+    .find((p) => p.role === "attorney" || p.role === "paralegal" || p.role === "staff" || p.id === user.id)
     .map((p) => ({ id: p.id, name: p.name, title: p.title }));
-  const user = currentUser((id) => d.people.get(id)?.name);
+  if (!reviewers.some((r) => r.id === user.id)) reviewers.unshift({ id: user.id, name: user.name, title: undefined });
   return (
     <Suspense fallback={<ReviewSkeleton />}>
       <ReviewPage
         matters={matters}
         initialMatterId={matterId}
+        matterFromUrl={known(requested)}
         initialTab={tab}
         initialCodesSection={codesSection}
         initialDocId={linkedDoc?.id ?? sp.doc}

@@ -23,7 +23,6 @@ import { validateWorkflow } from "@/modules/workflows/graph";
 import { buildSystemTemplates } from "@/modules/workflows/templates-system";
 import { buildTemplates, TEMPLATE_FRONTENDS } from "@/modules/workflows/templates";
 import { startRun } from "@/modules/workflows/engine";
-import { isTerminalStatus } from "@/modules/workflows/types";
 
 const DEMO_IDS = new Set<string>([...Object.values(PEOPLE), ...Object.values(MATTERS)]);
 /** Names from the demo dataset that must not appear in reference content. */
@@ -92,7 +91,6 @@ describe("reference seed", () => {
     const before = { tasks: d.tasks.all().length, events: d.events.all().length, library: d.library.all().length, updates: d.updates.all().length, matters: d.matters.all().length, insights: d.collection("intel_insights").all().length };
     for (const w of buildSystemTemplates()) {
       const run = await startRun(w, { triggeredBy: "manual", wait: true });
-      expect(isTerminalStatus(run.status) || run.status === "succeeded", `${w.id}: ${run.status}`).toBe(true);
       expect(run.status, `${w.id}: ${run.error ?? ""} ${(run.logs ?? []).slice(-3).join(" | ")}`).not.toBe("failed");
       expect(run.status, w.id).not.toBe("waiting_approval");
       expect(run.status, `${w.id}: ${(run.logs ?? []).slice(-3).join(" | ")}`).toBe("succeeded");

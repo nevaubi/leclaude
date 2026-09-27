@@ -43,7 +43,7 @@ export function InsightsView({ initial, matters, userId, hasKey, status, openId 
   ];
   const update = (next: IntelInsight) => setItems((list) => list.map((i) => (i.id === next.id ? { ...i, ...next } : i)));
   const columns: DataTableColumn<IntelInsight>[] = [
-    { id: "kind", header: "Kind", width: 92, sortable: true, accessor: (i) => i.kind, render: (i) => <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground">{INSIGHT_KIND_LABEL[i.kind]}</span> },
+    { id: "kind", header: "Kind", width: 92, sortable: true, accessor: (i) => i.kind, render: (i) => <span className="text-[11.5px] text-muted-foreground">{INSIGHT_KIND_LABEL[i.kind]}</span> },
     { id: "title", header: "Insight", width: 420, minWidth: 220, locked: true, sortable: true, accessor: (i) => i.title.toLowerCase(), render: (i) => <span className="min-w-0"><span className="block truncate font-medium">{i.title}</span></span> },
     { id: "scope", header: "Scope", width: 120, sortable: true, accessor: (i) => scopeLabel(i, matterName), render: (i) => <span className="truncate text-muted-foreground">{scopeLabel(i, matterName)}</span> },
     { id: "confidence", header: "Conf.", width: 64, align: "right", sortable: true, accessor: (i) => i.confidence, render: (i) => <ConfidenceText value={i.confidence} /> },
@@ -85,7 +85,7 @@ function InsightInspector({ id, hasKey, matterName, onClose, onChange }: { id: s
     try {
       const res = await fetch(`/api/intel/insights/${encodeURIComponent(id)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
       const j = await res.json().catch(() => ({}));
-      if (res.status === 503) { toast.error("Verification needs an OpenAI key", { description: "Add OPENAI_API_KEY to .env.local to verify insights against their evidence." }); return; }
+      if (res.status === 503) { toast.error("Verification needs a model provider", { description: "Configure a model provider (Settings, AI) to verify insights against their evidence." }); return; }
       if (!res.ok) throw new Error(j.error ?? res.statusText);
       const next = (j.insight ?? j) as IntelInsight | undefined;
       if (next && next.id) onChange(next);
@@ -102,7 +102,7 @@ function InsightInspector({ id, hasKey, matterName, onClose, onChange }: { id: s
         <div className="flex flex-wrap items-center gap-1 px-3 py-2">
           {i.status !== "published" && i.status !== "dismissed" && <Tip label="Publish to Home and matter views"><Button size="xs" onClick={() => void act("publish")} disabled={busy != null}>{busy === "publish" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Publish</Button></Tip>}
           {i.status !== "dismissed" && <Button size="xs" variant="ghost" onClick={() => void act("dismiss")} disabled={busy != null}><X className="size-3.5" /> Dismiss</Button>}
-          <Tip label={hasKey ? "Re-check every claim against the cited passages" : "Needs OPENAI_API_KEY"}><Button size="xs" variant="ghost" onClick={() => void act("verify")} disabled={busy != null}>{busy === "verify" ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Verify</Button></Tip>
+          <Tip label={hasKey ? "Re-check every claim against the cited passages" : "Needs a model provider"}><Button size="xs" variant="ghost" onClick={() => void act("verify")} disabled={busy != null}>{busy === "verify" ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Verify</Button></Tip>
           <span className="flex-1" />
           <span className="text-[11px] text-muted-foreground">{INSIGHT_STATUS_LABEL[i.status]}</span>
         </div>

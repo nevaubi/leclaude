@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/integrity/audit";
 import type { Provenance } from "@/lib/integrity/types";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromParams } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ interface AppliedProposal { id: string; kind: string; title: string; summary?: s
  * Editors call this after applying (or discarding) the agent's edit proposals so every AI application is on the audit
  * trail with the proposal ids, targets and the provenance the agent attached to them.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const doc = db().officeDocs.get(id);
   if (!doc) return jsonError("Not found", 404);
@@ -35,3 +37,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
   return Response.json({ ok: true, eventId: ev.id, applied: applied.length, discarded, failed });
 }
+
+export const POST = withAuth(handlePOST, { action: "write", resource: officeDocFromParams });

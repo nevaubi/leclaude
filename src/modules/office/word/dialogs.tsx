@@ -37,8 +37,8 @@ export function PromptDialog({ request, onSubmit, onCancel }: { request: PromptR
 
 const EXAMPLES: { label: string; source: string }[] = [
   { label: "Procedural timeline", source: `timeline\n    title Procedural history\n    2026-01-20 : Complaint filed\n    2026-03-04 : Answer and counterclaim\n    2026-06-15 : Close of fact discovery\n    2026-09-09 : MSJ filed\n    2026-10-09 : Opposition due` },
-  { label: "Corporate structure", source: `flowchart TB\n    P[Parent Holdings, Inc.] --> S1[Meridian Fluorochem Corp.]\n    P --> S2[Meridian Specialty Chemicals LLC]\n    S1 --> J[Joint venture 49%]\n    S2 --> D[Distribution sub]` },
-  { label: "Exposure pathway", source: `flowchart LR\n    A[AFFF training use] --> B[Soil infiltration]\n    B --> C[Groundwater plume]\n    C --> D[Municipal wells]\n    D --> E[Distribution system]\n    E --> F[Plaintiff residences]` },
+  { label: "Corporate structure", source: `flowchart TB\n    P[Parent Holdings, Inc.] --> S1[Operating Company A]\n    P --> S2[Operating Company B LLC]\n    S1 --> J[Joint venture 49%]\n    S2 --> D[Distribution sub]` },
+  { label: "Exposure pathway", source: `flowchart LR\n    A[Product release] --> B[Soil infiltration]\n    B --> C[Groundwater plume]\n    C --> D[Municipal wells]\n    D --> E[Distribution system]\n    E --> F[Plaintiff residences]` },
   { label: "Deal steps", source: `sequenceDiagram\n    participant B as Buyer\n    participant S as Seller\n    participant E as Escrow\n    B->>S: Signing (SPA)\n    B->>E: Deposit\n    S-->>B: Consents & disclosures\n    B->>S: Closing payment\n    E-->>S: Release escrow (18 mo)` },
 ];
 

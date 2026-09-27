@@ -61,7 +61,7 @@ export function ThumbnailRail({ pdfDoc, cacheKey, commentCounts, onExtract }: Th
 
   return (
     <div className="flex h-full w-[168px] shrink-0 flex-col border-r bg-sidebar">
-      <div className="flex h-8 shrink-0 items-center justify-between border-b px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="flex h-8 shrink-0 items-center justify-between border-b px-2 text-[11px] font-medium text-muted-foreground">
         <span>Pages</span><span className="tabular">{pages.length}</span>
       </div>
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin p-2" role="listbox" aria-label="Page thumbnails" aria-multiselectable>
@@ -91,7 +91,7 @@ export function ThumbnailRail({ pdfDoc, cacheKey, commentCounts, onExtract }: Th
         </DndContext>
         {deleted.length > 0 && (
           <div className="mt-3 border-t pt-2">
-            <div className="mb-1.5 px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Deleted ({deleted.length})</div>
+            <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">Deleted ({deleted.length})</div>
             <ul className="space-y-1">
               {deleted.map((p) => (
                 <li key={p.id} className="flex items-center justify-between rounded-md border border-dashed px-2 py-1 text-[11px] text-muted-foreground">

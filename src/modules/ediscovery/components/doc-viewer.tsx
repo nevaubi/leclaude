@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { ChevronLeft, ChevronRight, X, Maximize2, Minimize2, Paperclip, MessagesSquare, Copy, Files, ArrowUpLeft, PanelRightClose, PanelRightOpen, Search, ClipboardCopy, Loader2, AlertTriangle, CircleCheck, CircleX, Flame, Save, ShieldAlert, EyeOff, Layers, History, ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Maximize2, Minimize2, Paperclip, MessagesSquare, Copy, Files, ArrowUpLeft, PanelRightClose, PanelRightOpen, Search, ClipboardCopy, Loader2, AlertTriangle, CircleCheck, CircleX, Flame, Save, ShieldAlert, EyeOff, Layers, History, ArrowRight, Download } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,8 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count, onN
   const [draft, setDraft] = React.useState<CodingDecision | null>(null);
   const [saving, setSaving] = React.useState(false);
   const doc = detail.data?.doc;
+  // Ingested documents carry their original-file record (hash, mime, extraction status); seeded or API-created ones do not.
+  const original = (doc as (typeof doc & { original?: { name: string; extraction: { status: string } } }) | undefined)?.original;
   const dirty = !!doc && !!draft && JSON.stringify(normalise(draft)) !== JSON.stringify(normalise(doc.coding));
 
   React.useEffect(() => { if (doc) setDraft({ ...doc.coding, issues: [...(doc.coding.issues ?? [])] }); }, [doc]);
@@ -142,6 +144,7 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count, onN
         ) : <Skeleton className="h-4 flex-1" />}
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <FamilyNav family={family} threadIdx={threadIdx} onOpen={setOpenDocId} />
+          {original && <Tip label={`Download original (${original.name})`}><Button asChild variant="ghost" size="icon-xs"><a href={`/api/ediscovery/docs/${encodeURIComponent(docId)}/original`} download aria-label="Download original file"><Download className="size-4" /></a></Button></Tip>}
           <Tip label={redactMode ? "Leave redaction mode" : "Redact: select text or drag on a page image"}><Button variant={redactMode ? "secondary" : "ghost"} size="icon-xs" onClick={() => setRedactMode(!redactMode)} aria-label="Toggle redaction mode" aria-pressed={redactMode}><EyeOff className="size-4" /></Button></Tip>
           <Tip label={codingVisible ? "Hide coding panel" : "Show coding panel"}><Button variant="ghost" size="icon-xs" onClick={toggleCoding} aria-label="Toggle coding panel" aria-pressed={codingVisible}>{codingVisible ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}</Button></Tip>
           <Tip label={fullscreen ? "Exit full screen" : "Full screen"} shortcut="F"><Button variant="ghost" size="icon-xs" onClick={() => setFullscreen(!fullscreen)} aria-label="Toggle full screen">{fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button></Tip>
@@ -163,7 +166,8 @@ export function DocViewer({ docId, terms, onNavigate, onClose, index, count, onN
       {!narrow && !codingVisible && draft && doc && (
         <QuickDecisionRow draft={draft} onChange={setDraft} onSave={() => save()} saving={saving} dirty={dirty} onOpenPanel={() => setCodingOpen(true)} />
       )}
-      {redactMode && <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-warning/10 px-3 text-[11.5px] text-warning-foreground dark:text-warning" role="status"><EyeOff className="size-3.5" /> Redaction mode — select text in the Text tab or drag a rectangle on a page image. Existing redactions open on click.<div className="flex-1" /><Button size="xs" variant="ghost" className="h-5 px-1.5" onClick={() => setRedactMode(false)}>Done</Button></div>}
+      {original?.extraction.status === "needs_ocr" && <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-3 text-[11.5px] text-muted-foreground" role="status">No text layer — this file needs OCR before search and analysis can read it. The original is stored unchanged.</div>}
+      {redactMode && <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/50 px-3 text-[11.5px] text-foreground" role="status"><EyeOff className="size-3.5" /> Redaction mode — select text in the Text tab or drag a rectangle on a page image. Existing redactions open on click.<div className="flex-1" /><Button size="xs" variant="ghost" className="h-5 px-1.5" onClick={() => setRedactMode(false)}>Done</Button></div>}
       <div className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-hidden">
           {!detail.data ? (
@@ -208,10 +212,10 @@ function QuickDecisionRow({ draft, onChange, onSave, saving, dirty, onOpenPanel 
   const off = "border-border text-muted-foreground hover:bg-accent hover:text-foreground";
   return (
     <div className="sticky-actions flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1.5" role="toolbar" aria-label="Coding decisions">
-      <Tip label="Responsive" shortcut="R"><button type="button" onClick={() => onChange({ ...draft, responsive: draft.responsive === true ? null : true })} aria-pressed={draft.responsive === true} className={cn(seg, draft.responsive === true ? "border-success/40 bg-success/12 text-success" : off)}><CircleCheck className="size-3.5" /> Responsive</button></Tip>
+      <Tip label="Responsive" shortcut="R"><button type="button" onClick={() => onChange({ ...draft, responsive: draft.responsive === true ? null : true })} aria-pressed={draft.responsive === true} className={cn(seg, draft.responsive === true ? "border-foreground/25 bg-accent text-foreground" : off)}><CircleCheck className="size-3.5" /> Responsive</button></Tip>
       <Tip label="Not responsive" shortcut="N"><button type="button" onClick={() => onChange({ ...draft, responsive: draft.responsive === false ? null : false })} aria-pressed={draft.responsive === false} className={cn(seg, draft.responsive === false ? "border-foreground/25 bg-muted text-foreground" : off)}><CircleX className="size-3.5" /> Not</button></Tip>
-      <Tip label="Privileged (withhold)" shortcut="P"><button type="button" onClick={() => onChange({ ...draft, privileged: !draft.privileged, privilegeBasis: draft.privileged ? undefined : (draft.privilegeBasis ?? "attorney-client") })} aria-pressed={!!draft.privileged} className={cn(seg, draft.privileged ? "border-info/40 bg-info/12 text-info" : off)}><ShieldAlert className="size-3.5" /> Privileged</button></Tip>
-      <Tip label="Hot document" shortcut="H"><button type="button" onClick={() => onChange({ ...draft, hot: !draft.hot })} aria-pressed={!!draft.hot} className={cn(seg, draft.hot ? "border-destructive/40 bg-destructive/10 text-destructive" : off)}><Flame className="size-3.5" /> Hot</button></Tip>
+      <Tip label="Privileged (withhold)" shortcut="P"><button type="button" onClick={() => onChange({ ...draft, privileged: !draft.privileged, privilegeBasis: draft.privileged ? undefined : (draft.privilegeBasis ?? "attorney-client") })} aria-pressed={!!draft.privileged} className={cn(seg, draft.privileged ? "border-foreground/25 bg-accent text-foreground" : off)}><ShieldAlert className="size-3.5" /> Privileged</button></Tip>
+      <Tip label="Hot document" shortcut="H"><button type="button" onClick={() => onChange({ ...draft, hot: !draft.hot })} aria-pressed={!!draft.hot} className={cn(seg, draft.hot ? "border-destructive/40 text-destructive" : off)}><Flame className="size-3.5" /> Hot</button></Tip>
       <div className="flex-1" />
       <Tip label="Open the coding panel for issue codes, notes and reviewer"><Button variant="ghost" size="xs" className="h-7" onClick={onOpenPanel}><PanelRightOpen className="size-3.5" /> Details</Button></Tip>
       <Tip label={autoAdvance ? "Save coding and open the next document" : "Save coding"} shortcut="⌘S"><Button size="xs" className="h-7" onClick={onSave} disabled={saving} variant={dirty ? "default" : "secondary"}>{saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />} {dirty ? (autoAdvance ? "Save & next" : "Save") : "Saved"}</Button></Tip>
@@ -340,7 +344,7 @@ function TextView({ detail, terms, redactions, redactMode, onCreated, onRemoved 
           const pieces = splitRanges(pageText, ranges);
           return (
             <article key={i} data-page-bates={pageBates} className="paper mx-auto mb-4 max-w-[760px] rounded-md border px-5 py-5 sm:px-8 sm:py-6">
-              <div className="mb-3 flex items-center justify-between border-b pb-1.5 font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
+              <div className="mb-3 flex items-center justify-between border-b pb-1.5 font-mono text-[11px] text-muted-foreground">
                 <span>Page {i + 1} of {spans.length}</span>
                 <span>{pageBates}</span>
               </div>
@@ -438,7 +442,7 @@ function ImageView({ detail, redactions, redactMode, onCreated, onRemoved }: { d
       {!sheets && <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Rendering pages…</div>}
       {sheets?.map((sheet, idx) => (
         <div key={idx} className="mx-auto mb-4 w-full max-w-[720px]">
-          <div className="mb-1 flex items-center justify-between font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground"><span>Sheet {idx + 1} of {sheets.length} · page {sheet.logical}{!sheet.first && " (continued)"}</span>{pageRedactions.filter((r) => r.page === sheet.logical).length > 0 && sheet.first && <span>{pageRedactions.filter((r) => r.page === sheet.logical).length} redaction{pageRedactions.filter((r) => r.page === sheet.logical).length === 1 ? "" : "s"}</span>}</div>
+          <div className="mb-1 flex items-center justify-between font-mono text-[11px] text-muted-foreground"><span>Sheet {idx + 1} of {sheets.length} · page {sheet.logical}{!sheet.first && " (continued)"}</span>{pageRedactions.filter((r) => r.page === sheet.logical).length > 0 && sheet.first && <span>{pageRedactions.filter((r) => r.page === sheet.logical).length} redaction{pageRedactions.filter((r) => r.page === sheet.logical).length === 1 ? "" : "s"}</span>}</div>
           <div className={cn("relative select-none rounded-md border bg-white shadow-sm", redactMode && sheet.first && "cursor-crosshair", drag?.sheet === idx && "touch-none")} onPointerDown={(e) => sheet.first && onPointerDown(e, idx)} onPointerMove={onPointerMove} onPointerUp={(e) => onPointerUp(e, sheet)} style={{ aspectRatio: `${sheet.width} / ${sheet.height}` }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={sheet.url} alt={`${doc.bates} sheet ${idx + 1}`} className="block h-auto w-full rounded-md" draggable={false} />
@@ -508,7 +512,7 @@ function MetadataView({ detail }: { detail: DocDetailResponse }) {
       <KeyValueList items={items} labelWidth={150} />
       {doc.entities && (
         <div className="mt-5 space-y-2">
-          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Entities</div>
+          <div className="text-[12px] font-medium text-muted-foreground">Entities</div>
           {(["people", "orgs", "places", "chemicals"] as const).map((k) => doc.entities?.[k]?.length ? <div key={k} className="flex flex-wrap items-baseline gap-1 text-[12px]"><span className="w-20 text-[11px] capitalize text-muted-foreground">{k}</span>{doc.entities[k]!.map((e) => <Badge key={e} variant="outline" size="sm" className="font-normal">{e}</Badge>)}</div> : null)}
         </div>
       )}
@@ -550,7 +554,7 @@ function FamilyView({ detail, onOpen }: { detail: DocDetailResponse; onOpen: (id
       )}
       {groups.map((g) => (
         <div key={g.title} className="mb-4">
-          <div className="mb-1 flex items-center gap-1.5 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><g.icon className="size-3.5" />{g.title}<span className="font-normal normal-case tracking-normal">· {g.rows.length}{g.hint ? ` · ${g.hint}` : ""}</span></div>
+          <div className="mb-1 flex items-center gap-1.5 px-1 text-[12px] font-medium text-muted-foreground"><g.icon className="size-3.5" />{g.title}<span className="font-normal normal-case tracking-normal">· {g.rows.length}{g.hint ? ` · ${g.hint}` : ""}</span></div>
           <ul className="divide-y rounded-md border">
             {g.rows.map((r) => <li key={r.id}><RowButton row={r} current={r.id === detail.doc.id} onClick={() => onOpen(r.id)} trailing={g.title === "Near-duplicates" && detail.doc.nearDuplicateScores?.[r.id] != null ? <span className="tabular text-[10.5px] text-muted-foreground">{Math.round(detail.doc.nearDuplicateScores[r.id] * 100)}%</span> : undefined} /></li>)}
           </ul>
@@ -588,7 +592,7 @@ function SimilarView({ docId, active, onOpen }: { docId: string; active: boolean
   const rows = sim.data?.similar ?? [];
   return (
     <div className="h-full overflow-auto scrollbar-thin p-3">
-      <p className="mb-2 px-1 text-[11px] text-muted-foreground">{aiConfigured ? "Hybrid ranking: embeddings fused with BM25 keyword scores." : "Keyword (BM25) similarity — add an OpenAI key for embedding-based ranking."} Family, thread and duplicate relations are listed first.</p>
+      <p className="mb-2 px-1 text-[11px] text-muted-foreground">{aiConfigured ? "Hybrid ranking: embeddings fused with BM25 keyword scores." : "Keyword (BM25) similarity — configure an AI provider for embedding-based ranking."} Family, thread and duplicate relations are listed first.</p>
       {!rows.length ? <div className="p-4 text-sm text-muted-foreground">No similar documents found.</div> : (
         <ul className="divide-y rounded-md border">
           {rows.map((r) => (
@@ -626,17 +630,17 @@ function HistoryView({ docId, active, redactions }: { docId: string; active: boo
     <div className="h-full overflow-auto scrollbar-thin p-3">
       {batches.length > 0 && (
         <div className="mb-3">
-          <div className="mb-1 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Batches</div>
+          <div className="mb-1 px-1 text-[12px] font-medium text-muted-foreground">Batches</div>
           <ul className="divide-y rounded-md border text-[11.5px]">{batches.map((b) => <li key={b.id} className="flex h-7 items-center gap-2 px-2.5"><Layers className="size-3 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{b.name}</span>{b.qc && <StateChip tone="info">QC sample</StateChip>}</li>)}</ul>
         </div>
       )}
       {redactions.length > 0 && (
         <div className="mb-3">
-          <div className="mb-1 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Redactions · {redactions.length}</div>
+          <div className="mb-1 px-1 text-[12px] font-medium text-muted-foreground">Redactions · {redactions.length}</div>
           <ul className="divide-y rounded-md border text-[11.5px]">{redactions.map((r) => <li key={r.id} className="flex h-7 items-center gap-2 px-2.5"><EyeOff className="size-3 text-muted-foreground" /><span className="font-mono text-[11px]">{r.label}</span><span className="min-w-0 flex-1 truncate text-muted-foreground">{r.kind === "text" ? r.quote ?? `chars ${r.start}–${r.end}` : `page ${r.page}`}</span><span className="tabular text-[10.5px] text-muted-foreground">{formatDateTime(r.createdAt)}</span></li>)}</ul>
         </div>
       )}
-      <div className="mb-1 flex items-center gap-1.5 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground"><History className="size-3.5" /> Audit trail · {rows.length}</div>
+      <div className="mb-1 flex items-center gap-1.5 px-1 text-[12px] font-medium text-muted-foreground"><History className="size-3.5" /> Audit trail · {rows.length}</div>
       {!rows.length ? <div className="rounded-md border border-dashed p-4 text-center text-[12px] text-muted-foreground">No recorded events for this document yet.</div> : (
         <ol className="divide-y rounded-md border">
           {rows.map((e) => (

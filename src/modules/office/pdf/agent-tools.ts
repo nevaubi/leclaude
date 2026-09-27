@@ -274,7 +274,7 @@ export function pdfAgentTools(ctx: Ctx, deps: PdfToolDeps = {}): ToolDef<never, 
   add(defineTool<{ prefix: string; start: number; digits?: number; position?: BatesPosition; legend?: string; font_size?: number }>({
     name: "bates_stamp",
     description: "Configure Bates numbering for every active page in order (applied on export or burn-in). Position: bottom-right (default), bottom-left, bottom-center, top-right, top-left, top-center. Optional confidentiality legend goes in the opposite corner.",
-    parameters: { type: "object", properties: { prefix: { type: "string", description: "e.g. MFC-" }, start: { type: "integer" }, digits: { type: "integer", description: "Zero padding, default 7" }, position: { type: "string", enum: ["top-right", "bottom-right", "bottom-center", "top-left", "bottom-left", "top-center"] }, legend: { type: "string", description: "e.g. CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER" }, font_size: { type: "number" } }, required: ["prefix", "start"] },
+    parameters: { type: "object", properties: { prefix: { type: "string", description: "e.g. ABC-" }, start: { type: "integer" }, digits: { type: "integer", description: "Zero padding, default 7" }, position: { type: "string", enum: ["top-right", "bottom-right", "bottom-center", "top-left", "bottom-left", "top-center"] }, legend: { type: "string", description: "e.g. CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER" }, font_size: { type: "number" } }, required: ["prefix", "start"] },
     label: (a) => `Bates ${a.prefix}${a.start}`,
     execute: ({ prefix, start, digits, position, legend, font_size }) => {
       const cfg = { prefix, start, digits: digits ?? 7, position: position ?? "bottom-right", legend, fontSize: font_size };

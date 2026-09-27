@@ -114,7 +114,7 @@ export function WordToolbar(props: ToolbarProps) {
           <DropdownMenuContent align="start" className="w-64">
             <DropdownMenuLabel>Style</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={state.style} onValueChange={(v) => applyParagraphStyle(editor, v as ParagraphStyle)}>
-              {PARAGRAPH_STYLES.map((s) => <DropdownMenuRadioItem key={s.id} value={s.id}><span className={cn(s.id.startsWith("heading") && "font-semibold", s.id === "title" && "font-semibold uppercase tracking-wide", s.id === "caption" && "italic text-muted-foreground")}>{s.label}</span>{STYLE_SHORTCUT[s.id] && <kbd className="ml-auto">{STYLE_SHORTCUT[s.id]}</kbd>}</DropdownMenuRadioItem>)}
+              {PARAGRAPH_STYLES.map((s) => <DropdownMenuRadioItem key={s.id} value={s.id}><span className={cn(s.id.startsWith("heading") && "font-semibold", s.id === "title" && "font-semibold", s.id === "caption" && "italic text-muted-foreground")}>{s.label}</span>{STYLE_SHORTCUT[s.id] && <kbd className="ml-auto">{STYLE_SHORTCUT[s.id]}</kbd>}</DropdownMenuRadioItem>)}
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>

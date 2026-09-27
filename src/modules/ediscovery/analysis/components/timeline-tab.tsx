@@ -126,7 +126,7 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
             <div className="flex h-full items-center justify-center p-8"><EmptyState icon={Activity} title={hasFilters ? "No events match the filters" : "No events yet"} description={hasFilters ? "Clear a filter or widen the date range." : "Add events by hand or extract them from documents."} action={hasFilters ? <Button size="sm" variant="outline" onClick={() => setFilters({ categories: [] })}>Clear filters</Button> : <Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" /> Add event</Button>} /></div>
           ) : (
             <table className="w-full table-fixed border-collapse text-[12px]">
-              <thead className="sticky top-0 z-10 bg-muted/80 text-[10.5px] uppercase tracking-wider text-muted-foreground backdrop-blur">
+              <thead className="sticky top-0 z-10 bg-muted/80 text-[11.5px] text-muted-foreground backdrop-blur">
                 <tr>
                   <th className="w-[104px] border-b px-3 py-1.5 text-left font-semibold">Date</th>
                   <th className="border-b px-3 py-1.5 text-left font-semibold">Event</th>
@@ -154,7 +154,7 @@ export function TimelineTab({ matterId, onOpenDocument }: AnalysisTabProps) {
                     <td className="px-3 py-2"><CategoryChip category={e.category} /></td>
                     <td className="px-3 py-2"><div className="flex flex-wrap gap-1">{e.sources.map((s, i) => <CiteChip key={i} cite={sourceLabel(s)} kind={s.kind} onClick={s.id ? () => openSource(s) : undefined} title={s.excerpt} />)}</div></td>
                     <td className="px-2 py-2 text-center" onClick={(ev) => ev.stopPropagation()}><Checkbox checked={!!e.verified} onCheckedChange={(v) => patch(e, { verified: v === true })} aria-label="Verified" /></td>
-                    <td className="px-2 py-2 text-center" onClick={(ev) => ev.stopPropagation()}><button type="button" onClick={() => patch(e, { disputed: !e.disputed })} className={cn("inline-flex size-5 items-center justify-center rounded border transition-colors cursor-pointer", e.disputed ? "border-destructive/40 bg-destructive/12 text-destructive" : "text-muted-foreground/50 hover:text-muted-foreground")} aria-label="Toggle disputed" aria-pressed={!!e.disputed}><AlertOctagon className="size-3.5" /></button></td>
+                    <td className="px-2 py-2 text-center" onClick={(ev) => ev.stopPropagation()}><button type="button" onClick={() => patch(e, { disputed: !e.disputed })} className={cn("inline-flex size-5 items-center justify-center rounded border transition-colors cursor-pointer", e.disputed ? "border-destructive/40 text-destructive" : "text-muted-foreground/50 hover:text-muted-foreground")} aria-label="Toggle disputed" aria-pressed={!!e.disputed}><AlertOctagon className="size-3.5" /></button></td>
                     <td className="px-1 py-1.5 text-right" onClick={(ev) => ev.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button size="icon-xs" variant="ghost" className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100" aria-label="Event actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
@@ -207,7 +207,7 @@ function EventDialog({ open, event, matterId, people, onOpenChange, onSaved }: {
       <DialogContent size="lg">
         <DialogHeader><DialogTitle>{event ? "Edit event" : "Add event"}</DialogTitle><DialogDescription>Every event should cite a Bates number, a transcript page:line, or an external source.</DialogDescription></DialogHeader>
         <div className="grid gap-3">
-          <div className="grid gap-1.5"><Label>Title</Label><Input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Whitfield final report received: dose-related liver effects" autoFocus /></div>
+          <div className="grid gap-1.5"><Label>Title</Label><Input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="What happened, in one line" autoFocus /></div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="grid gap-1.5"><Label>Date</Label><Input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} /></div>
             <div className="grid gap-1.5"><Label>End (optional)</Label><Input type="date" value={form.dateEnd ?? ""} onChange={(e) => set("dateEnd", e.target.value || undefined)} /></div>
@@ -222,7 +222,7 @@ function EventDialog({ open, event, matterId, people, onOpenChange, onSaved }: {
             {form.sources.map((s, i) => (
               <div key={i} className="grid grid-cols-[110px_1fr_1fr_28px] items-center gap-1.5">
                 <Select value={s.kind} onValueChange={(v) => setSource(i, { kind: v as Src["kind"] })}><SelectTrigger size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="document">Document</SelectItem><SelectItem value="deposition">Testimony</SelectItem><SelectItem value="external">External</SelectItem></SelectContent></Select>
-                {s.kind === "document" ? <Input value={s.bates ?? ""} onChange={(e) => setSource(i, { bates: e.target.value })} placeholder="Bates, e.g. MFC-0041877" className="h-8 font-mono text-xs" /> : <Input value={s.cite ?? ""} onChange={(e) => setSource(i, { cite: e.target.value })} placeholder={s.kind === "deposition" ? "Voss 24:05" : "Citation"} className="h-8 text-xs" />}
+                {s.kind === "document" ? <Input value={s.bates ?? ""} onChange={(e) => setSource(i, { bates: e.target.value })} placeholder="Bates number" className="h-8 font-mono text-xs" /> : <Input value={s.cite ?? ""} onChange={(e) => setSource(i, { cite: e.target.value })} placeholder={s.kind === "deposition" ? "Witness 24:05" : "Citation"} className="h-8 text-xs" />}
                 <Input value={s.excerpt ?? ""} onChange={(e) => setSource(i, { excerpt: e.target.value })} placeholder="Supporting quotation" className="h-8 text-xs" />
                 <Button size="icon-xs" variant="ghost" onClick={() => set("sources", form.sources.filter((_, j) => j !== i))} aria-label="Remove source"><X className="size-3.5" /></Button>
               </div>

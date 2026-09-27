@@ -94,7 +94,7 @@ export function CodingPanel({ draft, onChange, onSave, saving, dirty, reviewedBy
 }
 
 function Action({ active, onClick, tone, icon: Icon, label }: { active: boolean; onClick: () => void; tone: "success" | "muted" | "info" | "destructive"; icon: React.ComponentType<{ className?: string }>; label: string }) {
-  const on = { success: "border-success/40 bg-success/12 text-success", muted: "border-foreground/25 bg-muted text-foreground", info: "border-info/40 bg-info/12 text-info", destructive: "border-destructive/40 bg-destructive/12 text-destructive" }[tone];
+  const on = { success: "border-foreground/25 bg-accent text-foreground", muted: "border-foreground/25 bg-muted text-foreground", info: "border-foreground/25 bg-accent text-foreground", destructive: "border-destructive/40 text-destructive" }[tone];
   return (
     <button type="button" onClick={onClick} aria-pressed={active} className={cn("flex h-11 flex-col items-center justify-center gap-0.5 rounded-md border text-[10.5px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50", active ? on : "border-border text-muted-foreground hover:bg-accent hover:text-foreground")}>
       <Icon className="size-4" />
@@ -106,7 +106,7 @@ function Action({ active, onClick, tone, icon: Icon, label }: { active: boolean;
 function Field({ label, shortcut, children }: { label: string; shortcut?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between"><span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>{shortcut && <span className="text-[10px] text-muted-foreground/70">{shortcut}</span>}</div>
+      <div className="mb-1 flex items-center justify-between"><span className="text-[12px] font-medium text-muted-foreground">{label}</span>{shortcut && <span className="text-[10px] text-muted-foreground/70">{shortcut}</span>}</div>
       {children}
     </div>
   );

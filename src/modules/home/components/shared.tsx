@@ -1,13 +1,13 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, Flag, Gavel, Maximize2, MessageSquareText, Minimize2, Scale, Workflow, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, Gavel, Maximize2, MessageSquareText, Minimize2, Scale, Workflow, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Tip } from "@/components/ui/tooltip";
 import type { CalendarEvent, Task } from "@/lib/types/domain";
-import { countdown, type Urgency } from "../time";
+import { countdown, dueText, type Urgency } from "../time";
 import { EVENT_KIND_LABEL } from "../types";
 import { useHome } from "./home-provider";
 
@@ -25,9 +25,9 @@ export const KIND_STYLE: Record<CalendarEvent["kind"], { dot: string; chip: stri
 
 export const PRIORITY_STYLE: Record<Task["priority"], { label: string; className: string; dot: string }> = {
   urgent: { label: "Urgent", className: "bg-destructive/10 text-destructive border-destructive/20", dot: "bg-destructive" },
-  high: { label: "High", className: "bg-chart-3/15 text-warning-foreground dark:text-chart-3 border-chart-3/30", dot: "bg-chart-3" },
-  medium: { label: "Medium", className: "bg-primary/8 text-primary border-primary/15", dot: "bg-primary/70" },
-  low: { label: "Low", className: "bg-muted text-muted-foreground border-transparent", dot: "bg-muted-foreground/60" },
+  high: { label: "High", className: "bg-chart-3/15 text-warning-foreground dark:text-chart-3 border-chart-3/30", dot: "bg-warning" },
+  medium: { label: "Medium", className: "bg-primary/8 text-primary border-primary/15", dot: "bg-muted-foreground/50" },
+  low: { label: "Low", className: "bg-muted text-muted-foreground border-transparent", dot: "bg-muted-foreground/25" },
 };
 
 export const URGENCY_STYLE: Record<Urgency, string> = {
@@ -44,24 +44,24 @@ export function KindDot({ kind, className }: { kind: CalendarEvent["kind"]; clas
 }
 
 export function KindBadge({ kind, className }: { kind: CalendarEvent["kind"]; className?: string }) {
-  return <span className={cn("inline-flex items-center gap-1 rounded-[var(--radius-chip)] border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", KIND_STYLE[kind].chip, className)}><KindDot kind={kind} className="size-1.5" />{KIND_STYLE[kind].label}</span>;
+  return <span className={cn("inline-flex items-center gap-1.5 text-[11.5px] leading-4 text-muted-foreground", className)}><KindDot kind={kind} className="size-1.5" />{KIND_STYLE[kind].label}</span>;
 }
 
 export function PriorityBadge({ priority, className, compact }: { priority: Task["priority"]; className?: string; compact?: boolean }) {
   const s = PRIORITY_STYLE[priority];
-  if (compact) return <Tip label={`${s.label} priority`}><span className={cn("inline-block size-2 rounded-full", s.dot, className)} /></Tip>;
-  return <span className={cn("inline-flex items-center gap-1 rounded-[var(--radius-chip)] border px-1.5 py-0.5 text-[10.5px] font-medium leading-4", s.className, className)}><Flag className="size-2.5" />{s.label}</span>;
+  if (compact) return <Tip label={`${s.label} priority`}><span className={cn("inline-block size-1.5 rounded-full", s.dot, className)} /></Tip>;
+  return <span className={cn("inline-flex items-center gap-1.5 text-[11.5px] leading-4 text-muted-foreground", className)}><span className={cn("inline-block size-1.5 rounded-full", s.dot)} aria-hidden />{s.label}</span>;
 }
 
-/** Countdown chip, e.g. "in 3 wk", "overdue 2d", "today". */
+/** Due-date text, e.g. "in 3 days", "9 days overdue", "today"; plain text, danger color only when overdue. */
 export function CountdownChip({ date, deadline, className, prefix }: { date?: string | null; deadline?: boolean; className?: string; prefix?: string }) {
   const { now } = useHome();
   if (!date) return null;
   const c = countdown(date, now, { deadline });
+  const d = deadline ? dueText(date, now) : null;
   return (
-    <span className={cn("inline-flex h-[18px] items-center gap-1 whitespace-nowrap rounded-[var(--radius-chip)] border px-1.5 text-[10.5px] font-medium leading-none tabular", URGENCY_STYLE[c.urgency], className)} title={new Date(date).toLocaleString()}>
-      {c.urgency === "overdue" && <AlertTriangle className="size-2.5" />}
-      {prefix}{c.label}
+    <span className={cn("inline-flex items-center whitespace-nowrap text-[11.5px] leading-none tabular", c.urgency === "overdue" ? "text-destructive" : "text-muted-foreground", className)} title={new Date(date).toLocaleString()}>
+      {prefix}{d ? d.text : c.label}
     </span>
   );
 }
@@ -107,8 +107,8 @@ export function PersonChip({ id, className, size = "xs" }: { id?: string | null;
 /** Section wrapper with a dense header and optional expand/collapse toggle. */
 export function Section({ id, title, icon: Icon, count, actions, children, className, bodyClassName, onExpand, expanded, description }: { id?: string; title: React.ReactNode; icon?: LucideIcon; count?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string; bodyClassName?: string; onExpand?: () => void; expanded?: boolean; description?: React.ReactNode }) {
   return (
-    <section id={id} className={cn("@container flex min-w-0 flex-col rounded-md border bg-card", expanded && "h-full", className)}>
-      <header className="section-header h-9">
+    <section id={id} className={cn("@container flex min-w-0 flex-col", expanded && "h-full rounded-md border bg-card", className)}>
+      <header className={cn("section-header h-9", !expanded && "px-1")}>
         {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
         <h2 className="section-title">{title}</h2>
         {count != null && <span className="section-count">{count}</span>}
@@ -151,7 +151,7 @@ export function TimeInput({ value, onChange, className, ...rest }: { value: stri
 }
 
 export function FieldLabel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground", className)}>{children}</div>;
+  return <div className={cn("mb-1 text-[11.5px] font-medium text-muted-foreground", className)}>{children}</div>;
 }
 
 /** Sentinel for "none" in Radix selects (empty string is not allowed). */

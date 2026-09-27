@@ -136,7 +136,7 @@ function MoveDialog({ ids }: { ids: string[] }) {
         <button onClick={() => setTarget(null)} className={cn("flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent/50 cursor-pointer", target === null && "bg-accent font-medium")}><TypeIcon type="folder" /> Library root</button>
         {visible.map((n) => (
           <button key={n.id} disabled={disabled(n)} onClick={() => setTarget(n.id)} style={{ paddingLeft: 12 + n.depth * 16 }} className={cn("flex w-full items-center gap-2 py-1.5 pr-3 text-left text-sm hover:bg-accent/50 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40", target === n.id && "bg-accent font-medium")}>
-            <TypeIcon type="folder" className={cn(n.matterId && "text-chart-2")} /><span className="truncate">{n.name}</span>{n.system && <Badge variant="muted" className="ml-auto px-1 py-0 text-[9px]">system</Badge>}
+            <TypeIcon type="folder" /><span className="truncate">{n.name}</span>{n.system && <Badge variant="muted" className="ml-auto px-1 py-0 text-[9px]">system</Badge>}
           </button>
         ))}
       </div>

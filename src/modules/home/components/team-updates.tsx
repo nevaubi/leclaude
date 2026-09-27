@@ -41,12 +41,12 @@ export function UpdatesOverview() {
   const setFocus = useHomeUI((s) => s.setFocus);
   const shown = list.slice(0, 6);
   return (
-    <Section id="updates" title="Team updates" icon={Users} count={list.length} onExpand={() => setFocus("updates")}>
-      <div className="border-b p-2"><UpdateComposer /></div>
+    <Section id="updates" title="Team updates" count={list.length} onExpand={() => setFocus("updates")}>
+      <div className="border-b px-1 py-2"><UpdateComposer /></div>
       {shown.length === 0 ? <EmptyRow icon={Users} title="No updates yet" hint="Share a win, an update or a question with the team." /> : (
         <ul className="divide-y">{shown.map((u, i) => <UpdateCard key={u.id} update={u} index={i} />)}</ul>
       )}
-      {list.length > shown.length && <button onClick={() => setFocus("updates")} className="flex w-full items-center justify-center border-t py-2 text-[11.5px] font-medium text-primary hover:bg-accent/50 cursor-pointer">Show all {list.length}</button>}
+      {list.length > shown.length && <button onClick={() => setFocus("updates")} className="flex w-full items-center justify-center border-t py-2 text-[11.5px] text-muted-foreground hover:text-foreground cursor-pointer">Show all {list.length}</button>}
     </Section>
   );
 }
@@ -154,7 +154,7 @@ function UpdateCard({ update: u, index, full }: { update: TeamUpdateView; index:
               const count = u.reactions?.[emoji] ?? 0;
               const mine = u.myReactions.includes(emoji);
               return (
-                <button key={emoji} onClick={() => void react(u.id, emoji)} className={cn("inline-flex h-6 items-center gap-1 rounded-full border px-1.5 text-[11px] tabular transition-colors cursor-pointer", mine ? "border-primary/30 bg-primary/10 text-primary" : count ? "bg-background hover:bg-accent" : "border-transparent text-muted-foreground opacity-60 hover:opacity-100 hover:bg-accent")} aria-pressed={mine} aria-label={`React ${emoji}`}>
+                <button key={emoji} onClick={() => void react(u.id, emoji)} className={cn("inline-flex h-6 items-center gap-1 rounded-full border px-1.5 text-[11px] tabular transition-colors cursor-pointer", mine ? "border-transparent bg-accent text-foreground" : count ? "bg-background hover:bg-accent" : "border-transparent text-muted-foreground opacity-60 hover:opacity-100 hover:bg-accent")} aria-pressed={mine} aria-label={`React ${emoji}`}>
                   <span>{emoji}</span>{count > 0 && <span>{count}</span>}
                 </button>
               );

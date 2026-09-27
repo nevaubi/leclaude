@@ -3,6 +3,8 @@ import { jsonError } from "@/lib/ai/sse";
 import { getOfficeDoc } from "@/modules/office/shared/docs-service";
 import { exportCsv, exportXlsx } from "@/modules/office/sheet/export";
 import { normalizeWorkbook, type Workbook } from "@/modules/office/sheet/model";
+import { withAuth } from "@/lib/auth/route";
+import { officeDocFromBody } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -14,7 +16,7 @@ interface Body { docId?: string; content?: unknown; title?: string; format?: "xl
  * XLSX carries values, formulas, number formats, column widths, merges, freeze panes and named ranges;
  * charts and conditional formats are not exported by the xlsx package.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Body | null;
   if (!body) return jsonError("Invalid body");
   let content = body.content;
@@ -41,3 +43,5 @@ export async function POST(req: NextRequest) {
     return jsonError(`Export failed: ${(e as Error).message}`, 500);
   }
 }
+
+export const POST = withAuth(handlePOST, { action: "export", resource: officeDocFromBody });

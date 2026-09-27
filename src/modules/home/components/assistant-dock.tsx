@@ -13,11 +13,11 @@ import { useHomeUI } from "../store";
 import { useHome } from "./home-provider";
 
 const SUGGESTIONS = [
-  "What is due this week on AFFF?",
-  "Summarize yesterday's Federal Register PFAS items",
-  "Draft a status update for Northgate",
+  "What is due this week?",
   "Which of my tasks are overdue, and what should I do first?",
-  "What did the team post about the Hale deposition?",
+  "Summarize this week's Federal Register items for my practice areas",
+  "Draft a status update for my most active matter",
+  "What did the team post this week?",
 ];
 
 /** True while the viewport is narrower than `px` (false during SSR and before mount). */
@@ -114,9 +114,9 @@ function AssistantBody({ onCollapse, inSheet, width, onWidthChange }: { onCollap
       ariaLabel="Assistant"
     >
       {noKey && (
-        <div className="flex items-start gap-2 border-b bg-warning/10 px-3 py-2 text-[11.5px] text-warning-foreground dark:text-warning">
+        <div className="flex items-start gap-2 border-b px-3 py-2 text-[11.5px] text-muted-foreground">
           <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-          <span><span className="font-semibold">OpenAI key required.</span> Add <code className="rounded bg-background/60 px-1 font-mono text-[10.5px]">OPENAI_API_KEY</code> to <code className="rounded bg-background/60 px-1 font-mono text-[10.5px]">.env.local</code> and restart to enable the assistant. <Link href="/settings#ai" className="underline underline-offset-2">Settings</Link></span>
+          <span>The assistant needs a model provider (Amazon Bedrock, Anthropic or OpenAI). <Link href="/settings#ai" className="text-foreground underline underline-offset-2">Connect one in Settings</Link>.</span>
         </div>
       )}
       <MessageList
@@ -130,7 +130,7 @@ function AssistantBody({ onCollapse, inSheet, width, onWidthChange }: { onCollap
             <div className="text-[12.5px] font-medium">Ask about today</div>
             <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">Reads your calendar, tasks and matter context, searches the library and e-discovery sets, pulls case law and Federal Register documents, and drafts updates. Every answer cites its sources.</p>
             {matter && <p className="mt-1 text-[11px] text-muted-foreground">Scoped to <span className="font-medium text-foreground">{matter.shortName}</span>.</p>}
-            <div className="mt-3 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Try</div>
+            <div className="mt-3 text-[11.5px] font-medium text-muted-foreground">Try</div>
             <SuggestionChips className="mt-1.5" suggestions={SUGGESTIONS} onPick={send} />
           </div>
         }

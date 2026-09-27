@@ -2,12 +2,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, LayoutTemplate } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/misc";
 import type { OfficeKind } from "@/lib/types/domain";
 import { KIND_META, type OfficeTemplateSummary } from "./types";
-import { KIND_BG, KIND_COLOR, KIND_ICON, newHref } from "./new-tiles";
+import { newHref } from "./new-tiles";
+import { OfficeAppIcon } from "../shared/office-app-icon";
 
 /** Quiet template gallery grouped by category, filtered by the active kind and the search box. */
 export function TemplatesSection({ templates, kind, matterId, query }: { templates: OfficeTemplateSummary[]; kind: OfficeKind | null; matterId: string | null; query: string }) {
@@ -36,10 +36,9 @@ export function TemplatesSection({ templates, kind, matterId, query }: { templat
 }
 
 function TemplateCard({ t, matterId }: { t: OfficeTemplateSummary; matterId: string | null }) {
-  const Icon = KIND_ICON[t.kind];
   return (
     <Link href={newHref(t.kind, { templateId: t.id, matterId })} className="group flex gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
-      <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md", KIND_BG[t.kind], KIND_COLOR[t.kind])}><Icon className="size-4" /></span>
+      <OfficeAppIcon kind={t.kind} size={20} className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5"><div className="truncate text-[13px] font-medium">{t.name}</div><ArrowRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" /></div>
         <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-muted-foreground">{t.description}</p>

@@ -45,6 +45,9 @@ const INTEL_LANE_NOTE: Record<LaneKind, string> = {
   fast: "Also searches the intelligence corpus",
 };
 
+/** Shown on a lane when the matter record was requested without a selected matter (never widened to all matters). */
+export const MATTER_SKIPPED_NOTE = "Matter documents skipped: no matter is selected.";
+
 /** Whether a lane should also retrieve from the intelligence corpus (every provider-backed lane does). */
 export function intelFeeds(kind: LaneKind, sources: SearchSource[]): boolean {
   void kind;
@@ -110,6 +113,11 @@ export function planLanes(input: PlanInput): ResearchLane[] {
   const controlling = out.find((l) => l.kind === "controlling");
   const contrary = out.find((l) => l.kind === "contrary");
   if (controlling && contrary) contrary.dependsOn = [controlling.id];
+  // Matter documents were requested but no matter is selected: say so on the lane that would have read them.
+  if (has("ediscovery") && !input.hasMatter && out.length) {
+    const host = out.find((l) => l.kind === "record") ?? out[0];
+    host.note = `${MATTER_SKIPPED_NOTE}${host.note ? ` ${host.note}` : ""}`;
+  }
   return out;
 }
 

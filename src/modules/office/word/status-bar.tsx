@@ -29,7 +29,7 @@ export function StatusBar(p: StatusBarProps) {
       {p.comments > 0 && <StatusItem onClick={p.onComments} title="Open comments"><MessageSquare className="size-3" /> <span className="tabular">{p.comments}</span></StatusItem>}
       <StatusItem onClick={p.onTrackChanges ? () => p.onTrackChanges?.(!p.trackChanges) : undefined} active={p.trackChanges} title="Toggle track changes (⌘⇧E)">
         <PenLine className="size-3" /> <span className="hidden lg:inline">Track changes </span>{p.trackChanges ? "on" : "off"}
-        {p.pending > 0 && <span className="ml-1 rounded-full bg-primary/10 px-1.5 tabular text-primary">{p.pending} pending</span>}
+        {p.pending > 0 && <span className="ml-1 tabular text-primary">{p.pending} pending</span>}
       </StatusItem>
       <DropdownMenu>
         <DropdownMenuTrigger asChild><button className="flex h-full items-center gap-1 whitespace-nowrap border-r px-2.5 hover:bg-accent hover:text-foreground cursor-pointer" aria-label={`Proofing language: ${p.language}`} title={`Proofing language: ${p.language}`}><Globe className="size-3" /> <span className="hidden xl:inline">{p.language}</span></button></DropdownMenuTrigger>

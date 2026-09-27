@@ -5,17 +5,16 @@ import { useRouter } from "next/navigation";
 import { Briefcase, FileSearch, Filter, Library, MoreHorizontal, Scale, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/misc";
 import { Tip } from "@/components/ui/tooltip";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { MatterOverview as MatterOverviewRow } from "../types";
-import { countdown } from "../time";
+import { dueText } from "../time";
 import { fmtDate } from "../time";
 import { useHomeUI } from "../store";
 import { useHome } from "./home-provider";
 import { EmptyRow, PeopleStack, Section } from "./shared";
-import { hotCell, keyDateTone, matterMeta, matterRows, taskCell } from "./matters-table-model";
+import { hotCell, matterMeta, matterRows, taskCell } from "./matters-table-model";
 
 /** Columns the overview leaves out so the table fits beside the brief; the focused view offers them in the chooser. */
 const OVERVIEW_HIDDEN = ["stage", "events", "team", "area", "client"];
@@ -26,7 +25,7 @@ export function MattersOverview() {
   const setFocus = useHomeUI((s) => s.setFocus);
   const rows = React.useMemo(() => matterRows(matterOverview, matterFilter), [matterOverview, matterFilter]);
   return (
-    <Section id="matters" title="Matters" icon={Briefcase} count={rows.length} onExpand={() => setFocus("matters")} actions={matterFilter ? <Button variant="ghost" size="xs" onClick={() => setMatterFilter(null)}><X className="size-3" /> Clear filter</Button> : undefined}>
+    <Section id="matters" title="Matters" count={rows.length} onExpand={() => setFocus("matters")} actions={matterFilter ? <Button variant="ghost" size="xs" onClick={() => setMatterFilter(null)}><X className="size-3" /> Clear filter</Button> : undefined}>
       {rows.length === 0 ? <EmptyRow icon={Briefcase} title="No active matters" /> : <MattersTable rows={rows} virtualize={false} />}
     </Section>
   );
@@ -67,12 +66,11 @@ function MattersTable({ rows, virtualize, activeId, density }: { rows: MatterOve
       ) : <span className="text-muted-foreground">—</span>,
     },
     {
-      id: "due", header: "Due", width: 96, minWidth: 72, sortable: true, accessor: (m) => m.nextKeyDate?.daysUntil ?? null,
+      id: "due", header: "Due", width: 110, minWidth: 80, sortable: true, accessor: (m) => m.nextKeyDate?.daysUntil ?? null,
       render: (m) => {
         if (!m.nextKeyDate) return <span className="text-muted-foreground">—</span>;
-        const c = countdown(m.nextKeyDate.date, now, { deadline: true });
-        const tone = keyDateTone(m.nextKeyDate.daysUntil);
-        return <Chip tone={tone === "destructive" ? "danger" : tone === "warning" ? "warning" : "quiet"} className="tabular">{c.label}</Chip>;
+        const due = dueText(m.nextKeyDate.date, now);
+        return <span className={cn("tabular text-[11.5px]", due.overdue ? "text-destructive" : "text-muted-foreground")}>{due.text}</span>;
       },
     },
     {
@@ -81,7 +79,7 @@ function MattersTable({ rows, virtualize, activeId, density }: { rows: MatterOve
     },
     {
       id: "hot", header: "Hot / docs", width: 90, minWidth: 70, align: "right", sortable: true, accessor: (m) => m.hotDocs,
-      render: (m) => { const h = hotCell(m); return <span className={cn("tabular", h.hot && "text-destructive")}>{h.text}</span>; },
+      render: (m) => { const h = hotCell(m); return <span className={cn("tabular", h.hot ? "text-foreground" : "text-muted-foreground")}>{h.text}</span>; },
     },
     { id: "events", header: "Events", width: 72, minWidth: 56, align: "right", sortable: true, accessor: (m) => m.upcomingEvents, render: (m) => <span className="tabular" title={m.nextEvent ? `Next: ${m.nextEvent.title}` : undefined}>{m.upcomingEvents}</span> },
     {

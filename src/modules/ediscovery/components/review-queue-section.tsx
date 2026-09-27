@@ -90,7 +90,7 @@ export function ReviewQueueSection({ matterId, onChanged }: { matterId: string; 
         <div className="space-y-5">
           {groups.map((g) => (
             <section key={g.kind}>
-              <div className="mb-1.5 flex items-center gap-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{g.label}<CountChip>{g.items.length}</CountChip></div>
+              <div className="mb-1.5 flex items-center gap-2 px-1 text-[12px] font-medium text-muted-foreground">{g.label}<CountChip>{g.items.length}</CountChip></div>
               <ul className="divide-y rounded-md border bg-card">
                 {g.items.map((it) => <QueueRow key={`${it.kind}:${it.id}`} item={it} busy={busy === `${it.kind}:${it.id}`} onDecide={decide} />)}
               </ul>

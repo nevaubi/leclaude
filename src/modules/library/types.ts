@@ -10,7 +10,7 @@ export type ClauseCategory =
   | "force majeure"
   | "assignment"
   | "termination"
-  | "PFAS discovery definitions"
+  | "discovery definitions"
   | "deposition stipulations"
   | "protective order tiers"
   | "M&A definitions";
@@ -23,7 +23,7 @@ export const CLAUSE_CATEGORIES: ClauseCategory[] = [
   "force majeure",
   "assignment",
   "termination",
-  "PFAS discovery definitions",
+  "discovery definitions",
   "deposition stipulations",
   "protective order tiers",
   "M&A definitions",

@@ -136,7 +136,7 @@ function adjacentChange(doc: PMNode, pos: number, type: "insertion" | "deletion"
 
 export const TrackChanges = Extension.create<TrackChangesOptions, TrackChangesStorage>({
   name: "trackChanges",
-  addOptions: () => ({ enabled: false, author: "Jordan Whitfield" }),
+  addOptions: () => ({ enabled: false, author: "You" }),
   addStorage() { return { enabled: this.options.enabled, author: this.options.author }; },
   addExtensions: () => [Insertion, Deletion],
   addCommands() {

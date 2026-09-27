@@ -72,6 +72,16 @@ export function CodesTab({ initialSection }: { initialSection?: CodesSection } =
 function IssueCodesSection() {
   const { matterId, issueCodes, refreshIssueCodes } = useReview();
   const [editing, setEditing] = React.useState<IssueCode | "new" | null>(null);
+  const [adding, setAdding] = React.useState(false);
+  const addStandard = async () => {
+    setAdding(true);
+    try {
+      const r = await api<{ created: IssueCode[]; skipped: string[] }>("/api/ediscovery/issue-codes", { method: "POST", json: { matterId, preset: "standard" } });
+      refreshIssueCodes();
+      toast.success(r.created.length ? `Added ${r.created.length} code${r.created.length === 1 ? "" : "s"}` : "The standard codes are already here");
+    } catch (e) { toast.error("Could not add codes", { description: (e as Error).message }); }
+    finally { setAdding(false); }
+  };
   const roots = issueCodes.filter((c) => !c.parentId);
   const childrenOf = (id: string) => issueCodes.filter((c) => c.parentId === id);
   const total = issueCodes.reduce((n, c) => n + (c.count ?? 0), 0);
@@ -86,11 +96,11 @@ function IssueCodesSection() {
     const cls = issueColorClasses(c.color);
     return (
       <li className="group flex h-9 items-center gap-3 border-b px-4 text-[12.5px] hover:bg-accent/30" style={{ paddingLeft: 16 + depth * 22 }}>
-        <span className={cn("size-2 shrink-0 rounded-full", cls.dot)} />
-        <span className="w-20 shrink-0 font-mono text-[12px] font-semibold">{c.code}</span>
+        <span className={cn("size-1.5 shrink-0 rounded-full", cls.dot)} />
+        <span className="w-20 shrink-0 font-mono text-[12px] font-medium">{c.code}</span>
         <span className="min-w-0 flex-1 truncate"><span className="font-medium">{c.label}</span>{c.description && <span className="ml-2 text-[11.5px] text-muted-foreground">{c.description}</span>}</span>
         {index < 9 && <kbd className="hidden px-1 text-[10px] sm:inline" title="Keyboard shortcut in the review grid">{index + 1}</kbd>}
-        <span className="hidden w-40 items-center gap-2 sm:flex"><span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><span className={cn("absolute inset-y-0 left-0 rounded-full", cls.dot)} style={{ width: `${((c.count ?? 0) / max) * 100}%` }} /></span><span className="w-8 text-right tabular text-[11.5px] text-muted-foreground">{c.count ?? 0}</span></span>
+        <span className="hidden w-40 items-center gap-2 sm:flex"><span className="relative h-1 flex-1 overflow-hidden rounded-full bg-muted"><span className="absolute inset-y-0 left-0 rounded-full bg-muted-foreground/40" style={{ width: `${((c.count ?? 0) / max) * 100}%` }} /></span><span className="w-8 text-right tabular text-[11.5px] text-muted-foreground">{c.count ?? 0}</span></span>
         <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tip label="Edit"><Button variant="ghost" size="icon-xs" onClick={() => setEditing(c)} aria-label={`Edit ${c.code}`}><Pencil className="size-3.5" /></Button></Tip>
           <Tip label="Delete"><Button variant="ghost" size="icon-xs" onClick={() => remove(c)} aria-label={`Delete ${c.code}`}><Trash2 className="size-3.5" /></Button></Tip>
@@ -104,14 +114,14 @@ function IssueCodesSection() {
       <div className="mb-4 flex items-end justify-between gap-3">
         <div>
           <h2 className="text-[15px] font-semibold">Issue codes</h2>
-          <p className="text-[11.5px] text-muted-foreground">{issueCodes.length} codes · {total.toLocaleString()} applications. Codes drive facets, the suggestion rubric and the production load file; keys 1–9 apply the first nine in the grid.</p>
+          <p className="text-[11.5px] text-muted-foreground">{issueCodes.length ? `${issueCodes.length} codes · ${total.toLocaleString()} applications. ` : ""}Codes drive facets, the suggestion rubric and the production load file; keys 1–9 apply the first nine in the grid.</p>
         </div>
-        <Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" /> New code</Button>
+        {!!issueCodes.length && <Button size="sm" variant="outline" onClick={() => setEditing("new")}><Plus className="size-4" /> Add code</Button>}
       </div>
       {!issueCodes.length ? (
-        <EmptyState icon={Tags} title="No issue codes yet" description="Create codes such as TOX-01 Toxicology knowledge to tag documents and steer batch prediction." action={<Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" /> New code</Button>} />
+        <EmptyState icon={Tags} title="No issue codes yet" description="Add the codes reviewers will apply in this matter, or start from a small standard set (responsive, not responsive, hot, privileged, confidential) and edit it." action={<div className="flex items-center justify-center gap-2"><Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" /> Add code</Button><Button size="sm" variant="ghost" onClick={() => void addStandard()} disabled={adding}>{adding && <Loader2 className="size-4 animate-spin" />} Use standard set</Button></div>} />
       ) : (
-        <ul className="rounded-md border bg-card">
+        <ul className="border-t">
           {roots.map((r) => (<React.Fragment key={r.id}><Row c={r} depth={0} index={issueCodes.indexOf(r)} />{childrenOf(r.id).map((ch) => <Row key={ch.id} c={ch} depth={1} index={issueCodes.indexOf(ch)} />)}</React.Fragment>))}
         </ul>
       )}
@@ -304,7 +314,7 @@ function PrivilegeLogSection() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button size="sm" disabled={gen.running}>{gen.running ? <Loader2 className="size-4 animate-spin" /> : <ListChecks className="size-4" />} Draft entries <ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>{aiConfigured ? "Drafted descriptions (verified against the header)" : "Template descriptions (no OpenAI key)"}</DropdownMenuLabel>
+              <DropdownMenuLabel>{aiConfigured ? "Drafted descriptions (verified against the header)" : "Template descriptions (no AI provider)"}</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => generate(false, true)}><Plus className="size-4" /> Draft entries for {missing.length} missing document{missing.length === 1 ? "" : "s"}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => generate(true, true)}><RefreshCw className="size-4" /> Redraft every entry from the coding</DropdownMenuItem>
               {aiConfigured && <><DropdownMenuSeparator /><DropdownMenuItem onClick={() => generate(false, false)}><FileText className="size-4" /> Add missing using templates only</DropdownMenuItem></>}

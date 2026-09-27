@@ -79,15 +79,26 @@ export function resolveQuotedAnnotations(model: PdfModel, extraction: Extraction
  * Generate the PDF for a pending template/seed document and populate the
  * model (pages, text index, resolved annotations). Idempotent.
  */
+/** "New PDF → Blank": a document with no source gets one blank US Letter page, so it can be viewed, annotated and exported. */
+async function materializeBlank(docId: string, doc: OfficeDocument, model: PdfModel): Promise<LoadedPdf | null> {
+  const bytes = await generatePdf({ title: doc.title, blocks: [{ type: "spacer", height: 1 }], outline: false });
+  const { model: fresh } = await modelFromBytes(bytes, { name: `${safeName(doc.title)}.pdf`, title: doc.title, meta: { blank: true } });
+  const next: PdfModel = { ...fresh, annotations: model.annotations, meta: { ...fresh.meta, ...model.meta } };
+  const saved = savePdfModel(docId, next, { summary: "Created blank PDF", force: false });
+  return saved ? { doc: saved, model: next } : null;
+}
+
 export async function materialize(docId: string): Promise<LoadedPdf | null> {
   const loaded = loadPdf(docId);
   if (!loaded) return null;
   const { doc, model } = loaded;
+  if (!model.meta.pending && !model.sourceBlobId && model.pageCount === 0) return materializeBlank(docId, doc, model);
   if (!model.meta.pending) return loaded;
   const specId = String(model.meta.specId ?? "");
   const builder = SPEC_BUILDERS[specId];
   if (!builder) throw new Error(`Unknown PDF spec "${specId}"`);
-  const spec = builder({ matterId: doc.matterId, title: doc.title });
+  const matter = doc.matterId ? db().matters.get(doc.matterId) : undefined;
+  const spec = builder({ matterId: doc.matterId, title: doc.title, demo: model.meta.seeded === true, matter: matter ? { name: matter.name, caption: matter.caption, court: matter.court, judge: matter.judge, client: matter.client } : undefined });
   const bytes = await generatePdf(spec);
   const blobId = typeof model.meta.blobId === "string" && model.meta.blobId ? model.meta.blobId : `blob_pdf_${nanoid(10)}`;
   const { model: fresh, extraction } = await modelFromBytes(bytes, { name: `${safeName(doc.title)}.pdf`, title: doc.title, blobId, meta: { templateId: model.meta.templateId, specId } });

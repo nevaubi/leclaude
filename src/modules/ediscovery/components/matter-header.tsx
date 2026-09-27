@@ -1,10 +1,9 @@
 "use client";
 import * as React from "react";
-import { CalendarClock, ChevronDown, Database, Flame, ListChecks, ShieldAlert, Users } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tip } from "@/components/ui/tooltip";
-import { Chip } from "@/components/ui/misc";
 import { deadlineChip, deadlineLabel } from "./matter-header-helpers";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { MatterOption } from "./review-page";
@@ -12,65 +11,74 @@ import type { StatsResponse } from "./use-review-data";
 
 export { deadlineLabel, deadlineChip };
 
+/** A plain-text fact in the header row; clickable facts read as links on hover, not as pills. */
+function Fact({ children, onClick, title, tone }: { children: React.ReactNode; onClick?: () => void; title?: string; tone?: "danger" | "warning" }) {
+  const cls = cn("shrink-0 whitespace-nowrap text-[12px] tabular text-muted-foreground", tone === "danger" && "text-destructive", tone === "warning" && "text-warning-foreground dark:text-warning");
+  if (onClick) return <button type="button" onClick={onClick} title={title} className={cn(cls, "cursor-pointer rounded-sm hover:text-foreground hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50")}>{children}</button>;
+  return <span className={cls} title={title}>{children}</span>;
+}
+
+const Sep = () => <span className="shrink-0 text-muted-foreground/40" aria-hidden>·</span>;
+
 /**
- * One-row matter header: matter · stage · review progress · next deadline ·
- * hot / privileged as quiet chips. Custodians, AI coverage and the index live
- * in a "Details" popover so the row stays calm.
+ * One quiet row: matter name, then a few facts as plain text (documents, review progress, hot, privileged,
+ * the next production deadline). Custodians, suggestion coverage and the index sit in a Details popover.
  */
-export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, onOpenPrivileged }: { matter?: MatterOption; stats: StatsResponse | null; loading: boolean; onOpenCodes: () => void; onOpenHot?: () => void; onOpenPrivileged?: () => void }) {
-  const pct = stats?.pctReviewed ?? 0;
+export function MatterHeader({ matter, stats, loading, onOpenCodes, onOpenHot, onOpenPrivileged, actions }: { matter?: MatterOption; stats: StatsResponse | null; loading: boolean; onOpenCodes: () => void; onOpenHot?: () => void; onOpenPrivileged?: () => void; actions?: React.ReactNode }) {
   const deadline = stats?.productionDeadline;
   const dl = deadline ? deadlineLabel(deadline.daysLeft) : null;
+  const empty = !!stats && stats.total === 0;
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 overflow-hidden border-b bg-card/40 px-4" aria-label="Matter summary">
-      {/* The title is the only flexible item: it shrinks (and truncates) before anything else so the Details control on the right always stays reachable. */}
-      <h1 className="min-w-[120px] max-w-[24vw] shrink truncate text-[13px] font-semibold tracking-tight xl:max-w-[30vw]" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
-      {matter?.stage && <Chip tone="muted" title={`Stage: ${matter.stage}`} className="hidden max-w-[200px] shrink-0 2xl:inline-flex">{matter.stage}</Chip>}
-      <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden />
+    <header className="flex h-11 shrink-0 items-center gap-2.5 overflow-hidden border-b px-4" aria-label="Matter summary">
+      <h1 className="min-w-[120px] max-w-[30vw] shrink truncate text-[13.5px] font-semibold tracking-tight" title={matter ? `${matter.name}${matter.caption ? ` · ${matter.caption}` : ""}` : undefined}>{matter?.name ?? "Matter"}</h1>
       {loading && !stats ? (
         <Skeleton className="h-4 w-56" />
       ) : stats ? (
         <>
-          <Tip label={`${stats.reviewed.toLocaleString()} of ${stats.total.toLocaleString()} reviewed · ${stats.needsReview.toLocaleString()} remaining`}>
-            <span className="flex shrink-0 items-center gap-2 text-[12px]">
-              <span className="relative h-1.5 w-16 overflow-hidden rounded-full bg-muted lg:w-20" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Review progress">
-                <span className={cn("absolute inset-y-0 left-0 rounded-full", pct >= 90 ? "bg-success" : "bg-primary")} style={{ width: `${pct}%` }} />
-              </span>
-              <span className="tabular font-medium">{pct}%</span>
-              <span className="hidden text-muted-foreground xl:inline">reviewed</span>
-            </span>
-          </Tip>
-          {deadline && dl && (
-            <Tip label={`${deadline.label} · ${new Date(deadline.date + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}`}>
-              <span className="flex shrink-0 items-center gap-1.5 text-[12px]">
-                <CalendarClock className={cn("size-3.5", dl.tone === "destructive" ? "text-destructive" : dl.tone === "warning" ? "text-warning-foreground dark:text-warning" : "text-muted-foreground")} />
-                <span className="hidden max-w-[140px] truncate text-muted-foreground xl:inline">{deadline.label}</span>
-                <Chip tone={dl.tone}>{dl.label}</Chip>
-              </span>
-            </Tip>
+          {empty ? (
+            <Fact>No documents yet</Fact>
+          ) : (
+            <>
+              <Fact>{stats.total.toLocaleString()} document{stats.total === 1 ? "" : "s"}</Fact>
+              <Sep />
+              <Fact title={`${stats.reviewed.toLocaleString()} of ${stats.total.toLocaleString()} reviewed · ${stats.needsReview.toLocaleString()} remaining`}>{stats.pctReviewed}% reviewed</Fact>
+              {stats.hot > 0 && <><Sep /><Fact onClick={onOpenHot} title="Show hot documents">{stats.hot.toLocaleString()} hot</Fact></>}
+              {stats.privileged > 0 && <><Sep /><Fact onClick={onOpenPrivileged ?? onOpenCodes} title="Show privileged documents">{stats.privileged.toLocaleString()} privileged</Fact></>}
+            </>
           )}
-          <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden />
-          <Chip icon={Flame} tone={stats.hot ? "destructive" : "outline"} onClick={onOpenHot} title="Hot documents">{stats.hot} hot</Chip>
-          <Chip icon={ShieldAlert} tone={stats.privileged ? "info" : "outline"} onClick={onOpenPrivileged ?? onOpenCodes} title="Privileged documents · open the privilege log">{stats.privileged} priv</Chip>
+          {deadline && dl && (
+            <>
+              <Sep />
+              <Tip label={`${deadline.label} · ${new Date(deadline.date + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })}`}>
+                <span className="flex min-w-0 shrink items-center gap-1 text-[12px]">
+                  <span className="hidden max-w-[160px] truncate text-muted-foreground xl:inline">{deadline.label}</span>
+                  <Fact tone={dl.tone === "destructive" ? "danger" : dl.tone === "warning" ? "warning" : undefined}>{dl.label}</Fact>
+                </span>
+              </Tip>
+            </>
+          )}
           <div className="flex-1" />
-          <Popover>
-            <PopoverTrigger asChild>
-              <button type="button" className="flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Matter details">
-                <span className="hidden sm:inline">Details</span><ChevronDown className="size-3.5" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-3">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{matter?.shortName ?? "Matter"}</div>
-              {matter?.caption && <div className="mt-0.5 text-[12px] text-muted-foreground">{matter.caption}</div>}
-              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[12px]">
-                <dt className="flex items-center gap-1.5 text-muted-foreground"><Users className="size-3.5" /> Client</dt><dd className="truncate">{matter?.client ?? "—"}</dd>
-                <dt className="flex items-center gap-1.5 text-muted-foreground"><Users className="size-3.5" /> Custodians</dt><dd className="tabular">{stats.custodians}</dd>
-                <dt className="flex items-center gap-1.5 text-muted-foreground"><ListChecks className="size-3.5" /> Suggested scores</dt><dd className="tabular">{stats.aiScored.toLocaleString()} <span className="text-muted-foreground">of {stats.total.toLocaleString()}</span></dd>
-                <dt className="flex items-center gap-1.5 text-muted-foreground"><Database className="size-3.5" /> Index</dt><dd className="tabular">{stats.indexed.docs.toLocaleString()} docs{stats.indexed.embedded ? ` · ${stats.indexed.embedded.toLocaleString()} embedded` : " · keyword only"}</dd>
-                <dt className="text-muted-foreground">Reviewed</dt><dd className="tabular">{stats.reviewed.toLocaleString()} / {stats.total.toLocaleString()} · {stats.needsReview.toLocaleString()} remaining</dd>
-              </dl>
-            </PopoverContent>
-          </Popover>
+          {actions}
+          {!empty && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" className="flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer" aria-label="Matter details">
+                  <span className="hidden sm:inline">Details</span><ChevronDown className="size-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 p-3">
+                <div className="text-[12.5px] font-medium">{matter?.shortName ?? "Matter"}</div>
+                {matter?.caption && <div className="mt-0.5 text-[12px] text-muted-foreground">{matter.caption}</div>}
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[12px]">
+                  <dt className="text-muted-foreground">Client</dt><dd className="truncate">{matter?.client || "—"}</dd>
+                  <dt className="text-muted-foreground">Custodians</dt><dd className="tabular">{stats.custodians}</dd>
+                  <dt className="text-muted-foreground">Reviewed</dt><dd className="tabular">{stats.reviewed.toLocaleString()} of {stats.total.toLocaleString()} · {stats.needsReview.toLocaleString()} remaining</dd>
+                  <dt className="text-muted-foreground">Suggested scores</dt><dd className="tabular">{stats.aiScored.toLocaleString()} of {stats.total.toLocaleString()}</dd>
+                  <dt className="text-muted-foreground">Search index</dt><dd className="tabular">{stats.indexed.docs.toLocaleString()} docs{stats.indexed.embedded ? ` · ${stats.indexed.embedded.toLocaleString()} embedded` : " · keyword only"}</dd>
+                </dl>
+              </PopoverContent>
+            </Popover>
+          )}
         </>
       ) : null}
     </header>

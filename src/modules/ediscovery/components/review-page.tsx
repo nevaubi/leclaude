@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
-import { ChevronRight, FileSearch, Keyboard, RefreshCw, ListChecks, Maximize2, Minimize2, Loader2, MoreHorizontal, Copy } from "lucide-react";
+import { ChevronRight, Keyboard, RefreshCw, ListChecks, Maximize2, Minimize2, Loader2, MoreHorizontal, Copy, Upload, Plus, FileUp } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TopbarSlot } from "@/components/shell/app-shell";
@@ -10,7 +11,8 @@ import { Tip } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { CountChip } from "@/components/ui/misc";
+import { CountChip, EmptyState } from "@/components/ui/misc";
+import { NewMatterDialog } from "@/modules/matters/components/new-matter-dialog";
 import { REVIEW_TABS, type ReviewTab, type SavedViewCounts } from "../types";
 import { DepositionsTab, CrossAnalysisTab, TimelineTab, PeopleGraphTab, ConflictsTab, StoryTab } from "../analysis";
 import { useReviewStore } from "./store";
@@ -22,6 +24,7 @@ import { ProductionsTab } from "./productions-tab";
 import { CodesTab, type CodesSection } from "./codes-tab";
 import { PredictDialog } from "./predict-dialog";
 import { Kbd } from "./shared";
+import { UploadDialog } from "./upload-dialog";
 import type { IssueCode } from "@/lib/types/domain";
 
 export interface MatterOption { id: string; shortName: string; name: string; caption?: string; client: string; stage?: string; docCount: number }
@@ -46,6 +49,8 @@ interface ReviewContextValue {
   reviewQueuePending: number | null;
   setReviewQueuePending: (n: number) => void;
   refreshReviewQueue: () => void;
+  /** Open the document upload dialog for the current matter. */
+  openUpload: () => void;
 }
 
 const ReviewContext = React.createContext<ReviewContextValue | null>(null);
@@ -58,6 +63,8 @@ export function useReview() {
 export interface ReviewPageProps {
   matters: MatterOption[];
   initialMatterId: string;
+  /** True when the matter came from the URL (?matter= or a document link); otherwise the viewer's last matter may take over. */
+  matterFromUrl?: boolean;
   initialTab: ReviewTab;
   /** Section of the Codes & privilege tab to open first (deep links such as `?view=privilege`). */
   initialCodesSection?: CodesSection;
@@ -86,6 +93,22 @@ const SHORTCUTS: [string, string][] = [
   ["[ / ]", "Previous / next in the viewer"], ["/", "Focus search"], ["?", "This help"],
 ];
 
+const NEW_MATTER = "__new_matter";
+
+/** Review tab of a matter without documents: the first action is an upload. */
+function EmptyMatter({ onUpload, onDepositions }: { onUpload: () => void; onDepositions: () => void }) {
+  return (
+    <div className="flex h-full items-center justify-center p-8">
+      <EmptyState
+        icon={FileUp}
+        title="No documents in this matter yet"
+        description="Upload PDFs, Word files, emails (.eml), text or images. Each file is hashed, deduplicated, text-extracted, Bates-numbered and indexed for search. Deposition transcripts are imported from the Depositions tab."
+        action={<div className="flex items-center justify-center gap-2"><Button size="sm" onClick={onUpload}><Upload className="size-4" /> Upload documents</Button><Button size="sm" variant="ghost" onClick={onDepositions}>Import a transcript</Button></div>}
+      />
+    </div>
+  );
+}
+
 export function ReviewPage(props: ReviewPageProps) {
   const [matterId, setMatterId] = React.useState(props.initialMatterId);
   const [tab, setTabState] = React.useState<ReviewTab>(props.initialTab);
@@ -93,6 +116,9 @@ export function ReviewPage(props: ReviewPageProps) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [indexing, setIndexing] = React.useState(false);
   const [nearDups, setNearDups] = React.useState(false);
+  const [uploadOpen, setUploadOpen] = React.useState(false);
+  const [newMatterOpen, setNewMatterOpen] = React.useState(false);
+  const router = useRouter();
   const store = useReviewStore();
   const setActiveMatterId = useShellStore((s) => s.setActiveMatterId);
   const stats = useStats(matterId);
@@ -110,13 +136,17 @@ export function ReviewPage(props: ReviewPageProps) {
     if (props.initialQuery) s.setQ(props.initialQuery);
     if (props.initialCustodian) s.toggleFilter("custodians", props.initialCustodian);
     if (props.initialDocId) s.setOpenDocId(props.initialDocId);
-    setActiveMatterId(props.initialMatterId);
-  }, [props.initialDocId, props.initialQuery, props.initialCustodian, props.initialMatterId, setActiveMatterId]);
+    // Without an explicit matter in the URL, the matter this browser last worked in wins over the server default.
+    const preferred = useShellStore.getState().activeMatterId;
+    if (!props.matterFromUrl && preferred && preferred !== props.initialMatterId && props.matters.some((m) => m.id === preferred)) setMatterId(preferred);
+    else setActiveMatterId(props.initialMatterId);
+  }, [props.initialDocId, props.initialQuery, props.initialCustodian, props.initialMatterId, props.matterFromUrl, props.matters, setActiveMatterId]);
 
   React.useEffect(() => { writeUrl({ matter: matterId, tab: tab === "review" ? null : tab, doc: store.openDocId }); }, [matterId, tab, store.openDocId]);
 
   const setTab = React.useCallback((t: ReviewTab) => setTabState(t), []);
   const changeMatter = (id: string) => {
+    if (id === NEW_MATTER) { setNewMatterOpen(true); return; }
     if (id === matterId) return;
     store.reset();
     setMatterId(id);
@@ -128,7 +158,7 @@ export function ReviewPage(props: ReviewPageProps) {
     setIndexing(true);
     try {
       const r = await api<{ docs: number; chunks: number; embedded: number; embeddingsAvailable: boolean }>("/api/ediscovery/index", { method: "POST", json: { matterId } });
-      toast.success(`Index rebuilt: ${r.docs} documents, ${r.chunks} chunks`, { description: r.embeddingsAvailable ? `${r.embedded} chunks embedded` : "Keyword-only (no OpenAI key); semantic search falls back to BM25." });
+      toast.success(`Index rebuilt: ${r.docs} documents, ${r.chunks} chunks`, { description: r.embeddingsAvailable ? `${r.embedded} chunks embedded` : "Keyword-only (no AI provider); semantic search falls back to BM25." });
       stats.refresh();
     } catch (e) { toast.error("Index rebuild failed", { description: (e as Error).message }); }
     finally { setIndexing(false); }
@@ -160,7 +190,7 @@ export function ReviewPage(props: ReviewPageProps) {
   const ctx = React.useMemo<ReviewContextValue>(() => ({
     matterId, matter, aiConfigured: props.aiConfigured, reviewers: props.reviewers, currentUserId: props.currentUserId,
     issueCodes: codes.data?.codes ?? [], viewCounts: stats.data?.views ?? null, refreshIssueCodes: codes.refresh, refreshStats: stats.refresh, refreshList, openDocument, setTab,
-    reviewQueuePending: queue.pending, setReviewQueuePending: queue.set, refreshReviewQueue: queue.refresh,
+    reviewQueuePending: queue.pending, setReviewQueuePending: queue.set, refreshReviewQueue: queue.refresh, openUpload: () => setUploadOpen(true),
   }), [matterId, matter, props.aiConfigured, props.reviewers, props.currentUserId, codes.data, stats.data, codes.refresh, stats.refresh, refreshList, openDocument, setTab, queue.pending, queue.set, queue.refresh]);
 
   const fullscreen = store.fullscreen && tab === "review" && !!store.openDocId;
@@ -168,8 +198,7 @@ export function ReviewPage(props: ReviewPageProps) {
   return (
     <ReviewContext.Provider value={ctx}>
       <TopbarSlot>
-        <FileSearch className="size-4 text-muted-foreground" />
-        <span className="shrink-0 text-sm font-semibold">E-Discovery</span>
+        <span className="shrink-0 text-sm font-medium">E-Discovery</span>
         <ChevronRight className="size-3.5 text-muted-foreground" />
         <Select value={matterId} onValueChange={changeMatter}>
           <SelectTrigger size="sm" className="h-7 w-auto max-w-[280px] gap-1.5 whitespace-nowrap border-transparent bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-accent" aria-label="Matter">
@@ -178,20 +207,24 @@ export function ReviewPage(props: ReviewPageProps) {
           <SelectContent align="start" className="min-w-[320px]">
             {props.matters.map((m) => (
               <SelectItem key={m.id} value={m.id}>
-                <span className="flex items-center gap-2"><span className="font-medium">{m.shortName}</span><span className="text-xs text-muted-foreground">{m.docCount.toLocaleString()} docs{m.caption ? ` · ${m.caption}` : ""}</span></span>
+                <span className="flex items-center gap-2"><span className="font-medium">{m.shortName}</span><span className="text-xs text-muted-foreground">{m.docCount ? `${m.docCount.toLocaleString()} docs` : "No documents"}{m.caption ? ` · ${m.caption}` : ""}</span></span>
               </SelectItem>
             ))}
+            <SelectItem value={NEW_MATTER}><span className="flex items-center gap-2 text-muted-foreground"><Plus className="size-3.5" /> New matter…</span></SelectItem>
           </SelectContent>
         </Select>
         <ChevronRight className="hidden size-3.5 text-muted-foreground md:block" />
         <span className="hidden text-sm text-muted-foreground md:block">{REVIEW_TABS.find((t) => t.id === tab)?.label}</span>
         <div className="flex-1" />
+        <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-[12.5px]" onClick={() => setUploadOpen(true)}><Upload className="size-3.5" /> Upload</Button>
         {tab === "review" && store.openDocId && (
           <Tip label={store.fullscreen ? "Exit full-screen viewer" : "Full-screen viewer"} shortcut="F"><Button variant="ghost" size="icon-sm" onClick={() => store.setFullscreen(!store.fullscreen)} aria-label="Toggle full screen">{store.fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button></Tip>
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="More actions"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuItem onClick={() => setUploadOpen(true)}><Upload /> Upload documents</DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setPredictOpen(true)}><ListChecks /> Predict responsiveness<span className="ml-auto text-[10px] text-muted-foreground">batch</span></DropdownMenuItem>
             <DropdownMenuItem onClick={detectNearDups} disabled={nearDups}>{nearDups ? <Loader2 className="animate-spin" /> : <Copy />} Detect near-duplicates</DropdownMenuItem>
             <DropdownMenuItem onClick={rebuildIndex} disabled={indexing}>{indexing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Rebuild search index</DropdownMenuItem>
@@ -214,7 +247,7 @@ export function ReviewPage(props: ReviewPageProps) {
                   aria-current={tab === t.id ? "page" : undefined}
                 >
                   {t.label}
-                  {t.id === "review" && stats.data && <CountChip>{stats.data.total.toLocaleString()}</CountChip>}
+                  {t.id === "review" && !!stats.data?.total && <CountChip>{stats.data.total.toLocaleString()}</CountChip>}
                   {t.id === "codes" && !!queue.pending && <Tip label={`${queue.pending} AI record${queue.pending === 1 ? "" : "s"} need review`}><CountChip tone="warning">{queue.pending}</CountChip></Tip>}
                   {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 bg-primary" />}
                 </button>
@@ -223,7 +256,7 @@ export function ReviewPage(props: ReviewPageProps) {
           </>
         )}
         <div className="min-h-0 flex-1">
-          {tab === "review" && <ReviewTabView key={matterId} />}
+          {tab === "review" && ((stats.data && stats.data.matterId === matterId ? stats.data.total === 0 : matter?.docCount === 0) ? <EmptyMatter onUpload={() => setUploadOpen(true)} onDepositions={() => setTabState("depositions")} /> : <ReviewTabView key={matterId} />)}
           {tab === "batches" && <BatchesTab key={matterId} initialBatchId={props.initialBatchId} />}
           {tab === "depositions" && <DepositionsTab matterId={matterId} onOpenDocument={openDocument} />}
           {tab === "cross" && <CrossAnalysisTab matterId={matterId} onOpenDocument={openDocument} />}
@@ -237,6 +270,8 @@ export function ReviewPage(props: ReviewPageProps) {
       </div>
 
       <PredictDialog open={predictOpen} onOpenChange={setPredictOpen} />
+      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} matterId={matterId} onOpenDocument={openDocument} onUploaded={(r) => { if (r.created) { stats.refresh(); codes.refresh(); refreshList(); router.refresh(); } }} />
+      <NewMatterDialog open={newMatterOpen} onOpenChange={setNewMatterOpen} onCreated={(m) => { window.location.assign(`/ediscovery?matter=${encodeURIComponent(m.id)}`); }} />
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent size="md">
           <DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Review faster without leaving the keyboard. Coding keys act on the selection, or on the active document.</DialogDescription></DialogHeader>

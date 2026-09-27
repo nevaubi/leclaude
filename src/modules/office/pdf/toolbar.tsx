@@ -180,11 +180,11 @@ export function PdfToolbar({ onSearch, onNextHit, onOpenSignature, onRedactSearc
           </PopoverTrigger>
         </Tip>
         <PopoverContent align="start" className="w-56 p-3">
-          <div className="mb-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Color</div>
+          <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Color</div>
           <div className="grid grid-cols-8 gap-1">{ANNOTATION_COLORS.map((c) => <button key={c.id} title={c.label} onClick={() => store.getState().setColor(c.hex)} className={cn("size-5 rounded-full border border-border transition-transform hover:scale-110 cursor-pointer", color.toLowerCase() === c.hex.toLowerCase() && "ring-2 ring-ring ring-offset-1 ring-offset-background")} style={{ background: c.hex }} aria-label={c.label} />)}</div>
-          <div className="mt-3 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Stroke width · {strokeWidth}pt</div>
+          <div className="mt-3 text-[11px] font-medium text-muted-foreground">Stroke width · {strokeWidth}pt</div>
           <Slider value={[strokeWidth]} min={0.5} max={8} step={0.5} onValueChange={([v]) => { store.getState().setPrefs({ strokeWidth: v }); const id = store.getState().selectedAnnotationId; if (id) store.getState().updateAnnotation(id, { strokeWidth: v }); }} className="mt-1" />
-          <div className="mt-3 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Text size · {fontSize}pt</div>
+          <div className="mt-3 text-[11px] font-medium text-muted-foreground">Text size · {fontSize}pt</div>
           <Slider value={[fontSize]} min={6} max={36} step={1} onValueChange={([v]) => { store.getState().setPrefs({ fontSize: v }); const id = store.getState().selectedAnnotationId; if (id) store.getState().updateAnnotation(id, { fontSize: v }); }} className="mt-1" />
         </PopoverContent>
       </Popover>

@@ -442,7 +442,7 @@ export const SEED_CLAUSES: SeedClause[] = [
   {
     id: "lib_clause_pfas_definitions",
     name: "PFAS / AFFF definitions for requests for production",
-    category: "PFAS discovery definitions",
+    category: "discovery definitions",
     stance: "pro-client",
     practiceArea: "Products Liability",
     tags: ["PFAS", "AFFF", "definitions", "RFP", "MDL 2873", "discovery"],
@@ -485,7 +485,7 @@ export const SEED_CLAUSES: SeedClause[] = [
   {
     id: "lib_clause_esi_tar_disclosure",
     name: "ESI protocol — technology-assisted review disclosure and validation",
-    category: "PFAS discovery definitions",
+    category: "discovery definitions",
     stance: "neutral",
     practiceArea: "Litigation",
     tags: ["ESI protocol", "TAR", "validation", "recall", "MDL 2873", "e-discovery"],

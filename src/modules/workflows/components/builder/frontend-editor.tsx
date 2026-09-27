@@ -211,7 +211,7 @@ function FrontendPreview({ fe, meta, workflowId }: { fe: WorkflowFrontend; meta:
   const formats = fe.output?.formats?.length ? fe.output.formats : OUTPUT_FORMATS;
   return (
     <div className="mx-auto max-w-[640px] space-y-5 px-5 py-4">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Preview</div>
+      <div className="text-[11px] font-medium text-muted-foreground">Preview</div>
       <div>
         <div className="text-[15px] font-semibold tracking-tight">{fe.title || "Start"}</div>
         {fe.intro && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{fe.intro}</p>}

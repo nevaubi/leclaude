@@ -762,6 +762,28 @@ export function createIssueCode(matterId: string, input: IssueCodeInput): IssueC
   return db().issueCodes.put(ic);
 }
 
+/** A small, generic starter set for a new matter (no case-specific codes). */
+export const STANDARD_ISSUE_CODES: IssueCodeInput[] = [
+  { code: "RESP", label: "Responsive", description: "Responsive to one or more document requests.", color: "chart-2" },
+  { code: "NR", label: "Not responsive", description: "Outside the scope of the requests.", color: "chart-3" },
+  { code: "HOT", label: "Hot", description: "Likely exhibit or key document for either side.", color: "destructive" },
+  { code: "PRIV-AC", label: "Privileged — attorney-client", description: "Confidential communication with counsel for legal advice; log before production.", color: "primary" },
+  { code: "PRIV-WP", label: "Privileged — work product", description: "Prepared in anticipation of litigation; log before production.", color: "primary" },
+  { code: "CONF", label: "Confidential", description: "Produce under the protective order's confidentiality designation.", color: "warning" },
+];
+
+/** Add the standard set to a matter, skipping codes it already has. Idempotent. */
+export function addStandardIssueCodes(matterId: string): { created: IssueCode[]; skipped: string[] } {
+  const created: IssueCode[] = [];
+  const skipped: string[] = [];
+  for (const c of STANDARD_ISSUE_CODES) {
+    if (db().issueCodes.findOne((x) => x.matterId === matterId && x.code === c.code)) { skipped.push(c.code); continue; }
+    created.push(createIssueCode(matterId, c));
+  }
+  if (created.length) audit("create", { kind: "issueCode", label: `standard issue codes (${created.length})`, matterId }, { codes: created.map((c) => c.code) });
+  return { created, skipped };
+}
+
 export function updateIssueCode(id: string, patch: Partial<IssueCodeInput>): IssueCode | null {
   const cur = db().issueCodes.get(id);
   if (!cur) return null;

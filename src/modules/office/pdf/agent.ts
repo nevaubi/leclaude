@@ -14,7 +14,7 @@ import { PII_PATTERNS } from "./text-search";
 
 export const PDF_SUGGESTIONS: OfficeAgentSuggestions = {
   draft: [
-    "Bates-stamp MFC-0060000 onward, bottom right",
+    "Bates-stamp ABC-0000001 onward, bottom right",
     "Redact every SSN and account number",
     "Highlight every mention of MW-7 and add a note",
     "Stamp CONFIDENTIAL on every page",
@@ -44,7 +44,7 @@ export function pdfInstructions(ctx: OfficeAgentContext<PdfSnapshot>): string {
 - Page numbers in tools and in your answers are DISPLAY numbers (position in the current page order, 1-based) — the same numbers the user sees in the viewer. Coordinates are PDF points; find_text returns the rectangles you can reuse.
 - The snapshot shows each page's text truncated to ~2,000 characters. Read the full page with get_pages_text before quoting or annotating precise language; use find_text for exact locations. Never guess page numbers — verify with find_text.
 - Redactions: add_redaction only PROPOSES boxes. Say so plainly. Text under a redaction is removed only when the user applies redactions (the editor rasterizes those pages and burns them into a new source). Never claim a redaction removed anything until the model shows it as applied. For "redact every SSN / account number / phone / email", use the PII presets (${PII_PATTERNS.map((p) => p.id).join(", ")}) and then check_pii_and_privilege to confirm coverage. Give each redaction a reason (${REDACTION_REASONS.slice(0, 5).join(", ")}…).
-- Production stamping: bates_stamp with prefix/start/digits/position, plus a confidentiality legend when the protective order requires it (default legend for AFFF/Meridian material: "CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER"; AEO tier: "HIGHLY CONFIDENTIAL — ATTORNEYS' EYES ONLY"). Numbers run consecutively over active pages in display order; tell the user the first and last number. Deleted pages are skipped.
+- Production stamping: bates_stamp with prefix/start/digits/position, plus a confidentiality legend when the protective order requires it (default legend: "CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER"; AEO tier: "HIGHLY CONFIDENTIAL — ATTORNEYS' EYES ONLY"). Numbers run consecutively over active pages in display order; tell the user the first and last number. Deleted pages are skipped.
 - Stamps: add_stamp for ${STAMP_PRESETS.slice(0, 6).join(", ")} or custom exhibit labels ("EXHIBIT 14", "PLAINTIFF'S EXHIBIT 7"). Exhibit stamps normally go top-right of page 1 only; confidentiality stamps go on every page.
 - Highlights carry an optional note; for "highlight every mention of X and add a note" call add_highlight with the note once (it marks all matches) rather than one note per hit unless asked.
 - Forms: get_form_fields lists names; fill_form takes name → value. Checkboxes are true/false; dropdowns need an existing option.
@@ -74,7 +74,7 @@ export function productionDeps(ctx: OfficeAgentContext<PdfSnapshot>): PdfToolDep
     extraction: () => extractionForModel(s.model),
     async summarize(text, focus, context) {
       const r = await generateText({
-        instructions: `You are a litigation associate at Seeger Weiss LLP summarizing a PDF for a partner. Document: "${context.title}"${context.matter ? ` (matter: ${context.matter})` : ""}. Write a tight summary in markdown: a two-sentence overview, then bullets grouped by ${focus ? `the user's focus (${focus})` : "obligations, deadlines, parties and open issues"}. Cite page numbers as (p. N) using the page markers. Quote operative language sparingly and exactly. Never invent dates or facts; mark inferences [VERIFY].`,
+        instructions: `You are a litigation associate summarizing a PDF for a partner. Document: "${context.title}"${context.matter ? ` (matter: ${context.matter})` : ""}. Write a tight summary in markdown: a two-sentence overview, then bullets grouped by ${focus ? `the user's focus (${focus})` : "obligations, deadlines, parties and open issues"}. Cite page numbers as (p. N) using the page markers. Quote operative language sparingly and exactly. Never invent dates or facts; mark inferences [VERIFY].`,
         input: text,
         reasoningEffort: "low",
       });

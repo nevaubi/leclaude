@@ -29,7 +29,7 @@ export const WORD_SUGGESTIONS: OfficeAgentSuggestions = {
     "Summarize the argument",
     "What authorities are cited?",
     "What is missing for a D.S.C. filing?",
-    "Which paragraphs mention the TSCA 8(e) timeline?",
+    "Which paragraphs discuss the notice deadline?",
   ],
 };
 
@@ -42,7 +42,7 @@ export function wordInstructions(ctx: OfficeAgentContext<WordSnapshot>): string 
 EDITING DISCIPLINE
 - Read before you write: use get_section / get_paragraphs / find_text to see exact text and ids. Do not guess ids or paraphrase from memory.
 - Prefer the smallest correct edit: replace_text_in_paragraph for a phrase, rewrite_paragraph for a whole paragraph, find_replace_all for a term used throughout. Do not rewrite paragraphs that do not need to change.
-- Preserve defined terms exactly (e.g. “Agreement”, “Meridian”, “the Products”), citation form, numbering, cross-references, Bates numbers and party names. If you rename a defined term, use find_replace_all with whole_word so every instance follows.
+- Preserve defined terms exactly (e.g. “Agreement”, “Company”, “the Products”), citation form, numbering, cross-references, Bates numbers and party names. If you rename a defined term, use find_replace_all with whole_word so every instance follows.
 - Keep the author's structure and voice unless asked to restructure. When restructuring, use set_style / move_block / insert_* rather than deleting and retyping.
 - Batch related edits in one turn; there is no need to ask permission for each proposal — the user reviews them before applying.
 - Never fabricate authority. If you need a citation you have not verified with a tool, write the proposition and add "[VERIFY]" in the text plus add_comment explaining what must be confirmed. When research is on, verify with search_case_law / get_opinion_text / verify_citations before citing, and give pin cites.
@@ -76,7 +76,7 @@ export function productionDeps(): WordToolDeps {
     },
     async polishParagraphs(paragraphs, goals, context) {
       const result = await generateJSON<{ rewrites: { id: string; markdown: string; note?: string }[] }>({
-        instructions: `You are a senior litigator's line editor at Seeger Weiss LLP. Rewrite each paragraph to meet the goals while preserving meaning, defined terms, citations, numbers, dates, names and cross-references exactly. Keep inline formatting as markdown (**bold**, *italic*). Return every paragraph id; if a paragraph needs no change, return it unchanged. Add a one-line note explaining a material change.`,
+        instructions: `You are a senior litigator's line editor at a litigation firm. Rewrite each paragraph to meet the goals while preserving meaning, defined terms, citations, numbers, dates, names and cross-references exactly. Keep inline formatting as markdown (**bold**, *italic*). Return every paragraph id; if a paragraph needs no change, return it unchanged. Add a one-line note explaining a material change.`,
         input: JSON.stringify({ document: context.title, section: context.sectionTitle, matter: context.matter, goals, paragraphs }),
         schema: { type: "object", properties: { rewrites: { type: "array", items: { type: "object", properties: { id: { type: "string" }, markdown: { type: "string" }, note: { type: "string" } }, required: ["id", "markdown"] } } }, required: ["rewrites"] },
         name: "polish_rewrites",

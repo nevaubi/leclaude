@@ -115,7 +115,7 @@ export function CalendarOverview() {
           )}
           {upcoming.length > 0 && (
             <div className="mt-1 border-t pt-1.5">
-              <div className="px-1.5 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Coming up</div>
+              <div className="px-1.5 pb-1 text-[11.5px] font-medium text-muted-foreground">Coming up</div>
               <ul className="space-y-0.5">
                 {upcoming.flatMap((d) => d.events.map((e) => <EventRow key={e.id} event={e} onClick={() => openEvent(e.id)} now={now} dayLabel={fmtDate(d.day, { weekday: "short" })} showCountdown />))}
               </ul>
@@ -171,7 +171,7 @@ function MiniMonth({ selected, onSelect }: { selected: string; onSelect: (k: str
         <Button variant="ghost" size="xs" className="px-1.5 text-[11px]" onClick={() => { setAnchor(now); onSelect(todayKey); }}>Today</Button>
         <Button variant="ghost" size="icon-xs" onClick={() => setAnchor(addMonths(anchor, 1))} aria-label="Next month"><ChevronRight className="size-3.5" /></Button>
       </div>
-      <div className="grid grid-cols-7 text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-7 text-center text-[11.5px] font-medium text-muted-foreground">
         {WEEKDAYS.map((d) => <div key={d} className="py-1">{d[0]}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-y-0.5" role="grid">
@@ -296,7 +296,7 @@ function MonthView({ anchor }: { anchor: Date }) {
   const todayKey = dateKey(now);
   return (
     <div className="flex h-full min-h-[560px] flex-col">
-      <div className="grid grid-cols-7 border-b text-center text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-7 border-b text-center text-[11.5px] font-medium text-muted-foreground">
         {WEEKDAYS.map((d) => <div key={d} className="py-1.5">{d}</div>)}
       </div>
       <div className="grid flex-1 grid-cols-7 auto-rows-fr">
@@ -352,7 +352,7 @@ function WeekView({ anchor }: { anchor: Date }) {
           const k = dateKey(d);
           return (
             <div key={k} className={cn("border-l px-2 py-1.5 text-center", k === todayKey && "bg-primary/5")}>
-              <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{WEEKDAYS[(d.getDay() + 6) % 7]}</div>
+              <div className="text-[11.5px] font-medium text-muted-foreground">{WEEKDAYS[(d.getDay() + 6) % 7]}</div>
               <div className={cn("mx-auto mt-0.5 flex size-6 items-center justify-center rounded-full text-[13px] tabular", k === todayKey && "bg-primary font-semibold text-primary-foreground")}>{d.getDate()}</div>
             </div>
           );
@@ -360,7 +360,7 @@ function WeekView({ anchor }: { anchor: Date }) {
       </div>
       {/* all-day row */}
       <div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b">
-        <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">All day</div>
+        <div className="px-2 py-1 text-[11.5px] text-muted-foreground">All day</div>
         {days.map((d) => {
           const k = dateKey(d);
           const evs = (byDay.get(k) ?? []).filter((e) => e.allDay || DATE_ONLY_RE.test(e.startsAt));
@@ -473,7 +473,7 @@ export function EventSheet() {
             <SheetBody className="space-y-4 text-sm">
               {matter && (
                 <div className="rounded-md border bg-muted/40 p-2.5">
-                  <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Matter</div>
+                  <div className="text-[11.5px] font-medium text-muted-foreground">Matter</div>
                   <div className="mt-0.5 font-medium">{matter.shortName} <span className="font-normal text-muted-foreground">· {matter.caption ?? matter.practiceArea}</span></div>
                   <div className="mt-1.5 flex gap-1.5">
                     <Button asChild variant="outline" size="xs"><Link href={`/ediscovery?matter=${matter.id}`}><FileSearch className="size-3" /> E-Discovery</Link></Button>
@@ -483,12 +483,12 @@ export function EventSheet() {
               )}
               {e.ruleSource && (
                 <div>
-                  <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Rule source</div>
+                  <div className="text-[11.5px] font-medium text-muted-foreground">Rule source</div>
                   <div className="mt-0.5 font-mono text-[12px]">{e.ruleSource}</div>
                 </div>
               )}
               <div>
-                <div className="flex items-center gap-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground"><Users className="size-3" /> Attendees <span className="tabular">({attendees.length})</span></div>
+                <div className="flex items-center gap-1 text-[11.5px] font-medium text-muted-foreground"><Users className="size-3" /> Attendees <span className="tabular">({attendees.length})</span></div>
                 {attendees.length ? (
                   <ul className="mt-1.5 space-y-1.5">
                     {attendees.map((p) => (
@@ -504,7 +504,7 @@ export function EventSheet() {
               </div>
               {e.notes && (
                 <div>
-                  <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Notes</div>
+                  <div className="text-[11.5px] font-medium text-muted-foreground">Notes</div>
                   <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/90">{e.notes}</p>
                 </div>
               )}
@@ -708,7 +708,7 @@ export function DeadlineCalculator({ initialTrigger, matterId, compact, onCreate
       <div className="flex flex-col rounded-lg border bg-muted/30 p-3">
         {result ? (
           <>
-            <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Due date</div>
+            <div className="text-[11.5px] font-medium text-muted-foreground">Due date</div>
             <div className="mt-0.5 font-serif text-2xl leading-tight">{fmtDate(result.dueDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</div>
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10.5px] text-muted-foreground"><CountdownChip date={result.dueDate} deadline /><span className="font-mono">{result.countedCourtDaysOnly ? "court days" : "calendar days"}</span>{result.mailDaysAdded > 0 && <span className="font-mono">+{result.mailDaysAdded} mail days</span>}</div>
             <ul className="mt-3 space-y-1 text-[12px] text-foreground/90">

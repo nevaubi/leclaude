@@ -89,11 +89,13 @@ export function validateDraft(d: MatterDraft): DraftErrors {
 }
 
 /** The matter fields, shared by the New matter dialog and the inspector's edit form. */
-export function MatterFields({ draft, onChange, errors, team, idPrefix, compact }: { draft: MatterDraft; onChange: (d: MatterDraft) => void; errors: DraftErrors; team: TeamMember[] | null; idPrefix: string; compact?: boolean }) {
+export function MatterFields({ draft, onChange, errors, team, idPrefix, compact, collapseDetails }: { draft: MatterDraft; onChange: (d: MatterDraft) => void; errors: DraftErrors; team: TeamMember[] | null; idPrefix: string; compact?: boolean; collapseDetails?: boolean }) {
+  const [detailsOpen, setDetailsOpen] = React.useState(!collapseDetails);
+  const showDetails = detailsOpen || !!(errors.openedAt || errors.caption || errors.judge || errors.stage);
   const set = <K extends keyof MatterDraft>(k: K, v: MatterDraft[K]) => onChange({ ...draft, [k]: v });
   const id = (k: string) => `${idPrefix}-${k}`;
   const attorneys = (team ?? []).filter((p) => p.firmRole === "Partner" || p.firmRole === "Associate");
-  const grid = compact ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 gap-3 sm:grid-cols-2";
+  const grid = compact ? "grid grid-cols-2 gap-x-2.5 gap-y-3" : "grid grid-cols-1 gap-3 sm:grid-cols-2";
   const toggleMember = (pid: string, on: boolean) => set("teamIds", on ? Array.from(new Set([...draft.teamIds, pid])) : draft.teamIds.filter((x) => x !== pid));
   return (
     <div className="space-y-3">
@@ -134,18 +136,6 @@ export function MatterFields({ draft, onChange, errors, team, idPrefix, compact 
         <Field label="Jurisdiction" htmlFor={id("jur")}>
           <Input id={id("jur")} size="sm" value={draft.jurisdiction} onChange={(e) => set("jurisdiction", e.target.value)} placeholder="e.g. Federal, 3d Cir." />
         </Field>
-        <Field label="Caption" htmlFor={id("caption")}>
-          <Input id={id("caption")} size="sm" value={draft.caption} onChange={(e) => set("caption", e.target.value)} placeholder="e.g. No. 2:26-cv-01234" />
-        </Field>
-        <Field label="Judge" htmlFor={id("judge")}>
-          <Input id={id("judge")} size="sm" value={draft.judge} onChange={(e) => set("judge", e.target.value)} />
-        </Field>
-        <Field label="Stage" htmlFor={id("stage")}>
-          <Input id={id("stage")} size="sm" value={draft.stage} onChange={(e) => set("stage", e.target.value)} placeholder="e.g. Pleadings, Discovery" />
-        </Field>
-        <Field label="Opened" htmlFor={id("opened")} error={errors.openedAt}>
-          <Input id={id("opened")} size="sm" type="date" value={draft.openedAt} onChange={(e) => set("openedAt", e.target.value)} className="tabular" />
-        </Field>
       </div>
       <Field label="Lead attorney" htmlFor={id("lead")} error={errors.leadAttorneyId} help={team && !attorneys.length ? "Add partners or associates in Settings → Team to assign a lead." : undefined}>
         <Select value={draft.leadAttorneyId || NONE} onValueChange={(v) => set("leadAttorneyId", v === NONE ? "" : v)} disabled={!team}>
@@ -175,9 +165,29 @@ export function MatterFields({ draft, onChange, errors, team, idPrefix, compact 
           </div>
         )}
       </Field>
-      <Field label="Description" htmlFor={id("desc")}>
-        <Textarea id={id("desc")} value={draft.description} onChange={(e) => set("description", e.target.value)} className="min-h-[64px] text-[12.5px]" placeholder="Claims, posture, anything the team should know." />
-      </Field>
+      {showDetails ? (
+        <>
+          <div className={grid}>
+            <Field label="Caption" htmlFor={id("caption")}>
+              <Input id={id("caption")} size="sm" value={draft.caption} onChange={(e) => set("caption", e.target.value)} placeholder="e.g. No. 2:26-cv-01234" />
+            </Field>
+            <Field label="Judge" htmlFor={id("judge")}>
+              <Input id={id("judge")} size="sm" value={draft.judge} onChange={(e) => set("judge", e.target.value)} />
+            </Field>
+            <Field label="Stage" htmlFor={id("stage")}>
+              <Input id={id("stage")} size="sm" value={draft.stage} onChange={(e) => set("stage", e.target.value)} placeholder="e.g. Pleadings, Discovery" />
+            </Field>
+            <Field label="Opened" htmlFor={id("opened")} error={errors.openedAt}>
+              <Input id={id("opened")} size="sm" type="date" value={draft.openedAt} onChange={(e) => set("openedAt", e.target.value)} className="tabular" />
+            </Field>
+          </div>
+          <Field label="Description" htmlFor={id("desc")}>
+            <Textarea id={id("desc")} value={draft.description} onChange={(e) => set("description", e.target.value)} className="min-h-[64px] text-[12.5px]" placeholder="Claims, posture, anything the team should know." />
+          </Field>
+        </>
+      ) : (
+        <button type="button" onClick={() => setDetailsOpen(true)} className="text-[12px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline cursor-pointer">More details: caption, judge, stage, opened date, description</button>
+      )}
     </div>
   );
 }

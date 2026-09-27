@@ -26,6 +26,7 @@ import { TodaySpine } from "./today-spine";
 import { ForYouSection } from "./for-you";
 import { MatterWatchSection } from "./insights-matter-watch";
 import { UpcomingPrepSection } from "./insights-upcoming";
+import { FirstRunChecklist } from "./first-run";
 
 /** Home page shortcuts, listed in the `?` help dialog. */
 export const HOME_SHORTCUTS: ShortcutGroup[] = [
@@ -118,23 +119,35 @@ function HomeLayout() {
 
 /**
  * Overview order follows the litigator's morning: what is due (spine), the
- * matters, the brief, then the quieter news and team updates.
+ * matters, the brief, then the quieter news and team updates. Sections with
+ * nothing to show are left out rather than rendered as empty boxes; before the
+ * first matter exists the page is the greeting plus a first-run checklist.
  */
 function Overview() {
+  const { setup, news, updates } = useHome();
+  const composerNonce = useHomeUI((s) => s.composerNonce);
+  const firstRun = setup.matters === 0;
+  const showNews = news.length > 0;
+  const showUpdates = updates.length > 0 || composerNonce > 0;
   return (
-    <div className="@container mx-auto w-full max-w-[1480px] space-y-3 p-3 pb-6">
-      <TodaySpine />
+    <div className="@container mx-auto w-full max-w-[1480px] space-y-4 p-4 pb-8">
+      <TodaySpine firstRun={firstRun} />
+      {firstRun && <FirstRunChecklist />}
       <ForYouSection />
       <UpcomingPrepSection />
       <MatterWatchSection />
-      <div className="grid gap-3 @5xl:grid-cols-[minmax(0,8fr)_minmax(0,4fr)]">
-        <MattersOverview />
-        <DailyBriefCard />
-      </div>
-      <div className="grid gap-3 @3xl:grid-cols-2">
-        <NewsOverview />
-        <UpdatesOverview />
-      </div>
+      {!firstRun && (
+        <div className="grid gap-4 @5xl:grid-cols-[minmax(0,8fr)_minmax(0,4fr)]">
+          <MattersOverview />
+          <DailyBriefCard />
+        </div>
+      )}
+      {(showNews || showUpdates) && (
+        <div className={cn("grid gap-4", showNews && showUpdates && "@3xl:grid-cols-2")}>
+          {showNews && <NewsOverview />}
+          {showUpdates && <UpdatesOverview />}
+        </div>
+      )}
     </div>
   );
 }

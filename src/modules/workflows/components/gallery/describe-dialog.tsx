@@ -15,8 +15,8 @@ import { CategoryBadge, InlineAlert, NodeTypeIcon } from "../shared";
 
 const EXAMPLES = [
   "When a new engagement letter is uploaded, extract client, scope and fee terms, check them against our standard terms, and open a task for the billing partner if anything deviates.",
-  "Every Friday, pull the open tasks and upcoming deadlines for the Northgate matter, draft a short internal status note, and post it to the team.",
-  "Take a deposition transcript, find every statement about the 2016 EHS memo, and build a chronology memo with page:line cites, then ask Jordan to approve before filing it.",
+  "Every Friday, pull the open tasks and upcoming deadlines for a matter, draft a short internal status note, and post it to the team.",
+  "Take a deposition transcript, find every statement about a key document, and build a chronology memo with page:line cites, then ask the partner to approve before filing it.",
 ];
 
 export function DescribeWorkflowDialog({ open, onOpenChange, meta, initialText }: { open: boolean; onOpenChange: (o: boolean) => void; meta: WorkflowMeta | null; initialText?: string }) {

@@ -37,9 +37,9 @@ export function toneFor(type: string) {
 
 export function NodeTypeIcon({ type, className, size = "md" }: { type: string; className?: string; size?: "xs" | "sm" | "md" }) {
   const Icon = iconFor(type);
-  const tone = toneFor(type);
   const sz = size === "xs" ? "size-5 [&>svg]:size-3" : size === "sm" ? "size-6 [&>svg]:size-3.5" : "size-7 [&>svg]:size-4";
-  return <span className={cn("inline-flex shrink-0 items-center justify-center rounded-md", tone.bg, tone.text, sz, className)}><Icon /></span>;
+  // Neutral tile: the icon names the step; category colour is reserved for the canvas edges and handles.
+  return <span className={cn("inline-flex shrink-0 items-center justify-center rounded-md border border-line-quiet bg-background text-muted-foreground", sz, className)}><Icon /></span>;
 }
 
 /** Row of tiny node-type icons (used on template cards). */
@@ -155,7 +155,7 @@ export function InlineAlert({ tone = "warning", icon: Icon = AlertCircle, title,
 
 export function SectionLabel({ children, className, right }: { children: React.ReactNode; className?: string; right?: React.ReactNode }) {
   return (
-    <div className={cn("flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground", className)}>
+    <div className={cn("flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground", className)}>
       <span>{children}</span>{right}
     </div>
   );

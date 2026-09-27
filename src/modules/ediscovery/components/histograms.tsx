@@ -17,7 +17,7 @@ function BarTip({ active, payload }: { active?: boolean; payload?: TipPayload[] 
   );
 }
 
-const FILL = "var(--chart-2)";
+const FILL = "color-mix(in oklch, var(--muted-foreground) 45%, transparent)";
 const FILL_SELECTED = "var(--primary)";
 const FILL_MUTED = "var(--line-quiet)";
 

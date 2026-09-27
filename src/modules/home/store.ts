@@ -69,7 +69,7 @@ export const useHomeUI = create<HomeUIState>()(
       taskDialog: { open: false, taskId: null, initial: null },
       openTaskDialog: (opts = {}) => set({ taskDialog: { open: true, taskId: opts.taskId ?? null, initial: opts.initial ?? null } }),
       closeTaskDialog: () => set((s) => ({ taskDialog: { ...s.taskDialog, open: false } })),
-      dockOpen: true,
+      dockOpen: false,
       setDockOpen: (dockOpen) => set({ dockOpen }),
       dockPrefill: null,
       askAssistant: (text) => set((s) => ({ dockOpen: true, dockPrefill: { text, nonce: (s.dockPrefill?.nonce ?? 0) + 1 } })),

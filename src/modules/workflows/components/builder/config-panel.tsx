@@ -116,7 +116,7 @@ function NodeConfig({ nodeId, meta }: { nodeId: string; meta: WorkflowMeta | nul
           <div className="min-w-0 flex-1">
             <Input value={node.data.label} onChange={(e) => updateNodeLabel(node.id, e.target.value)} className="h-7 border-transparent bg-transparent px-1 text-sm font-semibold shadow-none hover:border-input focus-visible:border-ring" aria-label="Step label" />
             <div className="mt-0.5 flex items-center gap-1.5 px-1 text-[10.5px]">
-              <span className={cn("font-medium uppercase tracking-wider", tone.text)}>{spec?.label ?? node.data.wfType}</span>
+              <span className={cn("font-medium", tone.text)}>{spec?.label ?? node.data.wfType}</span>
               <span className="text-muted-foreground">·</span>
               {editingId ? (
                 <input autoFocus value={idDraft} onChange={(e) => setIdDraft(e.target.value)} onBlur={commitId} onKeyDown={(e) => { if (e.key === "Enter") commitId(); if (e.key === "Escape") { setIdDraft(node.id); setEditingId(false); } }} className="h-5 w-32 rounded border bg-background px-1 font-mono text-[10.5px] outline-none focus:border-ring" />
@@ -168,7 +168,7 @@ function PanelSection({ title, count, children, first, right }: { title: React.R
   return (
     <section className={cn("px-3 pb-3", !first && "border-t")}>
       <div className="flex h-9 items-center gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+        <h3 className="text-[11px] font-semibold text-muted-foreground">{title}</h3>
         {count != null && <span className="rounded-full bg-muted px-1.5 text-[10px] tabular text-muted-foreground">{count}</span>}
         <span className="flex-1" />
         {right}

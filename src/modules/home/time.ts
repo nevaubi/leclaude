@@ -99,6 +99,21 @@ function humanDuration(ms: number): string {
   return `${hours} hr`;
 }
 
+/**
+ * Plain due-date text for lists: "today", "tomorrow", "in 5 days", "in 3 weeks", "9 days overdue".
+ * `overdue` tells the caller to use the danger color; nothing else is colored.
+ */
+export function dueText(target: string, now: Date): { text: string; overdue: boolean; days: number } {
+  const days = daysBetween(now, toDate(target));
+  if (days < 0) return { text: `${-days} day${days === -1 ? "" : "s"} overdue`, overdue: true, days };
+  if (days === 0) return { text: "today", overdue: false, days };
+  if (days === 1) return { text: "tomorrow", overdue: false, days };
+  if (days < 14) return { text: `in ${days} days`, overdue: false, days };
+  if (days < 60) return { text: `in ${Math.round(days / 7)} weeks`, overdue: false, days };
+  if (days < 365) return { text: `in ${Math.round(days / 30)} months`, overdue: false, days };
+  return { text: `in ${(days / 365).toFixed(1)} years`, overdue: false, days };
+}
+
 /** Human "in 3 weeks" / "overdue 2 days" phrases for the brief. */
 export function countdownPhrase(target: string, now: Date): string {
   const days = daysBetween(now, toDate(target));

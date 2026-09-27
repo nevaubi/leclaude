@@ -274,7 +274,7 @@ function UsageDetails({ id, run, steps, nodeMap, warnings }: { id: string; run: 
       {steps.length > 0 ? (
         <table className="w-full border-collapse text-[10.5px]">
           <thead>
-            <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+            <tr className="text-left text-[11px] text-muted-foreground">
               <th className="pb-1 font-medium">Step</th><th className="pb-1 font-medium">Model</th><th className="pb-1 text-right font-medium">In</th><th className="pb-1 text-right font-medium">Out</th><th className="pb-1 text-right font-medium">Cache</th><th className="pb-1 text-right font-medium">Latency</th><th className="pb-1 text-right font-medium">Cost</th>
             </tr>
           </thead>
@@ -385,13 +385,13 @@ function StepRow({ step, label, type, depth, progress, retrying, now, iterations
             {step.error && <div className={cn("rounded-md border px-2 py-1.5 text-[11px]", step.status === "cancelled" ? "border-border bg-muted/40 text-muted-foreground" : "border-destructive/40 bg-destructive/8 text-destructive")}>{step.failureKind && step.status !== "cancelled" ? <span className="font-medium">{FAILURE_KIND_LABEL[step.failureKind]} · </span> : null}{step.error}</div>}
             {step.logs && step.logs.length > 0 && (
               <div>
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Log</div>
+                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Log</div>
                 <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 p-2 font-mono text-[10.5px] leading-relaxed scrollbar-thin">{step.logs.join("\n")}</pre>
               </div>
             )}
             {iterations && iterations.length > 0 && (
               <div>
-                <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Iterations ({iterations.length})</div>
+                <div className="mb-1 text-[11px] font-medium text-muted-foreground">Iterations ({iterations.length})</div>
                 <div className="space-y-1">
                   {iterations.map((it) => <IterationRow key={it.index} iteration={it} nodeMap={nodeMap} />)}
                 </div>
@@ -399,7 +399,7 @@ function StepRow({ step, label, type, depth, progress, retrying, now, iterations
             )}
             {step.output !== undefined && (
               <div>
-                <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-muted-foreground"><span>Output</span><CopyButton value={step.output} /></div>
+                <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-muted-foreground"><span>Output</span><CopyButton value={step.output} /></div>
                 <OutputViewer value={shownOutput} defaultDepth={wide ? 2 : 1} className={cn("max-h-[420px] overflow-auto scrollbar-thin")} />
                 {stepProv && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-muted-foreground">

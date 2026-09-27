@@ -28,9 +28,9 @@ import { SlidesToolbar } from "./toolbar";
 import { VersionsDialog } from "./versions-dialog";
 
 const SUGGESTIONS = {
-  draft: ["Build a 10-slide case strategy deck for the AFFF bellwether", "Turn these notes into slides", "Tighten every slide to ≤5 bullets", "Add a timeline slide from the chronology", "Apply the Client Light theme and add speaker notes", "Add a key documents slide with Bates cites"],
+  draft: ["Build a 10-slide case strategy deck for this matter", "Turn these notes into slides", "Tighten every slide to ≤5 bullets", "Add a timeline slide from the chronology", "Apply the Client Light theme and add speaker notes", "Add a key documents slide with Bates cites"],
   review: ["Check consistency, hierarchy and overflow", "Is the narrative arc clear? Flag gaps", "Check every cite and Bates number", "Is this deck ready for a client audience?"],
-  ask: ["What's the narrative arc?", "Summarize the deck in three sentences", "Which slides mention the TSCA §8(e) timeline?"],
+  ask: ["What's the narrative arc?", "Summarize the deck in three sentences", "Which slides mention the key dates?"],
 };
 
 const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2];
@@ -267,7 +267,7 @@ export function SlidesEditorPage({ id, templateId, matterId, matters }: SlidesEd
                   <div className="sl-viewport flex flex-1 items-center justify-center"><Skeleton className="aspect-video w-[70%] rounded" /></div>
                 )}
                 <div className={cn("sl-notes shrink-0 border-t bg-background transition-[height]", notesOpen ? "h-[128px]" : "h-8")}>
-                  <button onClick={() => setNotesOpen((v) => !v)} className="flex h-8 w-full items-center gap-2 px-3 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={notesOpen}>
+                  <button onClick={() => setNotesOpen((v) => !v)} className="flex h-8 w-full items-center gap-2 px-3 text-[11px] font-medium text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={notesOpen}>
                     <StickyNote className="size-3.5" /> Speaker notes{slide?.notes.trim() ? <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] normal-case tracking-normal">{slide.notes.trim().split(/\s+/).length} words</span> : null}
                     <span className="ml-auto">{notesOpen ? <ChevronsDown className="size-3.5" /> : <ChevronsUp className="size-3.5" />}</span>
                   </button>

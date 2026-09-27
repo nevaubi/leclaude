@@ -1,7 +1,6 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Radar } from "lucide-react";
 import { TrustBadge } from "@/components/ai/trust-badge";
 import { useHome } from "./home-provider";
 import { Section } from "./shared";
@@ -27,13 +26,13 @@ export function ForYouSection() {
   }, [userId, matterFilter, intelInsights]);
   if (!items || items.length === 0) return null;
   return (
-    <Section id="for-you" title="For you" icon={Radar} count={items.length} description="Insights from the intelligence layer, ranked for your matters and watches" actions={<Link href="/intel" className="text-[11px] text-muted-foreground hover:text-primary">Intelligence</Link>}>
+    <Section id="for-you" title="For you" count={items.length} description="From your connected sources, ranked for your matters and watches" actions={<Link href="/intel" className="text-[11px] text-muted-foreground hover:text-primary">Intelligence</Link>}>
       <ul className="divide-y divide-line-quiet">
         {items.map((it) => {
           const matter = matterById(it.scope?.matterId);
           const body = (
             <>
-              <span className="w-[76px] shrink-0 text-[10.5px] uppercase tracking-wider text-muted-foreground">{INSIGHT_KIND_LABEL[it.kind ?? ""] ?? it.kind ?? "Insight"}</span>
+              <span className="w-[76px] shrink-0 text-[11.5px] text-muted-foreground">{INSIGHT_KIND_LABEL[it.kind ?? ""] ?? it.kind ?? "Insight"}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[12.5px] font-medium">{it.title}</span>
                 {it.summary && <span className="block truncate text-[11.5px] text-muted-foreground">{it.summary}</span>}
@@ -42,7 +41,7 @@ export function ForYouSection() {
               <TrustBadge provenance={it.provenance} compact />
             </>
           );
-          const cls = "flex min-h-[34px] w-full items-center gap-3 px-3 py-1 text-left hover:bg-accent/50";
+          const cls = "flex min-h-[34px] w-full items-center gap-3 px-1 py-1 text-left hover:bg-accent/40";
           return <li key={it.id}>{it.href ? <Link href={it.href} className={cls}>{body}</Link> : <Link href={`/intel?insight=${encodeURIComponent(it.id)}`} className={cls}>{body}</Link>}</li>;
         })}
       </ul>

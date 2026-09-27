@@ -40,7 +40,7 @@ export interface ResearchPageProps {
 }
 
 const EXAMPLES = [
-  "Is the government contractor defense available to a MilSpec AFFF manufacturer in the Fourth Circuit?",
+  "Is the government contractor defense available to a military-specification product manufacturer in the Fourth Circuit?",
   "Is a consequential damages waiver enforceable against a claim for gross negligence under Illinois law?",
   "What is the clear-evidence standard for impossibility preemption after Albrecht?",
   "Can a court strike a PAGA claim as unmanageable after Estrada v. Royalty Carpet Mills?",
@@ -274,7 +274,7 @@ export function ResearchPage(props: ResearchPageProps) {
 
   const emptyState = (
     <div className="mx-auto flex h-full w-full max-w-[760px] flex-col justify-center px-6 py-10">
-      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Research</div>
+      <div className="mb-1 text-[11.5px] font-medium text-muted-foreground">Research</div>
       <h1 className="text-[20px] font-semibold tracking-tight">What do you need to know?</h1>
       <p className="mt-1 max-w-xl text-[12.5px] text-muted-foreground">Parallel research lanes search and read case law, statutes, regulations, dockets, the matter record and the firm library, then the answer is written from what was read, verified claim by claim, and cited by number.</p>
       <div className="mt-6 flex flex-wrap gap-1.5">
