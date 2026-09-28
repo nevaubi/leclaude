@@ -55,7 +55,7 @@ export function FileDrop(p: FileDropProps) {
         onDragOver={(e) => { e.preventDefault(); if (!p.disabled) setOver(true); }}
         onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files); }}
-        className={cn("flex cursor-pointer items-center gap-3 rounded-md border border-dashed px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50", p.compact ? "h-9" : "min-h-16 py-3", over ? "border-primary bg-primary/5" : "border-border hover:border-foreground/30 hover:bg-accent/30", p.disabled && "cursor-not-allowed opacity-50")}
+        className={cn("flex cursor-pointer items-center gap-3 rounded-md border border-dashed px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", p.compact ? "h-9" : "min-h-16 py-3", over ? "border-primary bg-primary/5" : "border-border hover:border-foreground/30 hover:bg-accent/30", p.disabled && "cursor-not-allowed opacity-50")}
       >
         <FileUp className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <div className="min-w-0 flex-1 leading-tight">

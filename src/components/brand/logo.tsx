@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
 export function SWMark({ className, size = 32, title = "Seeger Weiss" }: { className?: string; size?: number; title?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={title} className={cn("shrink-0", className)}>
-      <rect width="64" height="64" rx="10" fill="#14284b" />
-      <text x="32" y="43" textAnchor="middle" fontFamily="'Source Serif 4 Variable', Georgia, 'Times New Roman', serif" fontWeight="600" fontSize="31" fill="#ffffff" letterSpacing="-1">SW</text>
+      <rect width="64" height="64" rx="10" fill="var(--brand)" />
+      <text x="32" y="43" textAnchor="middle" fontFamily="'Source Serif 4 Variable', Georgia, 'Times New Roman', serif" fontWeight="600" fontSize="31" fill="var(--brand-foreground)" letterSpacing="-1">SW</text>
     </svg>
   );
 }
@@ -25,7 +25,7 @@ export function SeegerWeissWordmark({ className, height = 34, tagline = true, co
         <tspan fontSize="20" dx="8" fontWeight="600" letterSpacing="1">LLP</tspan>
       </text>
       {tagline && (
-        <text x="1" y="86" fontFamily="'Inter Variable', ui-sans-serif, system-ui, sans-serif" fontWeight="500" fontSize="12.5" fill="#1f6fb2" letterSpacing="4.2">
+        <text x="1" y="86" fontFamily="'Inter Variable', ui-sans-serif, system-ui, sans-serif" fontWeight="500" fontSize="12.5" fill="var(--brand-accent)" letterSpacing="4.2">
           COMPLEX LITIGATION | SIMPLE JUSTICE
         </text>
       )}
@@ -41,7 +41,7 @@ export function BrandLockup({ collapsed, className }: { collapsed?: boolean; cla
       {!collapsed && (
         <span className="min-w-0 leading-tight">
           <span className="block truncate font-serif text-[15px] font-semibold tracking-tight">Seeger Weiss <span className="text-[11px] font-medium tracking-wider">LLP</span></span>
-          <span className="block truncate text-[9.5px] font-medium uppercase tracking-[0.18em] text-[#1f6fb2] dark:text-[#6fb2e6]">Complex Litigation | Simple Justice</span>
+          <span className="block truncate text-[9.5px] font-medium uppercase tracking-[0.18em] text-brand-accent">Complex Litigation | Simple Justice</span>
         </span>
       )}
     </span>

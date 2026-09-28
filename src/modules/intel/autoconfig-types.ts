@@ -35,6 +35,8 @@ export interface MatterIntelPlan {
   products: string[];
   /** News searches (run only when a news provider key is configured). */
   news: PlannedQuery[];
+  /** CFR sections to keep current (from citations in the record, or exact sections the model proposed). */
+  cfrSections?: { title: number; section: string }[];
   /** How the plan was produced: model-assisted wording or record-only rules (no AI key). */
   method: "model" | "rules";
   notes?: string[];

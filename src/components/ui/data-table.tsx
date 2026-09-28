@@ -286,7 +286,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
         aria-multiselectable={selectionMode === "multi" || undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className={cn("relative min-h-0 flex-1 overflow-auto scrollbar-thin outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40", !fill && "max-h-full")}
+        className={cn("relative min-h-0 flex-1 overflow-auto scrollbar-thin outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", !fill && "max-h-full")}
       >
         {/* Header */}
         <div role="row" className="sticky top-0 z-10 flex border-b bg-background grid-head" style={{ height: HEADER_HEIGHT, minWidth: gridWidth }}>

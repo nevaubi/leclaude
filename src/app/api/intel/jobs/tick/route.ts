@@ -5,6 +5,7 @@ import { intelConfig } from "@/modules/intel/config";
 import { intelHealth } from "@/modules/intel/health";
 import { runDue } from "@/modules/intel/jobs";
 import { ensureIntelSeeded } from "@/modules/intel/seed";
+import { scheduleAutoConfigure } from "@/modules/intel/autoconfig";
 import { withAuth } from "@/lib/auth/route";
 import { refs } from "@/lib/auth/resources";
 
@@ -28,6 +29,7 @@ async function tick(req: NextRequest) {
     if (auth !== `Bearer ${cronSecret}`) return jsonError("Unauthorized", 401);
   }
   try { ensureIntelSeeded(); } catch { /* seeded by db() on first access */ }
+  scheduleAutoConfigure();
   const url = new URL(req.url);
   const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") ?? 50) || 50, 200));
   const deadlineMs = Math.max(1000, Math.min(Number(url.searchParams.get("deadlineMs") ?? 50_000) || 50_000, 55_000));

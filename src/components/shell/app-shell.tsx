@@ -88,9 +88,9 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "group relative flex items-center rounded-md text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "group relative flex items-center rounded-md text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           expanded ? "gap-2.5 px-2.5 py-1.5" : "size-9 justify-center",
-          active ? "bg-primary/8 text-primary dark:bg-primary/12" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+          active ? "bg-primary/10 text-primary dark:bg-primary/14" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
         )}
       >
         <item.icon className={cn("size-[17px] shrink-0", active ? "text-primary" : "")} strokeWidth={active ? 2 : 1.75} />
@@ -113,7 +113,7 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
         )}
       >
         <div className={cn("flex h-11 items-center border-b border-sidebar-border", expanded ? "px-3" : "justify-center px-0")}>
-          <Link href="/" className="flex min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50" aria-label={`${appName} home`}>
+          <Link href="/" className="flex min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`${appName} home`}>
             {expanded || mobileOpen ? <BrandLockup /> : <SWMark size={26} />}
           </Link>
         </div>
@@ -124,12 +124,12 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
               onClick={() => setPaletteOpen(true)}
               aria-label="Search or jump to anything"
               className={cn(
-                "flex items-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                expanded && "border",
+                "flex items-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                expanded && "border bg-background",
                 expanded ? "h-8 w-full gap-2 px-2.5 text-[12px]" : "size-9 justify-center",
               )}
             >
-              <Search className="size-4 shrink-0" strokeWidth={1.75} />
+              <Search className="size-[17px] shrink-0" strokeWidth={1.75} />
               {expanded && (<><span className="flex-1 text-left">Search or jump to…</span><kbd className="hidden sm:inline">⌘K</kbd></>)}
             </button>
           </Tip>
@@ -142,13 +142,13 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
         <div className={cn("flex flex-col gap-0.5 border-t border-sidebar-border py-2", expanded ? "px-3" : "items-center px-0")}>
           {SECONDARY_NAV.map(railItem)}
           <Tip label={expanded ? "Collapse" : "Expand"} side="right" shortcut="[">
-            <button onClick={toggleSidebar} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className={cn("flex items-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50", expanded ? "gap-2.5 px-2.5 py-1.5 text-[12.5px]" : "size-9 justify-center")}>
-              {expanded ? <><ChevronLeft className="size-[17px]" /> Collapse</> : <ChevronRight className="size-[17px]" />}
+            <button onClick={toggleSidebar} aria-label={expanded ? "Collapse navigation" : "Expand navigation"} className={cn("flex items-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", expanded ? "gap-2.5 px-2.5 py-1.5 text-[12.5px]" : "size-9 justify-center")}>
+              {expanded ? <><ChevronLeft className="size-[17px]" strokeWidth={1.75} /> Collapse</> : <ChevronRight className="size-[17px]" strokeWidth={1.75} />}
             </button>
           </Tip>
           {expanded && (
             <button aria-label="Sign out" className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12.5px] text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground" disabled>
-              <LogOut className="size-[17px]" /> Sign out
+              <LogOut className="size-[17px]" strokeWidth={1.75} /> Sign out
             </button>
           )}
         </div>
@@ -163,7 +163,7 @@ function ShellFrame({ children, appName, firmName, user }: { children: React.Rea
             <ReviewQueueIndicator />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="ml-0.5 rounded-full ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 cursor-pointer" aria-label="Account menu"><PersonAvatar name={user.name} size="sm" /></button>
+                <button className="ml-0.5 rounded-full ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer" aria-label="Account menu"><PersonAvatar name={user.name} size="sm" /></button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
                 <DropdownMenuLabel className="font-normal">

@@ -15,7 +15,7 @@ const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.T
     ref={ref}
     data-size={size}
     className={cn(
-      "flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 cursor-pointer",
+      "flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 cursor-pointer",
       TRIGGER_SIZE[size],
       className,
     )}

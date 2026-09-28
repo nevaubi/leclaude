@@ -17,10 +17,14 @@ export function Kbd({ children, className }: { children: React.ReactNode; classN
 export function EmptyState({ icon: Icon, title, description, action, className, compact }: { icon?: LucideIcon; title: string; description?: React.ReactNode; action?: React.ReactNode; className?: string; compact?: boolean }) {
   return (
     <div className={cn("flex flex-col items-center justify-center gap-1.5 rounded-md text-center", compact ? "p-5" : "p-10", className)} role="status">
-      {Icon && <Icon className={cn("mb-1 text-muted-foreground/70", compact ? "size-4" : "size-5")} strokeWidth={1.75} aria-hidden />}
-      <div className={cn("font-medium", compact ? "text-[12.5px]" : "text-[13px]")}>{title}</div>
-      {description && <div className="max-w-sm text-[11.5px] leading-snug text-muted-foreground">{description}</div>}
-      {action && <div className="mt-2">{action}</div>}
+      {Icon && (
+        <span className={cn("mb-1.5 flex items-center justify-center rounded-full bg-muted text-muted-foreground", compact ? "size-7" : "size-9")} aria-hidden>
+          <Icon className={compact ? "size-3.5" : "size-4"} strokeWidth={1.75} />
+        </span>
+      )}
+      <div className={cn("font-medium text-foreground", compact ? "text-[12.5px]" : "text-[13.5px]")}>{title}</div>
+      {description && <div className={cn("max-w-sm text-pretty text-muted-foreground", compact ? "text-[11.5px] leading-snug" : "text-[12px] leading-relaxed")}>{description}</div>}
+      {action && <div className={compact ? "mt-2" : "mt-3"}>{action}</div>}
     </div>
   );
 }
@@ -31,7 +35,7 @@ export function PageHeader({ title, description, actions, className, eyebrow }: 
       <div className="min-w-0">
         {eyebrow && <div className="mb-1 text-[12px] text-muted-foreground">{eyebrow}</div>}
         <h1 className="text-[17px] font-semibold tracking-[-0.01em]">{title}</h1>
-        {description && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{description}</p>}
+        {description && <p className="mt-1 max-w-[var(--measure)] text-[12.5px] leading-snug text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
