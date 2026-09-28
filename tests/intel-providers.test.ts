@@ -84,6 +84,15 @@ describe("provider client error mapping", () => {
     const f = fakeFetch(handler);
     return { ...f, client: new ProviderClient({ name: "t", rps: 100, burst: 100, fetchImpl: f.impl, cache: memoryHttpCache(), limiter, maxWaitMs: 50, sleep: noSleep }) };
   };
+  it("retries a provider 429 once after a short Retry-After, and not after a long one", async () => {
+    let n = 0;
+    const once = make(() => (++n === 1 ? json({}, 429, { "retry-after": "2" }) : json({ ok: true })));
+    await expect(once.client.getJSON("https://p/r")).resolves.toMatchObject({ ok: true });
+    expect(once.calls).toHaveLength(2);
+    const long = make(() => json({}, 429, { "retry-after": "60" }));
+    await expect(long.client.getJSON("https://p/r")).rejects.toMatchObject({ code: "rate_limited", status: 429 });
+    expect(long.calls).toHaveLength(1);
+  });
   it("maps 429, 401/403, 404, 5xx, bad JSON and network failures", async () => {
     const c429 = make(() => json({}, 429, { "retry-after": "7" }));
     await expect(c429.client.getJSON("https://p/x")).rejects.toMatchObject({ code: "rate_limited", retryable: true, status: 429, retryAfterMs: 7000 });

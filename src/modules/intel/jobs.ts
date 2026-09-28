@@ -592,6 +592,9 @@ async function runSourceJob(job: IntelJob, o: ExecuteOptions, now: Date, log: (l
  * an interruption (runner deadline) gives the attempt back; a final failure
  * dead-letters it and hands it to the steward.
  */
+/** Job kinds whose handlers the analysis layer registers (loaded on demand when a runner meets one). */
+const ANALYSIS_JOB_KINDS = new Set<string>(["analysis.run", "entities.resolve", "doc.extract"]);
+
 export async function executeJob(job: IntelJob, o: ExecuteOptions = {}): Promise<DurableIntelJob> {
   const now = o.now ?? new Date();
   const log = (line: IntelJobLogLine) => appendLog(job.id, line);
@@ -638,7 +641,13 @@ export async function executeJob(job: IntelJob, o: ExecuteOptions = {}): Promise
         break;
       }
       default: {
-        const handler = getJobHandler(job.kind);
+        let handler = getJobHandler(job.kind);
+        if (!handler && ANALYSIS_JOB_KINDS.has(job.kind)) {
+          // Analysis handlers register in the analysis bootstrap, which a route running the queue may not have loaded.
+          const { registerAnalysisJobHandlers } = await import("./analysis/jobs");
+          registerAnalysisJobHandlers();
+          handler = getJobHandler(job.kind);
+        }
         if (!handler) outcome = { ok: false, error: { code: "unknown", message: `No handler registered for job kind "${job.kind}"`, retryable: false, fatal: true } };
         else outcome = { ok: true, result: await handler(job, { providers: o.providers, signal: o.signal, log, now }) };
       }

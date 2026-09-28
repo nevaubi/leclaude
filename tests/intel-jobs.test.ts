@@ -207,7 +207,7 @@ describe("scheduling and execution", () => {
     const done = await executeJob(claimJob(j.id, "w")!);
     expect(done.status).toBe("succeeded");
     expect(done.result).toEqual({ resolved: 7 });
-    const u = enqueueJob({ kind: "analysis.run", maxAttempts: 3 });
+    const u = enqueueJob({ kind: "not.a.kind" as Parameters<typeof enqueueJob>[0]["kind"], maxAttempts: 3 });
     const failed = await executeJob(claimJob(u.id, "w")!, { review: false });
     expect(failed.status).toBe("failed");
     expect(failed.error?.message).toMatch(/No handler/);
@@ -248,6 +248,13 @@ describe("scheduling and execution", () => {
     expect(sinceFor(changed, now)).toBe(new Date(now.getTime() - BACKFILL_DAYS * 86400_000).toISOString().slice(0, 10));
     intelSources().update(src.id, (s) => ({ ...s, health: { ...s.health, lastSuccessAt: "2026-09-28T02:00:00.000Z" } }));
     expect(sinceFor(intelSources().get(src.id)!, now)).toBe("2026-09-26");
+  });
+  it("loads the analysis handlers on demand when a runner meets an analysis job", async () => {
+    const { getJobHandler } = await import("@/modules/intel/jobs");
+    const j = enqueueJob({ kind: "analysis.run", payload: { kinds: [] }, maxAttempts: 1 });
+    const out = await executeJob(claimJob(j.id, "w")!, { review: false });
+    expect(out.error?.message ?? "").not.toMatch(/No handler/);
+    expect(getJobHandler("analysis.run")).toBeTypeOf("function");
   });
   it("runs housekeeping kinds through the runner (sweep, scan.run, workflow.tick)", async () => {
     const sweep = enqueueJob({ kind: "sweep", maxAttempts: 1 });

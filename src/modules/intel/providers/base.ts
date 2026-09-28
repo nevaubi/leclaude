@@ -140,6 +140,9 @@ export interface TextResponse { text: string; status: number; contentType: strin
  * A rate-limited, cached HTTP client for one provider. `getJSON`/`postJSON`
  * parse JSON and map errors; `getText` returns the decoded body.
  */
+/** Longest provider-requested wait (Retry-After) the client sleeps through before retrying a 429 once. */
+const MAX_429_WAIT_MS = 20_000;
+
 export class ProviderClient {
   readonly name: string;
   readonly limiter: TokenBucket;
@@ -194,6 +197,20 @@ export class ProviderClient {
   }
 
   async request(url: string, init: { method?: string; body?: string; headers?: Record<string, string> } = {}, opts: RequestOptions = {}): Promise<TextResponse> {
+    try {
+      return await this.requestOnce(url, init, opts);
+    } catch (e) {
+      // One retry after a provider 429 when the wait it asks for is short (default 5s); longer waits surface as rate_limited.
+      if (!isProviderError(e) || e.code !== "rate_limited" || e.status !== 429 || opts.signal?.aborted) throw e;
+      const wait = e.retryAfterMs ?? 5_000;
+      if (!(wait >= 0 && wait <= MAX_429_WAIT_MS)) throw e;
+      await (this.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(wait);
+      if (opts.signal?.aborted) throw e;
+      return this.requestOnce(url, init, opts);
+    }
+  }
+
+  private async requestOnce(url: string, init: { method?: string; body?: string; headers?: Record<string, string> } = {}, opts: RequestOptions = {}): Promise<TextResponse> {
     if (this.offline) throw new ProviderError(this.name, "not_configured", `${this.name}: outbound network is disabled (INTEL_OFFLINE)`, false, undefined, url);
     const ttl = opts.ttlMs ?? this.ttlMs;
     // Cached responses do not consume rate-limit tokens: peek first through fetchCached's cache by doing a dry lookup.
