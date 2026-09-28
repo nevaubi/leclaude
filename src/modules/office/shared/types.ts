@@ -22,6 +22,8 @@ export type ProposalStatus = "pending" | "applied" | "discarded" | "failed" | "s
 export interface ProposalBase {
   /** Content fingerprint of the target when it was read. */
   hash?: string;
+  /** Multi-target proposals: target id (paragraph, range, slide…) → content fingerprint when it was read. */
+  blocks?: Record<string, string>;
   /** Document version or revision the proposal was made against. */
   version?: string | number;
   /** PDF: the source blob the page content came from. */

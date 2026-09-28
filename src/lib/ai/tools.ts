@@ -81,6 +81,11 @@ export interface ToolDef<TArgs = Record<string, unknown>, TResult = unknown> {
   execute: (args: TArgs, ctx: ToolContext) => Promise<TResult> | TResult;
   /** Optional short label shown in the UI while running. */
   label?: string | ((args: TArgs) => string);
+  /**
+   * What the tool can do to a document: read it, record a suggestion or comment that the user applies, or edit it.
+   * Mode filters use this (Ask keeps read tools only). Tools without it are classified by name, which is a fallback.
+   */
+  access?: "read" | "suggest" | "edit";
   /** Concrete usage examples (Bates ranges, page:line cites, ISO dates, court ids); providers that support tool examples send them. */
   examples?: Record<string, unknown>[];
   /** Wall-clock budget for one execution (default TOOL_DEFAULT_TIMEOUT_MS). */

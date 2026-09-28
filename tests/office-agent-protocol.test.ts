@@ -40,6 +40,9 @@ describe("office agent prompt layout", () => {
   let POST: Handler;
   let scoped: Handler;
   beforeAll(async () => {
+    // Seed first: the handler looks up matters, and seeding inside a timed test is slow under a loaded full run.
+    const { db } = await import("@/lib/db");
+    db();
     const { createOfficeAgentHandler } = await import("@/modules/office/shared/route-factory");
     POST = createOfficeAgentHandler<{ text: string }>({
       kind: "word",
@@ -122,5 +125,16 @@ describe("per-request routing", () => {
     const deep = await run(routed, { message: "Build a prejudgment interest schedule from the damages table", mode: "draft", snapshot: {} });
     expect(deep.fast).toBe(false);
     expect(deep.reasoningEffort).toBe("high");
+  });
+});
+
+describe("ask-mode tool classification", () => {
+  it("uses the declared access before the name fallback", async () => {
+    const { isEditingTool } = await import("@/modules/office/shared/route-factory");
+    expect(isEditingTool({ ...tool("get_everything"), access: "edit" })).toBe(true);
+    expect(isEditingTool({ ...tool("rewrite_summary_preview"), access: "read" })).toBe(false);
+    expect(isEditingTool({ ...tool("add_review_comment"), access: "suggest" })).toBe(true);
+    for (const n of ["accept_all_changes", "resolve_comment", "edit_table_cell", "numbering_fix", "legal_caption", "redline_compare", "write_range"]) expect(isEditingTool(tool(n))).toBe(true);
+    for (const n of ["get_paragraphs", "read_document", "check_citations", "find_text"]) expect(isEditingTool(tool(n))).toBe(false);
   });
 });
