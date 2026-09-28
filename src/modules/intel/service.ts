@@ -90,6 +90,7 @@ export function updateSource(id: string, patch: UpdateSourceInput, now = new Dat
   if (patch.scope !== undefined) next.scope = patch.scope ?? undefined;
   if (patch.schedule !== undefined) next.schedule = validateSchedule(patch.schedule);
   if (patch.enabled !== undefined) next.enabled = patch.enabled;
+  if (JSON.stringify([next.config, next.scope ?? null]) !== JSON.stringify([cur.config, cur.scope ?? null])) next.searchesChangedAt = now.toISOString();
   if (patch.schedule !== undefined || patch.enabled !== undefined) {
     next.nextRunAt = next.enabled ? computeNextRunAt(next.schedule, now)?.toISOString() : undefined;
     next.status = next.enabled ? (cur.status === "running" ? "running" : "idle") : "disabled";

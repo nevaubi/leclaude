@@ -19,7 +19,7 @@ const schema = z.object({
 });
 
 /** Opinion searches in flight at once for one source run. */
-const SEARCH_CONCURRENCY = 3;
+const SEARCH_CONCURRENCY = 2;
 
 export type CourtListenerOpinionsConfig = z.infer<typeof schema>;
 
@@ -39,7 +39,7 @@ export const courtListenerOpinionsAdapter = defineAdapter<CourtListenerOpinionsC
     if (!queries.length) { ctx.note("No queries configured."); return; }
     const courts = courtsForJurisdiction(cfg.jurisdiction, cfg.courts ?? ctx.scope.courts?.join(" "));
     const filedAfter = ctx.since ?? daysAgoISO(cfg.sinceDays, ctx.now);
-    // Searches run a few at a time (the provider's rate limiter still paces them): one slow search no longer holds
+    // Searches run two at a time (the provider's rate limiter still paces them): one slow search no longer holds
     // the rest behind it inside a serverless run's time limit. Hits are then processed in query order.
     const searches: (Awaited<ReturnType<typeof ctx.providers.courtlistener.searchOpinions>> | undefined)[] = new Array(queries.length);
     let next = 0;

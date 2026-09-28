@@ -233,6 +233,22 @@ describe("scheduling and execution", () => {
     registerJobHandler("entities.resolve", async (job) => ({ resolved: job.payload.n }));
     for (const x of [out, failed]) cancelJob(x.id);
   });
+  it("backfills after a source's searches change, then runs incrementally again", async () => {
+    const { sinceFor, BACKFILL_DAYS } = await import("@/modules/intel/run");
+    const now = new Date("2026-09-28T12:00:00Z");
+    const src = createSource({ adapter: "web-list", name: "backfill", config: { pages: 1 }, schedule: { every: "manual" } });
+    intelSources().update(src.id, (s) => ({ ...s, health: { ...s.health, ok: true, lastSuccessAt: "2026-09-27T12:00:00.000Z" } }));
+    expect(sinceFor(intelSources().get(src.id)!, now)).toBe("2026-09-25");
+    // Toggling enabled is not a search change.
+    updateSource(src.id, { enabled: false }, new Date("2026-09-28T00:00:00Z"));
+    expect(intelSources().get(src.id)!.searchesChangedAt).toBeUndefined();
+    updateSource(src.id, { config: { pages: 2 } }, new Date("2026-09-28T01:00:00Z"));
+    const changed = intelSources().get(src.id)!;
+    expect(changed.searchesChangedAt).toBe("2026-09-28T01:00:00.000Z");
+    expect(sinceFor(changed, now)).toBe(new Date(now.getTime() - BACKFILL_DAYS * 86400_000).toISOString().slice(0, 10));
+    intelSources().update(src.id, (s) => ({ ...s, health: { ...s.health, lastSuccessAt: "2026-09-28T02:00:00.000Z" } }));
+    expect(sinceFor(intelSources().get(src.id)!, now)).toBe("2026-09-26");
+  });
   it("runs housekeeping kinds through the runner (sweep, scan.run, workflow.tick)", async () => {
     const sweep = enqueueJob({ kind: "sweep", maxAttempts: 1 });
     const s = await executeJob(claimJob(sweep.id, "w")!, { providers: providers() });

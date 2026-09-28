@@ -791,10 +791,10 @@ export function recoverOnBoot(o: { force?: boolean; now?: Date } = {}): DurableI
 }
 
 /** Enqueue a high-priority run for one source. With `wait`, executes it inline and returns the finished job. */
-export async function runSourceNow(sourceId: string, o: { wait?: boolean; providers?: IntelProviders; force?: boolean; maxDocs?: number; now?: Date } = {}): Promise<DurableIntelJob> {
+export async function runSourceNow(sourceId: string, o: { wait?: boolean; providers?: IntelProviders; force?: boolean; maxDocs?: number; since?: string; now?: Date } = {}): Promise<DurableIntelJob> {
   const source = intelSources().get(sourceId);
   if (!source) throw new Error(`Source not found: ${sourceId}`);
-  const job = enqueueJob({ kind: "source.run", sourceId, payload: { trigger: "manual", force: o.force ?? true, maxDocs: o.maxDocs }, priority: 1, dedupeKey: `source.run:${sourceId}` }, o.now);
+  const job = enqueueJob({ kind: "source.run", sourceId, payload: { trigger: "manual", force: o.force ?? true, maxDocs: o.maxDocs, since: o.since }, priority: 1, dedupeKey: `source.run:${sourceId}` }, o.now);
   if (!o.wait) return job;
   if (job.status === "running") return job;
   const claimed = claimJob(job.id, `inline_${process.pid}`, o.now);

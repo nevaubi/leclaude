@@ -26,9 +26,16 @@ export interface RunSourceOptions {
 const DEFAULT_MAX_DOCS = 400;
 const DEFAULT_MAX_TEXT = 400_000;
 
-/** Incremental window start: two days before the last success, so late-arriving records are not missed. */
+/** Look-back for the first run after a source's searches change (new queries have no history yet). */
+export const BACKFILL_DAYS = 365;
+
+/**
+ * Incremental window start: two days before the last success, so late-arriving records are not missed. When the
+ * searches changed after the last success, the new searches have never run: backfill `BACKFILL_DAYS` instead.
+ */
 export function sinceFor(source: IntelSource, now = new Date()): string | undefined {
   const last = source.health.lastSuccessAt;
+  if (source.searchesChangedAt && (!last || source.searchesChangedAt > last)) return new Date(now.getTime() - BACKFILL_DAYS * 86400_000).toISOString().slice(0, 10);
   if (!last) return undefined;
   const t = new Date(last).getTime() - 2 * 86400_000;
   if (!Number.isFinite(t) || t > now.getTime()) return undefined;

@@ -80,6 +80,8 @@ export interface IntelSource {
   nextRunAt?: ISODate;
   /** Opaque incremental cursor the adapter returned last time (e.g. last modified date). */
   cursor?: string;
+  /** When the source's searches (config or scope) last changed; the next run backfills instead of running incrementally. */
+  searchesChangedAt?: ISODate;
   stats: IntelSourceStats;
   /** System sources ship with the platform; users cannot delete them, only disable. */
   system?: boolean;
