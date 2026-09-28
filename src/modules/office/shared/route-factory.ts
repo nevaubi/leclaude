@@ -70,6 +70,11 @@ export interface OfficeAgentConfig<S> {
   renderSnapshot: (snapshot: S, scope: OfficeScope | null) => string;
   maxSteps?: number;
   reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  /**
+   * Per-request routing decided in code from the request (never by a model): the fast model role and a lower effort for
+   * short single-intent turns, the primary model and more effort for analysis. Overrides `reasoningEffort`/`maxSteps`.
+   */
+  route?: (ctx: OfficeAgentContext<S>, message: string) => { fast?: boolean; reasoningEffort?: OfficeAgentConfig<S>["reasoningEffort"]; maxSteps?: number; reason?: string };
 }
 
 const MODE_GUIDANCE: Record<OfficeAgentMode, string> = {
@@ -166,19 +171,22 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
       for (const a of body.attachments ?? []) if (a?.dataUrl?.startsWith("data:image/")) userContent.push({ type: "input_image", image_url: a.dataUrl, detail: "high" });
       input.push({ role: "user", content: userContent } as ResponseInputItem);
 
+      const routing = config.route?.(ctx, body.message) ?? {};
       try {
         await runAgent({
           instructions,
           input,
           tools,
           builtinTools,
-          maxSteps: config.maxSteps ?? 16,
-          reasoningEffort: config.reasoningEffort,
+          fast: routing.fast,
+          maxSteps: routing.maxSteps ?? config.maxSteps ?? 16,
+          reasoningEffort: routing.reasoningEffort ?? config.reasoningEffort,
+          matterId: matter?.id,
           cacheStablePrefix: true,
           verbosity: "low",
           signal,
           state: { snapshot, mode },
-          metadata: { app: "leclaude", surface: `office-${config.kind}`, mode },
+          metadata: { app: "leclaude", surface: `office-${config.kind}`, mode, ...(routing.reason ? { route: routing.reason } : {}) },
           onEvent: (e) => {
             if (e.type === "citation") citations.push({ kind: sourceKindOf(e.citation), cite: e.citation.cite, url: e.citation.url, title: e.citation.title });
             if (e.type === "done" && e.usage) usage = e.usage;

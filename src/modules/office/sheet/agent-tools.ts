@@ -23,6 +23,7 @@ import { SheetEngine, formulaErrors } from "./engine";
 import { parseFormula, say } from "./formula-ast";
 import { getSheet, getStyle, resolveRange, usedRange, type CellBorders, type CellStyle, type CellValue, type CFRule, type ChartType, type DataValidation, type NumFmt, type Sheet } from "./model";
 import { applyOp, describeOp, opTarget, type CellInput, type SheetOp } from "./ops";
+import { hashValue } from "./hash";
 import { proposalBase } from "./proposal-base";
 import { cellValue, describeValues, displayValue, headerInfo, recompute, type SheetSnapshot } from "./snapshot";
 
@@ -183,6 +184,8 @@ function allSheetTools(ctx: Ctx): AnyTool[] {
       target: target ? `${target.sheet}!${target.range}` : undefined,
       targetLabel: target ? (target.sheet === s.activeSheet ? target.range : `${target.sheet}!${target.range}`) : undefined,
       payload: { op, base, ...(suggestion ? { suggestion: true } : {}) },
+      // shared-protocol summary of the base; the per-range hashes the client checks live in payload.base
+      base: { hash: hashValue(base.map((b) => b.hash)) },
       risk: meta.risk ?? (op.type.startsWith("delete_") || op.type === "sort_range" || op.type === "clear_range" ? "medium" : "low"),
     });
     // verify: new errors / circular references, and the computed values of what was written

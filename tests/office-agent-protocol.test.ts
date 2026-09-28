@@ -102,3 +102,25 @@ describe("refused proposal status", () => {
     expect(failedStatus(undefined)).toBe("failed");
   });
 });
+
+describe("per-request routing", () => {
+  it("passes the module's routing decision to the runtime", async () => {
+    const { createOfficeAgentHandler } = await import("@/modules/office/shared/route-factory");
+    const routed = createOfficeAgentHandler<{ text: string }>({
+      kind: "sheet",
+      parseSnapshot: () => ({ text: "" }),
+      instructions: () => "Sheet instructions.",
+      tools: () => [],
+      renderSnapshot: () => "",
+      maxSteps: 28,
+      route: (_ctx, message) => (message.length < 20 ? { fast: true, reasoningEffort: "low", reason: "short" } : { fast: false, reasoningEffort: "high", reason: "analysis" }),
+    });
+    const quick = await run(routed, { message: "Bold row 1", mode: "draft", snapshot: {} });
+    expect(quick.fast).toBe(true);
+    expect(quick.reasoningEffort).toBe("low");
+    expect(quick.maxSteps).toBe(28);
+    const deep = await run(routed, { message: "Build a prejudgment interest schedule from the damages table", mode: "draft", snapshot: {} });
+    expect(deep.fast).toBe(false);
+    expect(deep.reasoningEffort).toBe("high");
+  });
+});

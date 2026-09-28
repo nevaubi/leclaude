@@ -47,6 +47,8 @@ export interface RunAgentOptions {
   /** Built-in tools in OpenAI Tool shape (web_search, image_generation…); translated per provider. */
   builtinTools?: Tool[];
   model?: string;
+  /** Route to the fast model role (short, single-intent turns); ignored when `model` names another model. */
+  fast?: boolean;
   reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
   verbosity?: "low" | "medium" | "high";
   maxSteps?: number;
@@ -256,7 +258,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   const ctx: ToolContext = { emit: (e) => emit(e), signal: opts.signal, state, ...({ traceId, runId: opts.runId } as Record<string, unknown>) } as ToolContext;
 
   const { messages: history, extraInstructions } = toInferenceMessages(opts.input);
-  const target = resolveTarget(opts.model, false, cfg);
+  const target = resolveTarget(opts.model, opts.fast, cfg);
   const base: InferenceRequest = {
     instructions: [opts.instructions, ...extraInstructions].filter(Boolean).join("\n\n"),
     messages: history,

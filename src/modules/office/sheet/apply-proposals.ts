@@ -18,7 +18,7 @@ export interface ApplyDeps {
 
 export async function applyProposals(proposals: EditProposal[], deps: ApplyDeps): Promise<ApplyResult> {
   const applied: string[] = [];
-  const failed: { id: string; error: string }[] = [];
+  const failed: ApplyResult["failed"] = [];
   const store = deps.store();
   const ops: CheckedItem[] = [];
   for (const p of proposals) {
@@ -35,7 +35,7 @@ export async function applyProposals(proposals: EditProposal[], deps: ApplyDeps)
   // against its base version first: edits whose target changed since the agent proposed them are rejected.
   if (ops.length) {
     const checked = applyChecked(store.workbook, ops);
-    for (const f of checked.failed) failed.push({ id: f.id, error: f.error });
+    for (const f of checked.failed) failed.push({ id: f.id, error: f.error, ...(f.stale ? { stale: true } : {}) });
     const good = checked.applied.map((a) => a.op);
     const okIds = checked.applied.map((a) => a.id);
     if (good.length) {

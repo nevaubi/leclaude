@@ -95,4 +95,11 @@ export const sheetAgentHandler = createOfficeAgentHandler<SheetSnapshot>({
   tools: (ctx) => sheetAgentTools(ctx),
   renderSnapshot: (s, scope) => renderSnapshot(s, scope),
   maxSteps: 28,
+  route: (ctx, message) => routeSheetRequest(message, ctx.mode),
+  // sheetAgentTools enforces modes itself (Ask = read tools only; Review = read + comments + safe suggestions)
+  modeScopedTools: true,
+  modeGuidance: {
+    review: "MODE: REVIEW. Do not restructure the workbook. Start with audit_formulas, read what it flags, and record each issue with report_finding (cell ref as target). Where a fix is small and safe, propose it with an edit tool — it arrives as a suggestion the user can apply. Finish with a short prioritized summary.",
+    ask: "MODE: ASK. Answer from the workbook; there are no edit tools. Quote cells by reference and use explain_formula, trace_precedents/trace_dependents, evaluate_formula and date_math for anything computed — never do arithmetic yourself.",
+  },
 });
