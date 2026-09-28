@@ -18,9 +18,11 @@ import { NotSourceBackedBanner, TrustBadge } from "@/components/ai/trust-badge";
 import { useAgent, type AgentAttachment, type AgentMessage } from "@/hooks/use-agent";
 import type { AgentEvent } from "@/lib/ai/agent";
 import { extractRunProvenance, mergeRunProvenance, needsNotSourceBackedBanner, proposalAuditPayload, SegmentedControl, type AuditedProposalStatus } from "./office-chrome";
+import { failedStatus } from "./office-chrome-helpers";
 import type { EditProposal, OfficeAgentMode, OfficeAgentSuggestions, OfficeScope, ReviewFinding } from "./types";
 
-export interface ApplyResult { applied: string[]; failed: { id: string; error: string }[] }
+/** `stale`: the editor refused the edit because its target changed after the agent read it. */
+export interface ApplyResult { applied: string[]; failed: { id: string; error: string; stale?: boolean }[] }
 
 /** Proposals and findings may carry the provenance of the agent turn that produced them. */
 export type ProvenancedProposal = EditProposal & { provenance?: Provenance };
@@ -126,8 +128,9 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
       if (autoApplyRef.current) {
         void applyRef.current([p]).then((r) => {
           const ok = r.applied.includes(p.id);
-          setProposals((ps) => ps.map((x) => (x.id === p.id ? { ...x, status: ok ? "applied" : "failed", error: r.failed.find((f) => f.id === p.id)?.error } : x)));
-          auditProposals([p], () => (ok ? "applied" : "failed"));
+          const miss = r.failed.find((f) => f.id === p.id);
+          setProposals((ps) => ps.map((x) => (x.id === p.id ? { ...x, status: ok ? "applied" : failedStatus(miss), error: miss?.error } : x)));
+          auditProposals([p], () => (ok ? "applied" : failedStatus(miss)));
         });
       }
     } else if (ev.type === "artifact" && ev.artifact.kind === "review-finding") {
@@ -168,6 +171,12 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
 
   const pending = proposals.filter((p) => p.status === "pending");
   const applied = proposals.filter((p) => p.status === "applied");
+  const refused = proposals.filter((p) => p.status === "failed" || p.status === "stale");
+  /** Ask the agent to redo refused edits against the document as it is now (the new request carries a fresh snapshot). */
+  const askAgain = () => {
+    const list = refused.map((p) => `- ${p.title}${p.targetLabel ? ` (${p.targetLabel})` : ""}${p.error ? `: ${p.error}` : ""}`).join("\n");
+    send(`These edits could not be applied because the document changed or the target could not be found. Read the current content and make them again:\n${list}`, []);
+  };
 
   const apply = async (ids: string[]) => {
     const batch = pending.filter((p) => ids.includes(p.id));
@@ -175,8 +184,9 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
     setApplying(true);
     try {
       const r = await applyProposals(batch);
-      setProposals((ps) => ps.map((p) => (r.applied.includes(p.id) ? { ...p, status: "applied" } : r.failed.some((f) => f.id === p.id) ? { ...p, status: "failed", error: r.failed.find((f) => f.id === p.id)?.error } : p)));
-      auditProposals(batch, (p) => (r.applied.includes(p.id) ? "applied" : "failed"));
+      const missOf = (id: string) => r.failed.find((f) => f.id === id);
+      setProposals((ps) => ps.map((p) => (r.applied.includes(p.id) ? { ...p, status: "applied" } : missOf(p.id) ? { ...p, status: failedStatus(missOf(p.id)), error: missOf(p.id)?.error } : p)));
+      auditProposals(batch, (p) => (r.applied.includes(p.id) ? "applied" : failedStatus(missOf(p.id))));
       if (r.failed.length) toast.error(`${r.failed.length} edit${r.failed.length === 1 ? "" : "s"} could not be applied`, { description: r.failed[0]?.error });
       if (r.applied.length) {
         const last = agent.messages.filter((m) => m.role === "assistant").at(-1);
@@ -247,7 +257,7 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
 
       <Thread messages={agent.messages} runs={runs} statusLine={agent.statusLine} emptyState={emptyState} userName={userName} onRetry={(m) => m.role === "user" && send(m.content, m.attachments ?? [])} />
 
-      {(pending.length > 0 || findings.length > 0 || (applied.length > 0 && agent.isStreaming)) && (
+      {(pending.length > 0 || findings.length > 0 || refused.length > 0 || (applied.length > 0 && agent.isStreaming)) && (
         <div className="max-h-[40%] shrink-0 overflow-y-auto border-t bg-muted/20 scrollbar-thin">
           {findings.length > 0 && <FindingsCard findings={findings} onLocate={onLocate} />}
           {pending.length > 0 && (
@@ -272,6 +282,7 @@ export function OfficeAgentPanel(props: OfficeAgentPanelProps) {
               </div>
             </div>
           )}
+          {refused.length > 0 && !agent.isStreaming && <RefusedCard proposals={refused} onLocate={onLocate} onAskAgain={askAgain} onDismiss={() => setProposals((ps) => ps.filter((p) => p.status !== "failed" && p.status !== "stale"))} />}
           {applied.length > 0 && pending.length === 0 && <div className="px-3 py-1.5 text-[11.5px] text-muted-foreground">{applied.length} edit{applied.length === 1 ? "" : "s"} applied {appliedNoun}.</div>}
         </div>
       )}
@@ -407,6 +418,33 @@ function ProposalRow({ proposal: p, checked, onCheck, onLocate, onPreview }: { p
         {long && <button onClick={() => setOpen((o) => !o)} className="mt-0.5 rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer" aria-label={open ? "Collapse" : "Expand"}><ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} /></button>}
       </div>
     </li>
+  );
+}
+
+function RefusedCard({ proposals, onLocate, onAskAgain, onDismiss }: { proposals: ProvenancedProposal[]; onLocate?: (t: string) => void; onAskAgain: () => void; onDismiss: () => void }) {
+  const stale = proposals.filter((p) => p.status === "stale").length;
+  return (
+    <div className="p-2" data-testid="refused-proposals">
+      <div className="mb-1.5 flex items-center justify-between px-1">
+        <div className="text-[11.5px] font-medium text-muted-foreground">Not applied · {proposals.length}{stale ? ` (${stale} out of date)` : ""}</div>
+      </div>
+      <ul className="space-y-1">
+        {proposals.map((p) => (
+          <li key={p.id} className="rounded-md border bg-background px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <Badge variant={p.status === "stale" ? "warning" : "destructive"} className="py-0 text-[10px]">{p.status === "stale" ? "Out of date" : "Failed"}</Badge>
+              <span className="truncate text-[12.5px] font-medium">{p.title}</span>
+              {p.targetLabel && <button onClick={() => p.target && onLocate?.(p.target)} className="ml-auto inline-flex items-center gap-0.5 rounded border px-1.5 text-[10.5px] text-muted-foreground hover:border-primary/40 hover:text-primary cursor-pointer"><Crosshair className="size-3" />{p.targetLabel}</button>}
+            </div>
+            {p.error && <div className="mt-0.5 text-[12px] leading-snug text-muted-foreground">{p.error}</div>}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 flex items-center gap-1.5 px-1">
+        <Button size="sm" variant="outline" onClick={onAskAgain}><RotateCcw className="size-3.5" /> Ask again</Button>
+        <Button size="sm" variant="ghost" onClick={onDismiss}><X className="size-3.5" /> Dismiss</Button>
+      </div>
+    </div>
   );
 }
 

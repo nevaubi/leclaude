@@ -9,11 +9,11 @@ import { officeDocFromParams } from "@/modules/office/shared/route-auth";
 
 export const runtime = "nodejs";
 
-interface AppliedProposal { id: string; kind: string; title: string; summary?: string; target?: string; targetLabel?: string; status?: "applied" | "discarded" | "failed"; risk?: string; provenance?: Provenance }
+interface AppliedProposal { id: string; kind: string; title: string; summary?: string; target?: string; targetLabel?: string; status?: "applied" | "discarded" | "failed" | "stale"; risk?: string; provenance?: Provenance }
 
 /**
  * POST /api/office/docs/[id]/audit-apply { proposals: AppliedProposal[], mode?, message?, discarded?: number }
- * → { ok, eventId, applied, discarded, failed }
+ * → { ok, eventId, applied, discarded, failed, stale }
  * Editors call this after applying (or discarding) the agent's edit proposals so every AI application is on the audit
  * trail with the proposal ids, targets and the provenance the agent attached to them.
  */
@@ -25,7 +25,8 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!body || !Array.isArray(body.proposals)) return jsonError("`proposals` (array) is required");
   const applied = body.proposals.filter((p) => (p.status ?? "applied") === "applied");
   const discarded = body.proposals.filter((p) => p.status === "discarded").length + (body.discarded ?? 0);
-  const failed = body.proposals.filter((p) => p.status === "failed").length;
+  const failed = body.proposals.filter((p) => p.status === "failed" || p.status === "stale").length;
+  const stale = body.proposals.filter((p) => p.status === "stale").length;
   const ev = audit("ai.apply", { kind: "officeDoc", id: doc.id, label: doc.title, matterId: doc.matterId }, {
     surface: `office.${doc.kind}`,
     mode: body.mode,
@@ -33,10 +34,11 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
     applied: applied.length,
     discarded,
     failed,
+    stale,
     proposals: applied.slice(0, 40).map((p) => ({ id: p.id, kind: p.kind, title: p.title, target: p.targetLabel ?? p.target, risk: p.risk, verification: p.provenance?.verification?.status, sources: p.provenance?.sources?.length })),
     contentVersion: doc.contentVersion,
   });
-  return Response.json({ ok: true, eventId: ev.id, applied: applied.length, discarded, failed });
+  return Response.json({ ok: true, eventId: ev.id, applied: applied.length, discarded, failed, stale });
 }
 
 export const POST = withDb(withAuth(handlePOST, { action: "write", resource: officeDocFromParams }));

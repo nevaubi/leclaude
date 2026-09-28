@@ -32,12 +32,7 @@ import { ThumbnailRail } from "./thumbnail-rail";
 import { PdfToolbar } from "./toolbar";
 import { VersionsDialog } from "./versions-dialog";
 import { PdfViewer } from "./viewer";
-
-const SUGGESTIONS = {
-  draft: ["Bates-stamp ABC-0000001 onward, bottom right", "Redact every SSN and account number", "Highlight every mention of the contract date and add a note", "Stamp CONFIDENTIAL on every page", "Summarize this order and list deadlines", "Convert to Word"],
-  review: ["Check for unredacted PII and privilege markers", "Is this ready to produce? Check Bates, legends and redactions", "Flag every deadline and who owns it"],
-  ask: ["What does paragraph 12 require?", "Which pages mention the §8(e) notice?", "List the custodians and the relevant period for each"],
-};
+import { PDF_SUGGESTIONS } from "./suggestions";
 
 const TOOL_KEYS: Record<string, Tool> = { v: "select", h: "hand", "1": "highlight", "2": "underline", "3": "strikeout", n: "note", t: "text", r: "rect", e: "ellipse", p: "freehand", x: "redaction", l: "link" };
 
@@ -417,7 +412,7 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
             <>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={narrow ? 340 : 400} minSize={300} maxSize={640}>
-                <OfficeAgentPanel endpoint="/api/office/pdf/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled PDF"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => store.getState().undo()} onLocate={onLocate} suggestions={SUGGESTIONS} onApplied={onApplied} title="PDF assistant" extraContext={extraContext} trackedChanges={false} onVersions={() => setDialog("versions")} onClose={() => setAgentOpen(false)} />
+                <OfficeAgentPanel endpoint="/api/office/pdf/agent" docId={doc?.id} docTitle={doc?.title ?? "Untitled PDF"} matterId={doc?.matterId ?? matterId ?? null} getSnapshot={getSnapshot} scopes={scopes} applyProposals={applyProposals} onUndo={() => store.getState().undo()} onLocate={onLocate} suggestions={PDF_SUGGESTIONS} onApplied={onApplied} title="PDF assistant" extraContext={extraContext} trackedChanges={false} onVersions={() => setDialog("versions")} onClose={() => setAgentOpen(false)} />
               </ResizablePanel>
             </>
           )}

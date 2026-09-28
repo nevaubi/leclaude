@@ -12,7 +12,23 @@ export interface OfficeScope {
   text?: string;
 }
 
-export type ProposalStatus = "pending" | "applied" | "discarded" | "failed";
+/** `stale`: the target changed after the agent read it, so the edit was refused rather than applied to different content. */
+export type ProposalStatus = "pending" | "applied" | "discarded" | "failed" | "stale";
+
+/**
+ * What the agent read when it made a proposal. Editors fill whichever fields fit their model (a content hash of the
+ * paragraph/slide/range, the source blob of a PDF, existing annotation ids) and refuse to apply when it no longer matches.
+ */
+export interface ProposalBase {
+  /** Content fingerprint of the target when it was read. */
+  hash?: string;
+  /** Document version or revision the proposal was made against. */
+  version?: string | number;
+  /** PDF: the source blob the page content came from. */
+  sourceBlobId?: string;
+  /** PDF: annotations that existed when the proposal was made. */
+  annotationIds?: string[];
+}
 
 /**
  * An edit the agent wants to make. Editors define `kind`/`payload` vocabularies
@@ -34,6 +50,8 @@ export interface EditProposal {
   error?: string;
   /** When true the editor applies it without preview (e.g. "ask" mode never proposes). */
   autoApply?: boolean;
+  /** What the agent read when it proposed this edit (stale detection). Editors may also carry it inside `payload`. */
+  base?: ProposalBase;
 }
 
 export interface OfficeAgentRequestBody {

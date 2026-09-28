@@ -108,7 +108,14 @@ export function needsNotSourceBackedBanner(research: boolean, provenance: Proven
   return provenance.sources.length === 0;
 }
 
-export type AuditedProposalStatus = "applied" | "discarded" | "failed";
+export type AuditedProposalStatus = "applied" | "discarded" | "failed" | "stale";
+
+const STALE_ERROR = /\b(stale|changed (since|after)|no longer (exists|in the)|was (edited|modified) after)\b/i;
+
+/** Status for a proposal the editor could not apply: stale when the editor says so or its error says the target moved on. */
+export function failedStatus(f: { error: string; stale?: boolean } | undefined): "failed" | "stale" {
+  return f && (f.stale || STALE_ERROR.test(f.error)) ? "stale" : "failed";
+}
 
 /** Body for POST /api/office/docs/[id]/audit-apply: the proposals with their final status and provenance. */
 export function proposalAuditPayload(proposals: (EditProposal & { provenance?: Provenance })[], statusOf: (p: EditProposal) => AuditedProposalStatus, extra: { mode?: string; message?: string } = {}) {

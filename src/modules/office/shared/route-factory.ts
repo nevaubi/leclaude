@@ -14,6 +14,8 @@ import { applyCiteCheck, crossCheckCitations } from "@/lib/ai/verify";
 import { audit } from "@/lib/integrity/audit";
 import { gateReview, makeProvenance } from "@/lib/integrity/provenance";
 import { putProvenance } from "@/lib/integrity/store";
+import { currentPrincipal } from "@/lib/auth/context";
+import type { Principal } from "@/lib/auth/types";
 import type { Provenance, ProvenanceSource } from "@/lib/integrity/types";
 import type { EditProposal, OfficeAgentMode, OfficeAgentRequestBody, OfficeScope, ReviewFinding } from "./types";
 
@@ -31,6 +33,8 @@ function sourceKindOf(c: { url?: string; cite?: string; source?: string }): Prov
 
 export interface OfficeAgentContext<S> {
   mode: OfficeAgentMode;
+  /** The authenticated principal of this request (set by withAuth); tools use it for matter checks on anything they read. */
+  principal?: Principal | null;
   scope: OfficeScope | null;
   research: boolean;
   snapshot: S;
@@ -55,6 +59,13 @@ export interface OfficeAgentConfig<S> {
   instructions: (ctx: OfficeAgentContext<S>) => string;
   /** Document read/edit tools bound to the snapshot. */
   tools: (ctx: OfficeAgentContext<S>) => ToolDef<never, unknown>[];
+  /**
+   * True when `tools(ctx)` already returns only the tools allowed in `ctx.mode` (Ask: read tools only; Review: read
+   * and comment tools). The shared name-pattern filter is then skipped, so a module owns its mode policy in code.
+   */
+  modeScopedTools?: boolean;
+  /** Per-editor replacement for the shared mode guidance (e.g. a review mode that only comments). */
+  modeGuidance?: Partial<Record<OfficeAgentMode, string>>;
   /** Compact serialization of the snapshot for the prompt (keep it under ~30k chars). */
   renderSnapshot: (snapshot: S, scope: OfficeScope | null) => string;
   maxSteps?: number;
@@ -91,6 +102,7 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
       const turnProvenance = () => makeProvenance({ surface, sources: citations, model, instructions: `${config.kind}:${mode}`, input: body.message });
       const ctx: OfficeAgentContext<S> = {
         mode,
+        principal: currentPrincipal(),
         scope: body.scope ?? null,
         research: Boolean(body.research),
         snapshot,
@@ -115,7 +127,7 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
         },
       };
 
-      const docTools = mode === "ask" ? config.tools(ctx).filter((t) => !isEditingTool(t)) : config.tools(ctx);
+      const docTools = mode === "ask" && !config.modeScopedTools ? config.tools(ctx).filter((t) => !isEditingTool(t)) : config.tools(ctx);
       const tools: ToolDef<never, unknown>[] = [...docTools];
       let builtinTools: Tool[] = [];
       if (mode === "review") tools.push(reportFindingTool(ctx));
@@ -128,20 +140,29 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
         tools.push(...researchToolset({ web: false, legal: false, internal: true }).tools);
       }
 
+      // Prompt layout for caching: the instructions and tools are stable for a document and mode, so every turn and
+      // every tool round reuses the cached prefix. The volatile parts (scope and the current snapshot) travel with the
+      // user's message at the end of the input, after the cache breakpoint.
       const instructions = [
         `You are the ${FIRM_NAME} ${KIND_NAME[config.kind]} drafting assistant embedded in the firm's ${KIND_NAME[config.kind]} editor. ${todayLine()}`,
         `You work on the open document "${ctx.docTitle}"${matter ? ` for the matter ${matter.name} (${matter.caption ?? matter.shortName}; client ${matter.client}, ${matter.clientSide}; ${matter.court ?? "no court"}; stage: ${matter.stage ?? "n/a"})` : ""}.`,
-        MODE_GUIDANCE[mode],
-        ctx.scope && ctx.scope.kind !== "document" ? `SCOPE: The user scoped this request to ${ctx.scope.label} (${ctx.scope.id}). Focus your reads and edits there unless the request clearly needs the whole document.${ctx.scope.text ? `\nScoped text:\n"""\n${ctx.scope.text.slice(0, 8000)}\n"""` : ""}` : "SCOPE: whole document.",
+        config.modeGuidance?.[mode] ?? MODE_GUIDANCE[mode],
         ctx.research ? "RESEARCH: enabled. You may use web search, case law, statutes/regulations, dockets and the firm library. Read primary sources before relying on them and cite them." : "RESEARCH: external research is OFF. You may still search the firm library, matter documents and matter context. If the task needs outside authority, say so and mark placeholders [VERIFY].",
         LEGAL_STYLE_RULES,
         config.instructions(ctx),
-        `CURRENT DOCUMENT SNAPSHOT (the authoritative state; reads through tools return the same content with ids):\n${config.renderSnapshot(snapshot, ctx.scope)}`,
+        "The user's latest message begins with the SCOPE of the request and the CURRENT DOCUMENT SNAPSHOT. The snapshot is the authoritative state of the document at the time of that message; reads through tools return the same content with ids.",
+      ].join("\n\n");
+      const volatile = [
+        ctx.scope && ctx.scope.kind !== "document" ? `SCOPE: The user scoped this request to ${ctx.scope.label} (${ctx.scope.id}). Focus your reads and edits there unless the request clearly needs the whole document.${ctx.scope.text ? `\nScoped text:\n"""\n${ctx.scope.text.slice(0, 8000)}\n"""` : ""}` : "SCOPE: whole document.",
+        `CURRENT DOCUMENT SNAPSHOT:\n${config.renderSnapshot(snapshot, ctx.scope)}`,
       ].join("\n\n");
 
       const input: ResponseInput = [];
       for (const h of (body.history ?? []).slice(-12)) input.push({ role: h.role, content: h.content.slice(0, 12_000) } as ResponseInputItem);
-      const userContent: Array<{ type: "input_text"; text: string } | { type: "input_image"; image_url: string; detail: "high" | "low" | "auto" }> = [{ type: "input_text", text: body.message }];
+      const userContent: Array<{ type: "input_text"; text: string } | { type: "input_image"; image_url: string; detail: "high" | "low" | "auto" }> = [
+        { type: "input_text", text: volatile },
+        { type: "input_text", text: `REQUEST:\n${body.message}` },
+      ];
       for (const a of body.attachments ?? []) if (a?.dataUrl?.startsWith("data:image/")) userContent.push({ type: "input_image", image_url: a.dataUrl, detail: "high" });
       input.push({ role: "user", content: userContent } as ResponseInputItem);
 
@@ -153,6 +174,7 @@ export function createOfficeAgentHandler<S>(config: OfficeAgentConfig<S>) {
           builtinTools,
           maxSteps: config.maxSteps ?? 16,
           reasoningEffort: config.reasoningEffort,
+          cacheStablePrefix: true,
           verbosity: "low",
           signal,
           state: { snapshot, mode },

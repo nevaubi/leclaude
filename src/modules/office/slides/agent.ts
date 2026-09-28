@@ -166,4 +166,6 @@ export const slidesAgentHandler = createOfficeAgentHandler<SlidesSnapshot>({
   tools: (ctx) => slidesAgentTools(ctx, productionDeps(ctx)),
   renderSnapshot: (s, scope) => renderSnapshot(s, scope),
   maxSteps: 24,
+  modeScopedTools: true,
+  modeGuidance: { review: "MODE: REVIEW. Do not change the deck. Read every slide in scope with the read tools and record each issue with report_finding (overflowing or dense text, inconsistent fonts/colors/titles, unsupported numbers or quotes, missing sources, exhibit references that do not resolve). Anchor comments on slides with add_review_comment where useful. Editing tools are not available in this mode; describe the fix in the finding's suggestion. Finish with a short prioritized summary." },
 });
