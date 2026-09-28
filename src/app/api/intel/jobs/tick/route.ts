@@ -16,7 +16,7 @@ export const maxDuration = 60;
  * External cron driver. Runs due intel jobs for up to 50 seconds and also the
  * housekeeping cadences (workflow scheduler tick, integrity scans, sweep,
  * embedding backfill) that the in-process loop would otherwise cover.
- * vercel.json schedules it every 10 minutes; note that Vercel Hobby plans only
+ * vercel.json schedules it hourly (each run wakes the shared database, so a tighter cadence exhausts a free-tier database quota); note that Vercel Hobby plans only
  * allow one cron invocation per day, so use an external cron (or the inline
  * runner on a persistent host) for the intended cadence. When CRON_SECRET is
  * set, the request must carry "Authorization: Bearer <secret>".
