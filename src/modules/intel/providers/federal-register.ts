@@ -62,6 +62,8 @@ export function createFederalRegister(opts: ProviderFactoryOptions = {}) {
       if (q.publishedBefore) params.set("conditions[publication_date][lte]", q.publishedBefore);
       for (const f of FIELDS) params.append("fields[]", f);
       const data = await client.getJSON<{ count?: number; results?: Array<Record<string, unknown>> }>(`${BASE}/documents.json?${params}`, { signal: q.signal, ttlMs: q.ttlMs });
+      // The API omits `results` when nothing matches ({"count":0,"description":…}); that is an empty result, not drift.
+      if (data && data.count === 0 && data.results === undefined) return { total: 0, results: [] };
       if (!data || !Array.isArray(data.results)) throw new ProviderError("federal-register", "parse", "federal-register: search response has no results array (schema drift?)", false);
       return { total: data.count ?? data.results.length, results: data.results.map(mapDoc) };
     },

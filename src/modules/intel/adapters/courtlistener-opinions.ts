@@ -18,6 +18,9 @@ const schema = z.object({
   orderBy: z.string().default("dateFiled desc"),
 });
 
+/** Opinion searches in flight at once for one source run. */
+const SEARCH_CONCURRENCY = 3;
+
 export type CourtListenerOpinionsConfig = z.infer<typeof schema>;
 
 /** Opinions matching saved queries (per court group), full text fetched and indexed. */
@@ -36,9 +39,22 @@ export const courtListenerOpinionsAdapter = defineAdapter<CourtListenerOpinionsC
     if (!queries.length) { ctx.note("No queries configured."); return; }
     const courts = courtsForJurisdiction(cfg.jurisdiction, cfg.courts ?? ctx.scope.courts?.join(" "));
     const filedAfter = ctx.since ?? daysAgoISO(cfg.sinceDays, ctx.now);
-    for (const query of queries) {
-      if (ctx.budgetLeft() <= 0) break;
-      const res = await ctx.attempt(`search opinions "${query}"`, () => ctx.providers.courtlistener.searchOpinions({ query, courts, filedAfter, orderBy: cfg.orderBy, limit: cfg.maxResults, signal: ctx.signal }), { provider: "courtlistener" });
+    // Searches run a few at a time (the provider's rate limiter still paces them): one slow search no longer holds
+    // the rest behind it inside a serverless run's time limit. Hits are then processed in query order.
+    const searches: (Awaited<ReturnType<typeof ctx.providers.courtlistener.searchOpinions>> | undefined)[] = new Array(queries.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < queries.length && !ctx.signal?.aborted) {
+        const i = next++;
+        const query = queries[i];
+        searches[i] = await ctx.attempt(`search opinions "${query}"`, () => ctx.providers.courtlistener.searchOpinions({ query, courts, filedAfter, orderBy: cfg.orderBy, limit: cfg.maxResults, signal: ctx.signal }), { provider: "courtlistener" });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(SEARCH_CONCURRENCY, queries.length) }, worker));
+    for (let qi = 0; qi < queries.length; qi++) {
+      if (ctx.budgetLeft() <= 0 || ctx.signal?.aborted) break;
+      const query = queries[qi];
+      const res = searches[qi];
       if (!res) continue;
       for (const hit of res.results) {
         if (ctx.budgetLeft() <= 0) break;

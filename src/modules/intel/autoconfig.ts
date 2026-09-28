@@ -221,8 +221,8 @@ const WORDING_SCHEMA = {
 const INSTRUCTIONS = [
   "You configure legal-intelligence searches for one litigation matter at a law firm.",
   "Return search WORDING only. Facts such as docket numbers, MDL numbers, judges and courts are taken from the matter record by the application; never put docket numbers, MDL numbers, judge names, court names, court ids or field filters (docketNumber:, judge:, court_id:) in any query.",
-  "Case-law queries use CourtListener syntax: quoted phrases, AND, OR, parentheses. Target the legal theories, doctrines and conduct at issue so new opinions on them surface; 2 to 5 queries.",
-  "Regulatory queries target Federal Register rules/notices on the subject (0 to 3). Statute queries name U.S. Code provisions central to the claims (0 to 3). News queries are short plain phrases (0 to 3).",
+  "Case-law queries use CourtListener syntax: quoted phrases, AND, OR, parentheses; no wildcards (*), which make searches slow. Target the legal theories, doctrines and conduct at issue so new opinions on them surface; 2 to 5 queries.",
+  "Regulatory queries are short plain keyword phrases for the Federal Register full-text search (no AND/OR, and never the words \"Federal Register\") targeting rules/notices on the subject (0 to 3). Statute queries name U.S. Code provisions central to the claims (0 to 3). News queries are short plain phrases (0 to 3).",
   "Products only for drug, device or food matters (FDA recalls); otherwise empty. CFR sections only when you are certain of the exact section; otherwise empty.",
   "No URLs. Keep each query under 160 characters. Do not invent facts about the matter.",
 ].join("\n");
@@ -257,9 +257,9 @@ function strs(v: unknown): string[] {
 export function validateWording(raw: unknown, facts: MatterFacts): { wording: Pick<MatterIntelPlan, "caseLaw" | "regulatory" | "statutes" | "news" | "products">; cfr: { title: number; section: string }[]; dropped: number } {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   let dropped = 0;
-  const pick = (key: string, max: number, maxLen: number): PlannedQuery[] => {
+  const pick = (key: string, max: number, maxLen: number, extra?: (t: string) => boolean): PlannedQuery[] => {
     const all = strs(o[key]);
-    const ok = all.filter((t) => wordingOk(t, facts, maxLen));
+    const ok = all.filter((t) => wordingOk(t, facts, maxLen) && (!extra || extra(t)));
     dropped += all.length - ok.length;
     return dedupeQueries(ok.map((text) => ({ text, origin: "model" as const }))).slice(0, max);
   };
@@ -280,7 +280,7 @@ export function validateWording(raw: unknown, facts: MatterFacts): { wording: Pi
     }
   }
   return {
-    wording: { caseLaw: pick("caseLaw", 5, 200), regulatory: pick("regulatory", 3, 160), statutes: pick("statutes", 3, 120), news: pick("news", 3, 120), products },
+    wording: { caseLaw: pick("caseLaw", 5, 200, (t) => !t.includes("*")), regulatory: pick("regulatory", 3, 160), statutes: pick("statutes", 3, 120), news: pick("news", 3, 120), products },
     cfr: cfr.slice(0, 5),
     dropped,
   };

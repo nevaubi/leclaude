@@ -215,6 +215,24 @@ describe("scheduling and execution", () => {
     expect(counts.failed24h).toBeGreaterThanOrEqual(1);
     expect(counts.running).toBe(0);
   });
+  it("treats a provider timeout caused by the runner's own abort as an interruption, not a failed attempt", async () => {
+    const { ProviderError } = await import("@/modules/intel/providers/base");
+    registerJobHandler("entities.resolve", async () => { throw new ProviderError("courtlistener", "timeout", "courtlistener: request timed out", true); });
+    const j = enqueueJob({ kind: "entities.resolve", maxAttempts: 3 });
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const out = await executeJob(claimJob(j.id, "w")!, { signal: ctrl.signal, review: false });
+    expect(out.status).toBe("queued");
+    expect(out.attempts).toBe(0);
+    expect(out.log.some((l) => /runner deadline/.test(l.msg))).toBe(true);
+    // Without the runner abort, the same timeout is an ordinary failed attempt.
+    const k = enqueueJob({ kind: "entities.resolve", maxAttempts: 3 });
+    const failed = await executeJob(claimJob(k.id, "w")!, { review: false });
+    expect(failed.attempts).toBe(1);
+    expect(failed.error?.code).toBe("timeout");
+    registerJobHandler("entities.resolve", async (job) => ({ resolved: job.payload.n }));
+    for (const x of [out, failed]) cancelJob(x.id);
+  });
   it("runs housekeeping kinds through the runner (sweep, scan.run, workflow.tick)", async () => {
     const sweep = enqueueJob({ kind: "sweep", maxAttempts: 1 });
     const s = await executeJob(claimJob(sweep.id, "w")!, { providers: providers() });

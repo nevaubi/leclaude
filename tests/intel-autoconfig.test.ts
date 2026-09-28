@@ -34,7 +34,7 @@ import type { Matter } from "@/lib/types/domain";
 import { setupWorkspace } from "@/modules/workspace/service";
 import { buildDemoMatters } from "@/modules/demo/workspace/matters";
 import { DEMO_MATTERS } from "@/modules/demo/ids";
-import { AUTO_FLAG_KEY, AUTOCONFIG_KEY, applyPlans, courtIdsFor, factsForMatter, maybeAutoConfigure, planForMatter, planForMatters } from "@/modules/intel/autoconfig";
+import { AUTO_FLAG_KEY, AUTOCONFIG_KEY, applyPlans, courtIdsFor, factsForMatter, maybeAutoConfigure, planForMatter, planForMatters, validateWording } from "@/modules/intel/autoconfig";
 import { listJobs } from "@/modules/intel/jobs";
 import { SEED_SOURCE_IDS, ensureIntelSeeded } from "@/modules/intel/seed";
 import { intelSources } from "@/modules/intel/store";
@@ -107,6 +107,16 @@ describe("facts from the matter record", () => {
     expect(c.judges).toEqual([]);
     expect(c.courts).toEqual(["cand", "ca9"]);
     expect(factsForMatter(doj).dockets).toEqual(["2:24-cv-04055"]);
+  });
+});
+
+describe("wording validation", () => {
+  it("drops wildcard case-law searches (slow on CourtListener) and keeps the rest", () => {
+    const facts = factsForMatter(doj);
+    const { wording, dropped } = validateWording({ caseLaw: ['"App Store" monopol* AND antitrust', '"refusal to deal" AND smartphone'], regulatory: ["app store competition"], statutes: [], news: [], products: [], cfrSections: [] }, facts);
+    expect(wording.caseLaw.map((q) => q.text)).toEqual(['"refusal to deal" AND smartphone']);
+    expect(wording.regulatory.map((q) => q.text)).toEqual(["app store competition"]);
+    expect(dropped).toBe(1);
   });
 });
 

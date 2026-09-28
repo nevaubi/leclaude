@@ -651,7 +651,8 @@ export async function executeJob(job: IntelJob, o: ExecuteOptions = {}): Promise
   }
   if (outcome.ok) return completeJob(job.id, (outcome.result as Record<string, unknown> | undefined) ?? undefined) ?? (job as DurableIntelJob);
   const code = outcome.error.code;
-  if (code === "cancelled" && o.signal?.aborted) {
+  // The runner's own abort surfaces from providers as "cancelled" or "timeout"; either way it is an interruption, not a failed attempt.
+  if ((code === "cancelled" || code === "timeout") && o.signal?.aborted) {
     const current = getJob(job.id);
     if (current?.status === "running") { resetSourceStatus(job.sourceId, now); return requeueInterrupted(job.id, "Interrupted by the runner deadline", new Date()) ?? current; }
   }

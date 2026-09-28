@@ -181,6 +181,14 @@ describe("regulatory providers", () => {
     const t = await fr.getText(s.results[0]);
     expect(t).toMatchObject({ text: "Full rule text.", source: "raw" });
   });
+  it("Federal Register treats a count-0 response without a results array as empty", async () => {
+    const { impl } = fakeFetch(() => json({ description: "Documents matching 'zz'", count: 0 }));
+    const fr = createFederalRegister({ fetchImpl: impl, cache: memoryHttpCache(), sleep: noSleep });
+    expect(await fr.search({ term: "zz" })).toEqual({ total: 0, results: [] });
+    const { impl: drift } = fakeFetch(() => json({ description: "changed shape" }));
+    const fr2 = createFederalRegister({ fetchImpl: drift, cache: memoryHttpCache(), sleep: noSleep });
+    await expect(fr2.search({ term: "zz" })).rejects.toThrow(/no results array/);
+  });
   it("openFDA enforcement mapping, 404-as-empty and query helpers", async () => {
     const { impl, calls } = fakeFetch((url) => {
       if (url.includes("/drug/enforcement.json") && url.includes("nothing")) return json({ error: { code: "NOT_FOUND" } }, 404);
