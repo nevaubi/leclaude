@@ -66,6 +66,20 @@
 .word-editor .ProseMirror a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 .word-editor .ProseMirror mark { border-radius: 2px; padding: 0 1px; }
 .word-editor .ProseMirror .small-caps { font-variant: small-caps; }
+.word-editor .ProseMirror .all-caps { text-transform: uppercase; }
+.word-editor .ProseMirror h4, .word-editor .ProseMirror h5, .word-editor .ProseMirror h6 { position: relative; font-weight: 700; line-height: 1.25; margin: 1.1em 0 0.45em; font-size: 1em; }
+.word-editor .ProseMirror h5 { font-style: italic; }
+.word-editor .ProseMirror h6 { font-weight: 600; }
+/* Imported Word character/paragraph styles that carry meaning the editor should show. */
+.word-editor .ProseMirror [data-rstyle="Strong"], .word-editor .ProseMirror [data-rstyle="DefinedTerm"] { font-weight: 700; }
+.word-editor .ProseMirror [data-rstyle="Emphasis"] { font-style: italic; }
+.word-editor .ProseMirror [data-style="Quote"], .word-editor .ProseMirror [data-style="IntenseQuote"], .word-editor .ProseMirror [data-style="BlockText"] { margin-left: 0.5in; margin-right: 0.5in; }
+.word-editor .ProseMirror [data-style^="TOC"] { margin-bottom: 0.2em; }
+/* Imported inline OOXML: field codes and bookmarks are zero-width anchors; drawings/objects are small chips. */
+.word-editor .ProseMirror .docx-inline-anchor { display: inline; width: 0; overflow: hidden; }
+.word-editor .ProseMirror .docx-inline-chip { display: inline-flex; align-items: center; padding: 0 0.35em; margin: 0 0.1em; border-radius: 3px; border: 1px solid var(--paper-rule); color: var(--paper-muted); font-family: var(--font-sans); font-size: 0.72em; line-height: 1.4; vertical-align: baseline; user-select: none; }
+.word-editor .ProseMirror .docx-inline-img { display: inline-block; max-width: 100%; height: auto; vertical-align: bottom; }
+.word-editor .ProseMirror .section-break span { color: var(--primary); }
 .word-editor .ProseMirror sup, .word-editor .ProseMirror sub { font-size: 0.72em; }
 
 /* Lists */

@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ANNOTATION_COLORS, ANNOTATION_LABEL, REDACTION_REASONS, activePages, formatBates, parsePageRange, type BatesConfig, type BatesPosition, type PdfAnnotation, type PdfDecorations } from "./model";
+import { ANNOTATION_COLORS, ANNOTATION_LABEL, BATES_FONTS, REDACTION_REASONS, activePages, formatBates, parsePageRange, type BatesConfig, type BatesFont, type BatesPosition, type PdfAnnotation, type PdfDecorations } from "./model";
 import { usePdfStore } from "./store";
 
 // ---------------------------------------------------------------------------
@@ -64,10 +64,11 @@ export function BatesDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const [position, setPosition] = React.useState<BatesPosition>("bottom-right");
   const [fontSize, setFontSize] = React.useState("9");
   const [legend, setLegend] = React.useState("CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER");
-  const [useLegend, setUseLegend] = React.useState(true);
-  React.useEffect(() => { if (open && cur) { setPrefix(cur.prefix); setStart(String(cur.start)); setDigits(String(cur.digits)); setPosition(cur.position); setFontSize(String(cur.fontSize ?? 9)); setLegend(cur.legend ?? ""); setUseLegend(Boolean(cur.legend)); } }, [open, cur]);
+  const [useLegend, setUseLegend] = React.useState(false); // an endorsement is stamped only when the user opts in
+  const [font, setFont] = React.useState<BatesFont>("Helvetica");
+  React.useEffect(() => { if (open && cur) { setPrefix(cur.prefix); setStart(String(cur.start)); setDigits(String(cur.digits)); setPosition(cur.position); setFontSize(String(cur.fontSize ?? 9)); setLegend(cur.legend ?? "CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER"); setUseLegend(Boolean(cur.legend)); setFont(cur.font ?? "Helvetica"); } }, [open, cur]);
   const n = activePages(model).length;
-  const cfg: BatesConfig = { prefix, start: Math.max(0, Number(start) || 0), digits: Math.max(1, Math.min(12, Number(digits) || 1)), position, fontSize: Number(fontSize) || 9, legend: useLegend ? legend.trim() || undefined : undefined };
+  const cfg: BatesConfig = { prefix, start: Math.max(0, Number(start) || 0), digits: Math.max(1, Math.min(12, Number(digits) || 1)), position, fontSize: Number(fontSize) || 9, font, legend: useLegend ? legend.trim() || undefined : undefined };
   const apply = () => { store.getState().applyOp({ op: "set_bates", bates: cfg }); onOpenChange(false); };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,7 +80,8 @@ export function BatesDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           <div><Label className="text-xs">Digits</Label><Input value={digits} onChange={(e) => setDigits(e.target.value)} inputMode="numeric" className="mt-1 h-8 font-mono text-sm" /></div>
           <div className="col-span-2"><Label className="text-xs">Position</Label><Select value={position} onValueChange={(v) => setPosition(v as BatesPosition)}><SelectTrigger className="mt-1 h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent>{POSITIONS.map((p) => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}</SelectContent></Select></div>
           <div><Label className="text-xs">Font size</Label><Input value={fontSize} onChange={(e) => setFontSize(e.target.value)} inputMode="numeric" className="mt-1 h-8 text-sm" /></div>
-          <div className="col-span-3"><label className="flex items-center gap-2 text-xs"><Checkbox checked={useLegend} onCheckedChange={(v) => setUseLegend(Boolean(v))} /> Confidentiality legend (opposite corner)</label>{useLegend && <Input value={legend} onChange={(e) => setLegend(e.target.value)} className="mt-1 h-8 text-sm" />}</div>
+          <div className="col-span-3"><Label className="text-xs">Font</Label><Select value={font} onValueChange={(v) => setFont(v as BatesFont)}><SelectTrigger className="mt-1 h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent>{BATES_FONTS.map((f) => <SelectItem key={f} value={f}>{f.replace("-", " ")}</SelectItem>)}</SelectContent></Select></div>
+          <div className="col-span-3"><label className="flex items-center gap-2 text-xs"><Checkbox checked={useLegend} onCheckedChange={(v) => setUseLegend(Boolean(v))} /> Add an endorsement (e.g. CONFIDENTIAL) in the opposite corner</label>{useLegend && <Input value={legend} onChange={(e) => setLegend(e.target.value)} className="mt-1 h-8 text-sm" />}</div>
         </div>
         <div className="rounded-md border bg-muted/40 p-3 text-xs">
           <div className="mb-1 text-[11px] font-medium text-muted-foreground">Preview</div>

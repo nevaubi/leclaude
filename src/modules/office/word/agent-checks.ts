@@ -3,8 +3,8 @@
  * form, block-level redline between two versions, and post-edit verification. They only flag; edits stay
  * proposals the drafter reviews.
  */
-import { diffArrays, diffWordsWithSpace } from "diff";
-import { CITATION_REGEX, findPlaceholders } from "./doc-model";
+import { diffArrays } from "diff";
+import { findPlaceholders } from "./doc-model";
 
 export interface CheckBlock { id: string; index: number; type: string; text: string; level?: number }
 
@@ -78,14 +78,14 @@ export function checkDefinedTerms(blocks: CheckBlock[]): DefinedTermsReport {
     if (firstUse && firstUse.index < d.block.index) usedBefore.push({ term, first_use_block_id: firstUse.id, definition_block_id: d.block.id });
     if (/^[A-Z][a-z]+(?: [A-Z][a-z]+)*$/.test(term)) {
       const lower = term.toLowerCase();
-      const lre = new RegExp(`\\b(?:the|this|such|each|said)\\s+${escapeRe(lower)}\\b`, "g");
+      const lre = new RegExp(`\\b(?:[Tt]he|[Tt]his|[Ss]uch|[Ee]ach|[Ss]aid)\\s+${escapeRe(lower)}\\b`);
       const hits = blocks.filter((b) => b.type !== "heading" && lre.test(b.text)).map((b) => b.id);
       if (hits.length) inconsistent.push({ term, variant: lower, block_ids: hits.slice(0, 10) });
     }
   }
   // Candidates for "used but not defined": capitalized phrases after a determiner, used at least twice.
   const cand = new Map<string, { uses: number; blocks: Set<string> }>();
-  const candRe = /\b(?:the|such|each|any|this|that|said|all|every)\s+((?:[A-Z][a-z]+)(?:\s+[A-Z][a-z]+){0,3})\b/g;
+  const candRe = /\b(?:[Tt]he|[Ss]uch|[Ee]ach|[Aa]ny|[Tt]his|[Tt]hat|[Ss]aid|[Aa]ll|[Ee]very)\s+((?:[A-Z][a-z]+)(?:\s+[A-Z][a-z]+){0,3})\b/g;
   for (const b of blocks) {
     if (b.type === "heading") continue;
     candRe.lastIndex = 0;
@@ -109,7 +109,7 @@ export function checkDefinedTerms(blocks: CheckBlock[]): DefinedTermsReport {
 
 export interface CitationFlag { block_id: string; index: number; citation: string; rule: string; message: string }
 
-const CASE_CITE = /((?:[A-Z][\w.&'’-]*\s?)+(?:,?\s(?:Inc|LLC|Corp|Co|Ltd)\.?)?)\s(v\.?|vs\.?)\s((?:[A-Z][\w.&'’-]*[\s,]?)+?),?\s(\d{1,4})\s(U\.S\.|S\.\s?Ct\.|L\.\s?Ed\.(?:\s?2d)?|F\.\s?(?:2d|3d|4th)|F\.|F\.\s?Supp\.(?:\s?[23]d)?|F\.\s?App'x|[A-Z][\w.]*\s?(?:2d|3d|4th)?)\s(\d{1,5})(?:,\s?(\d{1,5}(?:[–-]\d{1,5})?))?(\s?\(([^)]{0,60})\))?/g;
+const CASE_CITE = /((?:[A-Z][\w.&'’-]*(?:,?\s)?)+?)\s?(v\.?|vs\.?)\s((?:[A-Z][\w.&'’-]*(?:,?\s)?)+?),?\s?(\d{1,4})\s(U\.S\.|S\.\s?Ct\.|L\.\s?Ed\.(?:\s?2d)?|F\.\s?(?:2d|3d|4th)|F\.|F\.\s?Supp\.(?:\s?[23]d)?|F\.\s?App'x|[A-Z][\w.]*\s?(?:2d|3d|4th)?)\s(\d{1,5})(?:,\s?(\d{1,5}(?:[–-]\d{1,5})?))?(\s?\(([^)]{0,60})\))?/g;
 
 export function checkCitations(blocks: CheckBlock[], opts: { currentYear?: number } = {}): CitationFlag[] {
   const year = opts.currentYear ?? new Date().getFullYear();
@@ -138,11 +138,10 @@ export function checkCitations(blocks: CheckBlock[], opts: { currentYear?: numbe
         if (p < Number(first)) flag(b, whole, "pin-cite", `Pin cite ${pin} is before the first page ${first}.`);
       }
     }
-    const generic = new RegExp(CITATION_REGEX.source, "g");
-    while ((m = generic.exec(t))) {
-      const c = m[0];
-      if (/U\.S\.C\.(?!\s§)/.test(c) && /U\.S\.C\.\s*\d/.test(c)) flag(b, c, "section-symbol", `Statutes take a section symbol: "U.S.C. § …".`);
-      if (/U\.S\.C\.\s?§\S/.test(c)) flag(b, c, "section-symbol", `Put a space after "§".`);
+    for (const mm of t.matchAll(/\b\d{1,3}\s+(?:U\.S\.C\.|C\.F\.R\.)\s*(§*)\s*\d[\w.-]*/g)) {
+      const c = mm[0];
+      if (!mm[1]) flag(b, c, "section-symbol", `Statutes and regulations take a section symbol: "U.S.C. § …".`);
+      else if (!/\.\s§+\s\d/.test(c)) flag(b, c, "section-symbol", `Put a space before and after "§".`);
     }
     for (const mm of t.matchAll(/\bFRCP\s*\d+|\bFRE\s*\d+/g)) flag(b, mm[0], "rule-form", `Cite rules as "Fed. R. Civ. P." / "Fed. R. Evid." in Bluebook form.`);
     for (const mm of t.matchAll(/(?:^|[.;]\s+)(id\.)/g)) flag(b, mm[1], "id", `Capitalize "Id." at the start of a citation sentence.`);
@@ -163,12 +162,15 @@ export type RedlineOp =
   | { op: "insert"; id: string; current: string }
   | { op: "delete"; after_id: string | null; base: string; base_type: string };
 
+/** Share of words two paragraphs have in common (multiset overlap over the longer one). */
 function similarity(a: string, b: string): number {
-  if (!a && !b) return 1;
-  const parts = diffWordsWithSpace(a, b);
-  let same = 0, total = 0;
-  for (const p of parts) { total += p.value.length; if (!p.added && !p.removed) same += p.value.length * 2; }
-  return total ? same / (a.length + b.length || 1) : 0;
+  const wa = a.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [], wb = b.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  if (!wa.length && !wb.length) return 1;
+  const counts = new Map<string, number>();
+  for (const w of wa) counts.set(w, (counts.get(w) ?? 0) + 1);
+  let common = 0;
+  for (const w of wb) { const c = counts.get(w) ?? 0; if (c > 0) { common++; counts.set(w, c - 1); } }
+  return common / Math.max(wa.length, wb.length);
 }
 
 /** Align base and current blocks by text; changed pairs become "modify", the rest insert/delete. */

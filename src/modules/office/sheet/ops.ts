@@ -31,7 +31,8 @@ export type SheetOp =
   | { type: "merge_cells"; sheet?: string; range: string }
   | { type: "unmerge_cells"; sheet?: string; range: string }
   | { type: "freeze_panes"; sheet?: string; rows: number; cols: number }
-  | { type: "sort_range"; sheet?: string; range: string; by: string; order?: "asc" | "desc"; has_header?: boolean; then_by?: string }
+  | { type: "sort_range"; sheet?: string; range: string; by: string; order?: "asc" | "desc"; has_header?: boolean; then_by?: string; /** Multi-key sort (takes precedence over by/then_by). */ keys?: { by: string; order?: "asc" | "desc" }[] }
+  | { type: "set_hidden"; sheet?: string; rows?: number[]; cols?: string[]; hidden: boolean }
   | { type: "add_filter"; sheet?: string; range: string }
   | { type: "set_filter_criteria"; sheet?: string; column: string; criteria: FilterCriteria | null }
   | { type: "clear_filter"; sheet?: string }
@@ -48,7 +49,7 @@ export type SheetOp =
   | { type: "set_active_sheet"; sheet: string }
   | { type: "add_named_range"; name: string; ref: string }
   | { type: "remove_named_range"; name: string }
-  | { type: "add_validation"; sheet?: string; range: string; kind: DataValidation["kind"]; list?: string[]; min?: number; max?: number; message?: string; id?: string }
+  | { type: "add_validation"; sheet?: string; range: string; kind: DataValidation["kind"]; list?: string[]; min?: number; max?: number; message?: string; id?: string; listSource?: string; operator?: DataValidation["operator"]; formula1?: string; formula2?: string; error?: string }
   | { type: "remove_validation"; sheet?: string; id: string }
   | { type: "set_page_setup"; patch: Partial<PageSetup> }
   | { type: "build_table"; sheet?: string; anchor: string; headers: string[]; rows: CellValue[][]; style?: "professional" | "plain"; total_row?: boolean; number_format?: NumFmt }
@@ -62,7 +63,7 @@ export const TOTAL_FILL = "#EEF2F7";
 export const BAND_FILL = "#F7F9FC";
 
 function cloneSheet(s: Sheet): Sheet {
-  return { ...s, cells: { ...s.cells }, colWidths: { ...s.colWidths }, rowHeights: { ...s.rowHeights }, merges: [...s.merges], charts: s.charts.map((c) => ({ ...c, position: { ...c.position } })), conditionalFormats: [...s.conditionalFormats], validations: [...(s.validations ?? [])], freeze: { ...s.freeze }, filters: s.filters ? { ...s.filters, criteria: { ...s.filters.criteria } } : s.filters };
+  return { ...s, ...(s.hiddenRows ? { hiddenRows: [...s.hiddenRows] } : {}), ...(s.hiddenCols ? { hiddenCols: [...s.hiddenCols] } : {}), cells: { ...s.cells }, colWidths: { ...s.colWidths }, rowHeights: { ...s.rowHeights }, merges: [...s.merges], charts: s.charts.map((c) => ({ ...c, position: { ...c.position } })), conditionalFormats: [...s.conditionalFormats], validations: [...(s.validations ?? [])], freeze: { ...s.freeze }, filters: s.filters ? { ...s.filters, criteria: { ...s.filters.criteria } } : s.filters };
 }
 
 function withSheet(wb: Workbook, sheet: Sheet, next: Sheet): Workbook {
@@ -161,15 +162,22 @@ function shiftCells(sheet: Sheet, axis: "row" | "col", index: number, count: num
   next.validations = (sheet.validations ?? []).map((v) => ({ ...v, range: shiftRange(v.range) ?? v.range }));
   next.charts = sheet.charts.map((c) => ({ ...c, range: shiftRange(c.range) ?? c.range, categoryRange: c.categoryRange ? shiftRange(c.categoryRange) ?? c.categoryRange : c.categoryRange }));
   if (sheet.filters) next.filters = { ...sheet.filters, range: shiftRange(sheet.filters.range) ?? sheet.filters.range };
+  const shiftRef = (ref: string): string | null => { try { const p = parseA1(ref); const v = axis === "row" ? shiftIdx(p.row) : shiftIdx(p.col); if (v === null) return null; return axis === "row" ? toA1(v, p.col) : toA1(p.row, v); } catch { return ref; } };
+  if (sheet.notes) { const n: NonNullable<Sheet["notes"]> = {}; for (const [ref, note] of Object.entries(sheet.notes)) { const r = shiftRef(ref); if (r) n[r] = note; } next.notes = Object.keys(n).length ? n : undefined; }
+  if (sheet.hyperlinks) next.hyperlinks = sheet.hyperlinks.map((h) => ({ ...h, ref: shiftRange(h.ref) ?? "" })).filter((h) => h.ref);
   if (axis === "row") {
     const rh: Record<string, number> = {};
     for (const [k, h] of Object.entries(sheet.rowHeights)) { const nv = shiftIdx(Number(k) - 1); if (nv !== null) rh[String(nv + 1)] = h; }
     next.rowHeights = rh;
+    if (sheet.hiddenRows) next.hiddenRows = sheet.hiddenRows.map((r) => shiftIdx(r - 1)).filter((v): v is number => v !== null).map((v) => v + 1);
+    if (sheet.rowStyles) { const rs: Record<string, string> = {}; for (const [k, v] of Object.entries(sheet.rowStyles)) { const nv = shiftIdx(Number(k) - 1); if (nv !== null) rs[String(nv + 1)] = v; } next.rowStyles = rs; }
     if (sheet.freeze.rows > index) next.freeze = { ...sheet.freeze, rows: Math.max(0, sheet.freeze.rows + count) };
   } else {
     const cw: Record<string, number> = {};
     for (const [k, w] of Object.entries(sheet.colWidths)) { const nv = shiftIdx(letterToCol(k)); if (nv !== null) cw[colToLetter(nv)] = w; }
     next.colWidths = cw;
+    if (sheet.hiddenCols) next.hiddenCols = sheet.hiddenCols.map((c) => shiftIdx(letterToCol(c))).filter((v): v is number => v !== null).map(colToLetter);
+    if (sheet.colStyles) { const cs: Record<string, string> = {}; for (const [k, v] of Object.entries(sheet.colStyles)) { const nv = shiftIdx(letterToCol(k)); if (nv !== null) cs[colToLetter(nv)] = v; } next.colStyles = cs; }
     if (sheet.freeze.cols > index) next.freeze = { ...sheet.freeze, cols: Math.max(0, sheet.freeze.cols + count) };
   }
   void sheetNames;
@@ -364,6 +372,24 @@ export function applyOp(wbIn: Workbook, op: SheetOp): Workbook {
       return withSheet(wb, sheet, next);
     }
 
+    case "set_hidden": {
+      const sheet = getSheet(wb, op.sheet);
+      const next = cloneSheet(sheet);
+      if (op.rows?.length) {
+        const set = new Set(next.hiddenRows ?? []);
+        for (const r of op.rows) { if (op.hidden) set.add(r + 1); else set.delete(r + 1); }
+        next.hiddenRows = [...set].sort((a, b) => a - b);
+        if (!next.hiddenRows.length) delete next.hiddenRows;
+      }
+      if (op.cols?.length) {
+        const set = new Set(next.hiddenCols ?? []);
+        for (const c of op.cols) { if (op.hidden) set.add(c.toUpperCase()); else set.delete(c.toUpperCase()); }
+        next.hiddenCols = [...set].sort((a, b) => letterToCol(a) - letterToCol(b));
+        if (!next.hiddenCols.length) delete next.hiddenCols;
+      }
+      return withSheet(wb, sheet, next);
+    }
+
     case "freeze_panes": {
       const sheet = getSheet(wb, op.sheet);
       return withSheet(wb, sheet, { ...sheet, freeze: { rows: Math.max(0, Math.min(10, op.rows)), cols: Math.max(0, Math.min(6, op.cols)) } });
@@ -383,7 +409,10 @@ export function applyOp(wbIn: Workbook, op: SheetOp): Workbook {
       }
       const valueOf = (cells: (Cell | undefined)[], col: number) => cells[col - range.start.col]?.v;
       const order = op.order ?? "asc";
-      const sorted = [...rows].sort((a, b) => compareValues(valueOf(a.cells, keyCol), valueOf(b.cells, keyCol), order) || (thenCol !== null ? compareValues(valueOf(a.cells, thenCol), valueOf(b.cells, thenCol), order) : 0) || a.row - b.row);
+      const colOf = (by: string) => (/^[A-Za-z]{1,3}$/.test(by) ? letterToCol(by) : range.start.col + (Number(by) || 0));
+      const keys = op.keys?.length ? op.keys.map((k) => ({ col: colOf(k.by), order: k.order ?? "asc" })) : [{ col: keyCol, order }, ...(thenCol !== null ? [{ col: thenCol, order }] : [])];
+      for (const k of keys) if (k.col < range.start.col || k.col > range.end.col) throw new Error(`Sort column ${colToLetter(k.col)} is outside ${rangeToA1(range)}`);
+      const sorted = [...rows].sort((a, b) => { for (const k of keys) { const c = compareValues(valueOf(a.cells, k.col), valueOf(b.cells, k.col), k.order); if (c) return c; } return a.row - b.row; });
       sorted.forEach((src, i) => {
         const targetRow = firstRow + i;
         const delta = targetRow - src.row;
@@ -429,7 +458,7 @@ export function applyOp(wbIn: Workbook, op: SheetOp): Workbook {
       const { range } = resolveRange(wb, op.chart.range, sheet);
       const n = sheet.charts.length;
       const defaultPos = { x: Math.min(1200, (range.end.col + 2) * DEFAULT_COL_WIDTH + 8), y: 8 + n * 40, w: 480, h: 300 };
-      const chart: SheetChart = { id: op.chart.id ?? `ch_${nanoid(6)}`, type: op.chart.type, title: op.chart.title, range: rangeToA1(range), categoryRange: op.chart.categoryRange ? rangeToA1(resolveRange(wb, op.chart.categoryRange, sheet).range) : undefined, hasHeader: op.chart.hasHeader ?? true, stacked: op.chart.stacked, position: { ...defaultPos, ...(op.chart.position ?? {}) } };
+      const chart: SheetChart = { id: op.chart.id ?? `ch_${nanoid(6)}`, type: op.chart.type, title: op.chart.title, range: rangeToA1(range), categoryRange: op.chart.categoryRange ? rangeToA1(resolveRange(wb, op.chart.categoryRange, sheet).range) : undefined, hasHeader: op.chart.hasHeader ?? true, stacked: op.chart.stacked, ...(op.chart.horizontal ? { horizontal: true } : {}), position: { ...defaultPos, ...(op.chart.position ?? {}) } };
       const next = cloneSheet(sheet);
       next.charts = [...next.charts.filter((c) => c.id !== chart.id), chart];
       return withSheet(wb, sheet, next);
@@ -508,6 +537,12 @@ export function applyOp(wbIn: Workbook, op: SheetOp): Workbook {
     case "add_validation": {
       const { sheet, range } = resolveRange(wb, op.range, getSheet(wb, op.sheet));
       const v: DataValidation = { id: op.id ?? `dv_${nanoid(6)}`, range: rangeToA1(range), kind: op.kind, list: op.list, min: op.min, max: op.max, message: op.message, allowBlank: true };
+      if (op.listSource) v.listSource = op.listSource;
+      if (op.operator) v.operator = op.operator;
+      if (op.formula1) v.formula1 = op.formula1;
+      if (op.formula2) v.formula2 = op.formula2;
+      if (op.error) v.error = op.error;
+      for (const k of Object.keys(v) as (keyof DataValidation)[]) if (v[k] === undefined) delete v[k];
       return withSheet(wb, sheet, { ...sheet, validations: [...(sheet.validations ?? []), v] });
     }
     case "remove_validation": {
@@ -579,6 +614,7 @@ export function opTarget(wb: Workbook, op: SheetOp): { sheet: string; range: str
       case "add_chart": { const s = getSheet(wb, op.sheet); return { sheet: s.name, range: op.chart.range }; }
       case "build_table": { const s = getSheet(wb, op.sheet); const a = parseA1(op.anchor); return { sheet: s.name, range: rangeToA1({ start: a, end: { row: a.row + op.rows.length + (op.total_row ? 1 : 0), col: a.col + Math.max(0, op.headers.length - 1) } }) }; }
       case "paste_block": { const s = getSheet(wb, op.sheet); const a = parseA1(op.anchor); return { sheet: s.name, range: rangeToA1({ start: a, end: { row: a.row + op.block.length - 1, col: a.col + Math.max(0, (op.block[0]?.length ?? 1) - 1) } }) }; }
+      case "set_hidden": { const s = getSheet(wb, op.sheet); if (op.rows?.length) { const lo = Math.min(...op.rows), hi = Math.max(...op.rows); return { sheet: s.name, range: `${lo + 1}:${hi + 1}` }; } const cols = (op.cols ?? []).map((c) => c.toUpperCase()).sort((a, b) => letterToCol(a) - letterToCol(b)); return cols.length ? { sheet: s.name, range: `${cols[0]}:${cols[cols.length - 1]}` } : null; }
       case "freeze_panes": case "set_row_height": case "rename_sheet": case "set_sheet_color": case "clear_filter": case "set_filter_criteria": case "remove_conditional_format": case "update_chart": case "remove_chart": case "remove_validation": { const s = getSheet(wb, op.sheet); return { sheet: s.name, range: "A1" }; }
       default: return null;
     }
@@ -604,7 +640,8 @@ export function describeOp(op: SheetOp): string {
     case "merge_cells": return `Merge ${op.range}`;
     case "unmerge_cells": return `Unmerge ${op.range}`;
     case "freeze_panes": return `Freeze ${op.rows} row${op.rows === 1 ? "" : "s"}, ${op.cols} column${op.cols === 1 ? "" : "s"}`;
-    case "sort_range": return `Sort ${op.range} by ${op.by} ${op.order === "desc" ? "Z→A" : "A→Z"}`;
+    case "sort_range": return op.keys?.length ? `Sort ${op.range} by ${op.keys.map((k) => `${k.by} ${k.order === "desc" ? "Z→A" : "A→Z"}`).join(", then ")}` : `Sort ${op.range} by ${op.by} ${op.order === "desc" ? "Z→A" : "A→Z"}`;
+    case "set_hidden": return `${op.hidden ? "Hide" : "Unhide"} ${op.rows?.length ? `${op.rows.length} row(s)` : ""}${op.rows?.length && op.cols?.length ? " and " : ""}${op.cols?.length ? `column(s) ${op.cols.join(", ")}` : ""}`;
     case "add_filter": return `Filter ${op.range}`;
     case "set_filter_criteria": return `Filter column ${op.column}`;
     case "clear_filter": return "Clear filter";

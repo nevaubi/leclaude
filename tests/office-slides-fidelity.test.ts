@@ -191,7 +191,9 @@ describe("package-preserving export", () => {
     const body2 = s2b.elements.find((e) => e.role === "body")!;
     expect(body2.text).toBe(body.text);
     expect(body2.rich!.paragraphs.map((p) => p.level)).toEqual([0, 1, 0, 0]);
-    expect(body2.rich!.paragraphs[1].runs[1].link).toBeUndefined(); // links are not carried into rewritten runs
+    expect(body2.rich!.paragraphs[1].runs[1].link).toBe("https://example.com/docs/MFC-0102211"); // untouched paragraph reused verbatim
+    expect(body2.rich!.paragraphs[2].runs[0]).toMatchObject({ text: "New third point" });
+    expect(body2.rich!.paragraphs[2].runs[0].color).toBeUndefined(); // new bullet borrows a plain bullet paragraph, not the red numbered one
     const box2 = s2b.elements.find((e) => e.ooxml?.name === "TextBox 3")!;
     expect(box2.ooxml!.emu).toEqual({ ...box.ooxml!.emu, x: pxToEmuX(box.x, deck.meta!.pptx!.map) });
     expect(s2b.elements.find((e) => e.role === "title")!.ooxml!.emu).toEqual(titleBefore.ooxml!.emu);
@@ -264,7 +266,7 @@ describe("package-preserving export", () => {
     const src = await handFixture();
     const deck = await importBytes(src);
     const e = cloneDeck(deck);
-    const [a, b, c, d, f] = e.slides;
+    const [a, b, c, , f] = e.slides;
     const dup = cloneSlide(b);
     const fresh = buildSlide("bullets", { title: "Added in LeClaude", body: "- one\n- two" }, e.theme);
     fresh.notes = "New slide notes";

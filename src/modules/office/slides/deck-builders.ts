@@ -6,7 +6,7 @@
  *  - checkConsistency: font/size/alignment/position outliers, overflow and density issues across the deck;
  *  - fitTextPlan: grow the box into free space, else shrink the font to a floor, else ask for condensing.
  */
-import { buildSlide, parseTimelineLine, type SlideContent, type TimelineItem } from "./layouts";
+import { buildSlide, type SlideContent, type TimelineItem } from "./layouts";
 import {
   SLIDE_H, SLIDE_W, bulletLines, estimateTextFit, fitFontSize, makeElement, parseMarkdownLite, plainText, slideTitle, wordCount,
   type DeckContent, type DeckElement, type DeckSlide, type DeckTheme, type SlideLayout,

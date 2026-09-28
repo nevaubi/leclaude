@@ -82,8 +82,6 @@ function lnXml(stroke: string | undefined, width: number | undefined, ctx: Write
   return `<a:ln w="${Math.round((width ?? 1) * EMU_PER_PT)}">${solid(stroke, ctx)}${extra}</a:ln>`;
 }
 
-const PH_TYPE: Partial<Record<NonNullable<DeckElement["role"]>, string>> = { title: "title", subtitle: "subTitle", body: "body", date: "dt", footer: "ftr" };
-
 export interface NewShapeRefs { imageRid?: string; chartRid?: string; imageSize?: { w: number; h: number } }
 
 /** XML for an element authored in LeClaude. `ph` places it in the layout placeholder of that type. */
@@ -290,16 +288,35 @@ const PPR_AFTER_BULLET = ["a:tabLst", "a:defRPr", "a:extLst"];
  * source paragraph at the same position (or the last one at the same level), so inherited formatting survives.
  */
 export function rebuildParagraphs(txBody: XEl, markdown: string, el: DeckElement, ctx: WriteCtx) {
+  void ctx;
   const srcPs = kids(txBody, "a:p");
-  const srcKinds = parseMarkdownLite(el.rich?.markdown ?? "").map((l) => l.kind);
+  const srcMd = (el.rich?.paragraphs ?? []).map((p) => p.md);
+  const srcKinds = srcMd.map((md) => (md === undefined ? "para" : parseMarkdownLite(md.split("\n")[0])[0]?.kind ?? "para"));
+  const srcLevels = srcPs.map((p) => Number(attr(kid(p, "a:pPr"), "lvl") ?? 0));
   const baseBold = Boolean(el.ooxml?.base.style.bold), baseItalic = Boolean(el.ooxml?.base.style.italic), baseU = Boolean(el.ooxml?.base.style.underline);
   const wantB = Boolean(el.style.bold), wantI = Boolean(el.style.italic), wantU = Boolean(el.style.underline);
-  const lines = parseMarkdownLite(markdown);
+  const rawLines = markdown.split("\n");
+  const used = new Set<number>();
   const next: XNode[] = [];
-  lines.forEach((line, i) => {
-    const tplIdx = i < srcPs.length ? i : Math.max(0, srcPs.length - 1 - [...srcPs].reverse().findIndex((p) => Number(attr(kid(p, "a:pPr"), "lvl") ?? 0) === line.indent));
-    const tpl = srcPs[Math.min(tplIdx, srcPs.length - 1)];
-    const tplKind = srcKinds[Math.min(tplIdx, srcKinds.length - 1)] ?? "para";
+  let expected = 0;
+  for (let i = 0; i < rawLines.length;) {
+    // 1. an untouched source paragraph (same markdown, possibly spanning a:br lines) is reused byte-for-byte
+    let reused = -1, span = 1;
+    const candidates = srcMd.map((md, j) => ({ md, j })).filter((c) => c.md !== undefined && !used.has(c.j) && c.j < srcPs.length).sort((x, y) => Math.abs(x.j - expected) - Math.abs(y.j - expected));
+    for (const c of candidates) {
+      const n = c.md!.split("\n").length;
+      if (rawLines.slice(i, i + n).join("\n") === c.md) { reused = c.j; span = n; break; }
+    }
+    if (reused >= 0) { used.add(reused); next.push(srcPs[reused]); i += span; expected = reused + 1; continue; }
+    // 2. a new or edited line borrows pPr/rPr from the best matching source paragraph
+    const line = parseMarkdownLite(rawLines[i])[0];
+    const byPos = expected < srcPs.length && srcKinds[expected] === line.kind && srcLevels[expected] === line.indent ? expected : -1;
+    const sameKindLevel = srcPs.findIndex((_, j) => srcKinds[j] === line.kind && srcLevels[j] === line.indent);
+    const sameKind = srcPs.findIndex((_, j) => srcKinds[j] === line.kind);
+    const tplIdx = byPos >= 0 ? byPos : sameKindLevel >= 0 ? sameKindLevel : sameKind >= 0 ? sameKind : Math.min(expected, srcPs.length - 1);
+    const tpl = tplIdx >= 0 ? srcPs[tplIdx] : undefined;
+    const tplKind = tplIdx >= 0 ? srcKinds[tplIdx] ?? "para" : "para";
+    if (byPos >= 0 && !used.has(byPos)) { used.add(byPos); expected = byPos + 1; }
     const pPr = tpl && kid(tpl, "a:pPr") ? clone(kid(tpl, "a:pPr")!) : mk("a:pPr");
     pPr.dirty = true;
     setAttr(pPr, "lvl", line.indent ? line.indent : undefined);
@@ -329,7 +346,8 @@ export function rebuildParagraphs(txBody: XEl, markdown: string, el: DeckElement
     const end = tpl ? kid(tpl, "a:endParaRPr") : undefined;
     if (end) p.kids.push(clone(end));
     next.push(p);
-  });
+    i++;
+  }
   const others = txBody.kids.filter((k) => !(k.t === "el" && k.name === "a:p"));
   setKids(txBody, [...others, ...next]);
   const bodyPr = kid(txBody, "a:bodyPr");

@@ -7,8 +7,8 @@
 import type { EditProposal } from "@/modules/office/shared/types";
 import type { ApplyResult } from "@/modules/office/shared/agent-panel";
 import { normalizeRange, parseRange, splitSheetRef } from "./a1";
-import type { Workbook } from "./model";
 import { opTarget, type SheetOp } from "./ops";
+import { applyChecked, type CheckedItem, type ProposalBase } from "./proposal-base";
 import type { SheetStore } from "./store";
 
 export interface ApplyDeps {
@@ -20,26 +20,24 @@ export async function applyProposals(proposals: EditProposal[], deps: ApplyDeps)
   const applied: string[] = [];
   const failed: { id: string; error: string }[] = [];
   const store = deps.store();
-  const ops: { id: string; op: SheetOp }[] = [];
+  const ops: CheckedItem[] = [];
   for (const p of proposals) {
     if (p.kind === "add_comment") {
       const { anchor, text, quote } = p.payload as { anchor: string; text: string; quote?: string };
       try { await deps.addComment({ anchor, body: text, quote, source: "agent" }); applied.push(p.id); } catch (e) { failed.push({ id: p.id, error: (e as Error).message }); }
       continue;
     }
-    const op = (p.payload as { op?: SheetOp }).op;
+    const { op, base } = p.payload as { op?: SheetOp; base?: ProposalBase[] };
     if (!op) { failed.push({ id: p.id, error: "Proposal has no operation" }); continue; }
-    ops.push({ id: p.id, op });
+    ops.push({ id: p.id, op, base });
   }
-  // Apply as one undoable batch so a single Undo reverts the whole agent turn.
+  // Apply as one undoable batch so a single Undo reverts the whole agent turn. Every proposal is checked
+  // against its base version first: edits whose target changed since the agent proposed them are rejected.
   if (ops.length) {
-    let wb: Workbook = store.workbook;
-    const okIds: string[] = [];
-    const good: SheetOp[] = [];
-    for (const { id, op } of ops) {
-      try { const { applyOp } = await import("./ops"); wb = applyOp(wb, op); good.push(op); okIds.push(id); }
-      catch (e) { failed.push({ id, error: (e as Error).message }); }
-    }
+    const checked = applyChecked(store.workbook, ops);
+    for (const f of checked.failed) failed.push({ id: f.id, error: f.error });
+    const good = checked.applied.map((a) => a.op);
+    const okIds = checked.applied.map((a) => a.id);
     if (good.length) {
       try { store.apply({ type: "batch", ops: good }); applied.push(...okIds); }
       catch (e) { for (const id of okIds) failed.push({ id, error: (e as Error).message }); }

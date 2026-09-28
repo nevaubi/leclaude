@@ -55,7 +55,8 @@ export const ElementView = React.memo(function ElementView({ element: e, theme, 
     case "shape": return <ShapeView e={e} theme={theme} base={base} />;
     case "line": return <LineView e={e} theme={theme} base={base} />;
     case "image": return <ImageView e={e} theme={theme} base={base} />;
-    case "table": return <div data-el-id={e.id} style={{ ...base, overflow: "hidden" }}><TableView e={e} theme={theme} /></div>;
+    // Tables grow downward like PowerPoint rows do when text needs more room.
+    case "table": return <div data-el-id={e.id} style={{ ...base, overflow: "visible" }}><TableView e={e} theme={theme} /></div>;
     case "chart": return <div data-el-id={e.id} style={{ ...base, background: resolveColor(e.style.fill, theme, "transparent"), borderRadius: e.style.radius ?? 0, padding: e.style.padding ?? 12, overflow: "hidden" }}>{lite ? <ChartLite e={e} theme={theme} /> : <ChartView e={e} theme={theme} />}</div>;
     default: return null;
   }
@@ -175,8 +176,7 @@ function ImageView({ e, theme, base }: { e: DeckElement; theme: DeckTheme; base:
   return (
     <div data-el-id={e.id} style={{ ...base, borderRadius: radius, overflow: "hidden", background: resolveColor(st.fill, theme, "transparent"), border: st.stroke ? `${st.strokeWidth ?? 1}px solid ${resolveColor(st.stroke, theme, "#999")}` : undefined }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {cropped ? <img src={e.src} alt={e.alt ?? ""} draggable={false} style={{ position: "absolute", width: `${100 / cw}%`, height: `${100 / ch}%`, left: `${(-c.l / cw) * 100}%`, top: `${(-c.t / ch) * 100}%`, maxWidth: "none", display: "block" }} />
-        : <img src={e.src} alt={e.alt ?? ""} draggable={false} style={{ width: "100%", height: "100%", objectFit: st.fit ?? "contain", display: "block" }} />}
+      <img src={e.src} alt={e.alt ?? ""} draggable={false} style={cropped ? { position: "absolute", width: `${100 / cw}%`, height: `${100 / ch}%`, left: `${(-c.l / cw) * 100}%`, top: `${(-c.t / ch) * 100}%`, maxWidth: "none", display: "block" } : { width: "100%", height: "100%", objectFit: st.fit ?? "contain", display: "block" }} />
     </div>
   );
 }

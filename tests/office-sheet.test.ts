@@ -262,13 +262,13 @@ describe("agent tools", () => {
     tool(tools, "sort_range")({ range: "A1:C3", by: "B", order: "desc", has_header: true });
     expect(snapshot.workbook.sheets[0].cells.A2.v).toBe("Experts");
     expect(snapshot.workbook.sheets[0].cells.C2.f).toBe("=B2/$B$4");
-    tool(tools, "add_chart")({ type: "bar", title: "Costs", range: "B1:B3", category_range: "A2:A3" });
+    tool(tools, "create_chart")({ type: "bar", title: "Costs", range: "B1:B3", category_range: "A2:A3" });
     expect(snapshot.workbook.sheets[0].charts).toHaveLength(1);
-    tool(tools, "style_range")({ range: "A1:C1", style: { bold: true, fill: "#1F3A5F", color: "#FFFFFF" } });
+    tool(tools, "set_style")({ range: "A1:C1", style: { bold: true, fill: "#1F3A5F", color: "#FFFFFF" } });
     tool(tools, "set_number_format")({ range: "B2:B4", numFmt: "$#,##0.00" });
     tool(tools, "set_freeze_panes")({ rows: 1 });
     tool(tools, "add_conditional_format")({ range: "B2:B3", rule: { kind: "gt", value: 10000 }, style: { fill: "#FDE2E1" } });
-    tool(tools, "add_named_range")({ name: "CostTotal", ref: "Sheet1!B4" });
+    tool(tools, "create_named_range")({ name: "CostTotal", ref: "Sheet1!B4" });
     tool(tools, "add_sheet")({ name: "Notes" });
     expect(snapshot.activeSheet).toBe("Notes");
     tool(tools, "set_sheet_name")({ name: "Assumptions" });
@@ -298,6 +298,7 @@ describe("agent tools", () => {
     expect(v.warnings.some((w) => w.ref === "B4" && w.issue.includes("inconsistent"))).toBe(true);
     expect(v.warnings.some((w) => w.issue.includes("hardcoded"))).toBe(true);
     expect(sheetInstructions(ctx)).toContain("Settlement allocation");
+    expect(sheetInstructions(ctx)).toBe(sheetInstructions(makeCtx(wbWith([])).ctx)); // static, cacheable prefix
     expect(SHEET_SUGGESTIONS.draft.length).toBeGreaterThanOrEqual(6);
   });
 });

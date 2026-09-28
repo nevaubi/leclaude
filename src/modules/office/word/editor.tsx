@@ -112,6 +112,8 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   const importedCommentsRef = React.useRef<DocxImportedComment[]>([]);
   importedCommentsRef.current = importedComments;
   const importedIds = React.useMemo(() => new Set(importedComments.map((c) => c.id)), [importedComments]);
+  const importedIdsRef = React.useRef(importedIds);
+  importedIdsRef.current = importedIds;
   const comments = React.useMemo<OfficeComment[]>(() => [
     ...importedComments.map((c) => ({ id: c.id, docId: id, anchor: c.anchor, quote: c.quote, body: c.text, authorName: c.author, createdAt: c.date ?? "", resolved: c.resolved, replies: [] })),
     ...dbComments,
@@ -375,6 +377,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     return s;
   }, [cursor]);
 
+  const docxMeta = React.useMemo<DocxMeta | null>(() => { const m = (doc?.meta as { docx?: unknown } | undefined)?.docx; return isDocxMeta(m) ? m : null; }, [doc?.meta]);
   const getSnapshot = React.useCallback(() => {
     if (!editor) return null;
     const c = computeCursor(editor);
@@ -386,8 +389,9 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
       comments: comments.filter((x) => !x.resolved).map((x) => ({ id: x.id, anchor: x.anchor, body: x.body, author: x.authorName, resolved: x.resolved, quote: x.quote })),
       matterId: doc?.matterId ?? null,
       templateId: doc?.templateId ?? null,
+      ...(docxMeta ? { styles: docxMeta.styles.filter((x) => x.type === "paragraph" || x.type === "character").map((x) => ({ id: x.id, name: x.name, type: x.type, outline: x.outlineLevel })), bookmarks: docxMeta.bookmarks } : {}),
     });
-  }, [editor, doc, trackChanges, settings, comments]);
+  }, [editor, doc, trackChanges, settings, comments, docxMeta]);
 
   const applyProposals = React.useCallback(async (proposals: EditProposal[]): Promise<ApplyResult> => {
     if (!editor) return { applied: [], failed: proposals.map((p) => ({ id: p.id, error: "Editor not ready" })) };
@@ -401,6 +405,13 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
           addComment: async (input) => { const c = await office.comments.add(input); commentsAdded = true; setComments((cs) => [...cs, c]); return c; },
           setTitle: async (t) => { setTitle(t); await office.setTitle(t); },
           renderMermaid: renderMermaidToImageUrl,
+          resolveComment: async (cid, note) => {
+            if (importedIdsRef.current.has(cid)) { await updateImportedComments((cs) => cs.map((c) => (c.id === cid ? { ...c, resolved: true, text: note ? `${c.text}\nDrafting assistant: ${note}` : c.text } : c))); return; }
+            await office.comments.update(cid, { resolved: true, ...(note ? { reply: note } : {}) });
+            await refreshComments();
+          },
+          settings,
+          updateSettings,
         });
         applied.push(p.id);
         if (firstPos == null && pos != null) firstPos = pos;
@@ -410,7 +421,8 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     if (commentsAdded) setCommentsOpen(true);
     scheduleDerived(editor); scheduleCursor(editor);
     return { applied, failed };
-  }, [editor, trackChanges, office, scheduleDerived, scheduleCursor]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, trackChanges, office, scheduleDerived, scheduleCursor, settings, updateImportedComments, refreshComments]);
 
   const onApplied = React.useCallback((summary: string) => { void saveNow({ summary, authorName: "Drafting assistant" }); }, [saveNow]);
   React.useEffect(() => { if (process.env.NODE_ENV !== "production") (window as unknown as { __leclaudeWordApply?: unknown }).__leclaudeWordApply = applyProposals; }, [applyProposals]);

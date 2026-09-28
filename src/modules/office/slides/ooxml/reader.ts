@@ -20,7 +20,7 @@ import {
 } from "../model";
 import { elementDataFp, elementFingerprint, slideFingerprint, themeFingerprint } from "../fingerprint";
 import { fnv1a64 } from "@/lib/integrity/hash-pure";
-import { DEFAULT_SLIDE_CX, DEFAULT_SLIDE_CY, EMU_PER_INCH, EMU_PER_PT, IMAGE_MIME, REL, RelSet, applyColorMods, readXmlPart, resolvePart } from "./package";
+import { DEFAULT_SLIDE_CX, DEFAULT_SLIDE_CY, EMU_PER_INCH, EMU_PER_PT, IMAGE_MIME, REL, RelSet, applyColorMods, readXmlPart } from "./package";
 import { deckThemeFromScheme, parseTheme, schemeToToken, type ParsedTheme } from "./theme";
 import { attr, els, kid, kids, numAttr, path, textContent, type XDoc, type XEl } from "./xml";
 
@@ -315,6 +315,7 @@ function readTextBody(ctx: SlideRead, txBody: XEl | undefined, ph?: { type?: str
     }).join("");
     return prefix + body;
   });
+  lines.forEach((l, i) => { rich.paragraphs[i].md = l; });
   const markdown = lines.join("\n").replace(/\n+$/, "");
   rich.markdown = markdown;
   const factor = ptFactor(ctx.map);

@@ -577,6 +577,9 @@ export function toSpans(content: PMNode[] | undefined): Span[] {
     if (n.type === "text") out.push({ text: n.text ?? "", marks: n.marks });
     else if (n.type === "hardBreak") out.push({ text: "\n", node: n });
     else if (n.content) out.push(...toSpans(n.content));
+    // Inline atoms (field codes, bookmarks, inline drawings from imported .docx) are zero-width spans that
+    // travel with the text around them, so edits never silently drop them.
+    else out.push({ text: "", node: n });
   }
   return out;
 }
@@ -590,6 +593,11 @@ export function sliceSpans(spans: Span[], from: number, to: number): PMNode[] {
   for (const s of spans) {
     const start = pos, end = pos + s.text.length;
     pos = end;
+    if (!s.text) {
+      // Zero-width atom at `start`: it belongs to the slice that ends at it (or the first slice at offset 0).
+      if (s.node && ((from < start && start <= to) || (start === 0 && from === 0))) out.push(cloneNode(s.node));
+      continue;
+    }
     if (end <= from || start >= to) continue;
     const a = Math.max(from, start) - start, b = Math.min(to, end) - start;
     if (s.node) { out.push(cloneNode(s.node)); continue; }

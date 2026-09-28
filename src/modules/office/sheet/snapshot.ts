@@ -9,6 +9,7 @@ import { computeWorkbook, type Computed } from "./engine";
 import { formatValue } from "./format";
 import { detectHeaderRow, getStyle, normalizeWorkbook, usedRange, type CellValue, type Sheet, type Workbook } from "./model";
 import type { OfficeScope } from "@/modules/office/shared/types";
+import { summarizeSheet } from "./analysis";
 
 export interface SheetSnapshot {
   title: string;
@@ -111,15 +112,18 @@ export function renderSheet(snapshot: SheetSnapshot, sheet: Sheet, cap = RENDER_
   return lines.join("\n");
 }
 
+/**
+ * Prompt rendering: a compact summary per sheet (used range, headers, column profiles, formula regions,
+ * errors, and a head/tail preview; small sheets in full) — never every cell of a large workbook. The agent
+ * reads further with targeted get_range calls. A range scope renders just that range.
+ */
 export function renderSnapshot(snapshot: SheetSnapshot, scope: OfficeScope | null): string {
   const wb = snapshot.workbook;
   const out: string[] = [];
-  out.push(`WORKBOOK "${snapshot.title}": ${wb.sheets.length} sheet(s): ${wb.sheets.map((s) => `"${s.name}" [id ${s.id}]`).join(", ")}. Active: "${snapshot.activeSheet}".`);
-  if (snapshot.selection) out.push(`SELECTION: ${snapshot.selection.sheet}!${snapshot.selection.range}`);
+  out.push(`WORKBOOK "${snapshot.title}": ${wb.sheets.length} sheet(s): ${wb.sheets.map((s) => `"${s.name}"${s.hidden ? " (hidden)" : ""} [id ${s.id}]`).join(", ")}. Active: "${snapshot.activeSheet}".`);
+  if (snapshot.selection) out.push(`SELECTION: ${snapshot.selection.sheet}!${snapshot.selection.range} — "this", "these cells", "the selection" refer to it.`);
   const named = Object.entries(wb.namedRanges);
   if (named.length) out.push(`NAMED RANGES: ${named.map(([k, v]) => `${k}=${v}`).join(", ")}`);
-  const styles = Object.entries(wb.styles);
-  if (styles.length) out.push(`STYLES (${styles.length}): ${styles.slice(0, 12).map(([id, s]) => `${id}:${JSON.stringify(s)}`).join(" ")}${styles.length > 12 ? " …" : ""}`);
   if (snapshot.comments?.length) out.push(`COMMENTS: ${snapshot.comments.slice(0, 20).map((c) => `[${c.anchor}] ${c.author}: ${c.body.slice(0, 120)}${c.resolved ? " (resolved)" : ""}`).join(" | ")}`);
   const scopedSheet = scope?.kind === "sheet" ? wb.sheets.find((s) => s.name === scope.ref || s.id === scope.ref) : null;
   const scopedRange = scope?.kind === "range" && scope.ref ? scope.ref : null;
@@ -127,19 +131,14 @@ export function renderSnapshot(snapshot: SheetSnapshot, scope: OfficeScope | nul
     const bang = scopedRange.indexOf("!");
     const sheetName = bang > 0 ? scopedRange.slice(0, bang).replace(/^'|'$/g, "") : snapshot.activeSheet;
     const sheet = wb.sheets.find((s) => s.name === sheetName) ?? wb.sheets[wb.activeSheet];
-    try { out.push(renderSheet(snapshot, sheet, RENDER_CELL_CAP, parseRange(bang > 0 ? scopedRange.slice(bang + 1) : scopedRange))); }
-    catch { out.push(renderSheet(snapshot, sheet)); }
-    for (const s of wb.sheets) if (s.id !== sheet.id) out.push(`## Sheet "${s.name}" — ${Object.keys(s.cells).length} cells (not in scope; use get_range to read)`);
+    try { out.push(renderSheet(snapshot, sheet, 400, parseRange(bang > 0 ? scopedRange.slice(bang + 1) : scopedRange))); }
+    catch { out.push(summarizeSheet(wb, sheet, snapshot.computed, { active: sheet.name === snapshot.activeSheet })); }
+    for (const s of wb.sheets) if (s.id !== sheet.id) out.push(`## Sheet "${s.name}" — ${Object.keys(s.cells).length} cells (not in scope; use get_workbook_summary / get_range)`);
     return out.join("\n\n");
   }
   const sheets = scopedSheet ? [scopedSheet] : wb.sheets;
-  let budget = RENDER_CELL_CAP * 2;
-  for (const s of sheets) {
-    const cap = Math.max(200, Math.min(RENDER_CELL_CAP, budget));
-    out.push(renderSheet(snapshot, s, cap));
-    budget -= Math.min(cap, Object.keys(s.cells).length);
-  }
-  if (scopedSheet) for (const s of wb.sheets) if (s.id !== scopedSheet.id) out.push(`## Sheet "${s.name}" — ${Object.keys(s.cells).length} cells (not in scope; use get_range to read)`);
+  for (const s of sheets) out.push(summarizeSheet(wb, s, snapshot.computed, { active: s.name === snapshot.activeSheet }));
+  if (scopedSheet) for (const s of wb.sheets) if (s.id !== scopedSheet.id) out.push(`## Sheet "${s.name}" — ${Object.keys(s.cells).length} cells (not in scope; use get_workbook_summary / get_range)`);
   return out.join("\n\n");
 }
 

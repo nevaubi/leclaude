@@ -147,10 +147,13 @@ describe("agent tools", () => {
     expect(payload.blocks[0].type).toBe("heading");
     expect(payload.blockIds).toEqual(res.inserted.map((b) => b.id));
   });
-  it("find_replace_all counts occurrences and updates snapshot text", async () => {
+  it("find_replace previews, then applies with the confirmed count and updates snapshot text", async () => {
     const { ctx, proposals } = makeCtx(sampleDoc());
     const tools = wordAgentTools(ctx);
-    const res = (await tool(tools, "find_replace_all")({ find: "summary judgment", replace: "SUMMARY JUDGMENT" })) as { count: number };
+    const pre = (await tool(tools, "find_replace")({ find: "summary judgment", replace: "SUMMARY JUDGMENT", preview: true })) as { count: number };
+    expect(pre.count).toBe(3);
+    expect(proposals.length).toBe(0);
+    const res = (await tool(tools, "find_replace")({ find: "summary judgment", replace: "SUMMARY JUDGMENT", expected_count: pre.count })) as { count: number };
     expect(res.count).toBe(3);
     expect(proposals[0].kind).toBe("find_replace_all");
     const found = (await tool(tools, "find_text")({ query: "SUMMARY JUDGMENT", case_sensitive: true })) as { count: number };
@@ -160,7 +163,7 @@ describe("agent tools", () => {
     const { ctx, snapshot } = makeCtx(sampleDoc());
     const tools = wordAgentTools(ctx);
     const p = snapshot.blocks.find((b) => b.text.startsWith("Defendant moves"))!;
-    await tool(tools, "set_style")({ id: p.id, style: "heading2" });
+    await tool(tools, "apply_style")({ id: p.id, style: "heading2" });
     expect(snapshot.blocks.find((b) => b.id === p.id)).toMatchObject({ type: "heading", level: 2 });
     expect(snapshot.sections.some((s) => s.id === p.id)).toBe(true);
     const n = snapshot.blocks.length;
@@ -175,16 +178,16 @@ describe("agent tools", () => {
     const { ctx, proposals, snapshot } = makeCtx(sampleDoc());
     const tools = wordAgentTools(ctx);
     const p = snapshot.blocks.find((b) => b.text.startsWith("Defendant moves"))!;
-    await tool(tools, "insert_table_after")({ id: p.id, header: ["Date", "Event"], rows: [["2026-01-01", "Filed"]], caption: "Table 1" });
+    await tool(tools, "insert_table")({ id: p.id, header: ["Date", "Event"], rows: [["2026-01-01", "Filed"]], caption: "Table 1" });
     expect(snapshot.blocks.filter((b) => b.table).length).toBe(4 + 4);
-    await tool(tools, "insert_toc_after")({ id: snapshot.blocks[0].id });
+    await tool(tools, "insert_toc")({ id: snapshot.blocks[0].id });
     expect(snapshot.blocks[1].text).toBe("TABLE OF CONTENTS");
     await tool(tools, "apply_template_section")({ id: snapshot.blocks[snapshot.blocks.length - 1].id, template_section: "signature_block" });
     expect(snapshot.blocks.some((b) => b.text.includes("Respectfully submitted"))).toBe(true);
     await tool(tools, "insert_page_break_after")({ id: snapshot.blocks[0].id });
     expect(snapshot.blocks[1].type).toBe("pageBreak");
     await tool(tools, "insert_footnote")({ id: p.id, anchor_text: "Rule 56", footnote_text: "Fed. R. Civ. P. 56(a)." });
-    await tool(tools, "add_comment")({ id: p.id, text: "Check this", quote: "Rule 56" });
+    await tool(tools, "insert_comment")({ id: p.id, text: "Check this", quote: "Rule 56" });
     expect(snapshot.comments?.length).toBe(1);
     const kinds = proposals.map((x) => x.kind);
     expect(kinds).toEqual(["insert_table_after", "insert_toc_after", "apply_template_section", "insert_page_break_after", "insert_footnote", "add_comment"]);
@@ -212,12 +215,14 @@ describe("agent tools", () => {
     expect(res.proposals).toBe(1);
     expect(proposals[0].title).toMatch(/^Polish ¶/);
   });
-  it("instructions mention key conventions", () => {
-    const { ctx } = makeCtx(sampleDoc());
+  it("instructions mention key conventions and stay stable across turns (cacheable prefix)", () => {
+    const { ctx, snapshot } = makeCtx(sampleDoc());
     const text = wordInstructions(ctx);
     expect(text).toContain("[VERIFY]");
     expect(text).toContain("replace_text_in_paragraph");
-    expect(text).toContain("Track changes is ON");
+    expect(wordInstructions(makeCtx(ensureBlockIds(markdownToDoc("# Other\n\nDifferent document."))).ctx)).toBe(text);
+    // volatile state lives in the snapshot, not in the instructions
+    expect(renderSnapshot(snapshot, null)).toContain("Track changes: ON");
   });
 });
 

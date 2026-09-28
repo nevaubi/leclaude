@@ -153,6 +153,8 @@ export interface RichParagraph {
   spaceAfter?: string;
   lineSpacing?: string;
   runs: RichRun[];
+  /** The paragraph's markdown line(s) at import (a:br → "\n"); lets an edit reuse untouched paragraphs verbatim. */
+  md?: string;
 }
 
 export interface RichText {
