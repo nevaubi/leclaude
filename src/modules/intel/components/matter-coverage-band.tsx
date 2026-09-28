@@ -165,7 +165,7 @@ function CoverageTable({ compact, data, plans, planState, openMatter, onToggle, 
       <thead className="sticky top-0 z-[1] bg-background">
         <tr className="h-7 border-b border-line-quiet text-left text-[11px] font-medium text-muted-foreground">
           <th scope="col" className="pl-3 font-medium">Matter</th>
-          {!compact && <th scope="col" className="w-[160px] font-medium">Searching</th>}
+          {!compact && <th scope="col" className="w-[210px] pr-3 font-medium">Searching</th>}
           <th scope="col" className={cn("font-medium", compact ? "w-[190px]" : "w-[250px]")}>Sources</th>
           {!compact && <>
             <th scope="col" className="w-[70px] pr-2 text-right font-medium">Records</th>
@@ -190,7 +190,7 @@ function CoverageTable({ compact, data, plans, planState, openMatter, onToggle, 
                     {m.status !== "active" && <span className="shrink-0 pr-2 text-[11px] text-muted-foreground">{m.status}</span>}
                   </button>
                 </td>
-                {!compact && <td className={cn("truncate", searching.empty && "text-muted-foreground")}>{searching.text}</td>}
+                {!compact && <td className={cn("truncate pr-3", searching.empty && "text-muted-foreground")} title={searching.text}>{searching.text}</td>}
                 <td className="truncate">{sourcesSummary(m)}</td>
                 {!compact && <>
                   <td className="pr-2 text-right tabular">{fmtInt(m.records)}{m.recentRecords > 0 && m.recentRecords < m.records && <span className="ml-1 text-[11px] text-muted-foreground" title="Fetched in the last 7 days">+{fmtInt(m.recentRecords)}</span>}</td>
