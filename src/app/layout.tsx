@@ -1,4 +1,6 @@
 import { pageDb } from "@/lib/db/request";
+import { lastSyncError, mirrorReady, remoteEnabled } from "@/lib/db/sync";
+import { safeReason } from "@/lib/db/diagnose";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/shell/app-shell";
@@ -45,6 +47,8 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   await pageDb();
+  // The shared database never loaded on this instance: show why instead of crashing every route with a bare digest.
+  if (remoteEnabled() && !mirrorReady()) return <DatabaseUnavailable reason={safeReason(lastSyncError() ?? "The database did not respond.")} />;
   const ws = readWorkspace();
   const firmName = ws.firmName || envFirmName;
   const user = ws.owner ? { id: ws.owner.id, name: ws.owner.name, email: ws.owner.email, role: ws.owner.title || ws.owner.firmRole || undefined } : undefined;
@@ -70,6 +74,21 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <Toaster position="bottom-right" closeButton toastOptions={{ className: "font-sans text-[12.5px]" }} />
           </TooltipProvider>
         </ThemeProvider>
+      </body>
+    </html>
+  );
+}
+
+function DatabaseUnavailable({ reason }: { reason: string }) {
+  return (
+    <html lang="en">
+      <body className="h-full bg-background text-foreground">
+        <main className="mx-auto flex h-full max-w-xl flex-col justify-center gap-3 p-8 text-sm">
+          <h1 className="text-lg font-semibold">The database is unavailable</h1>
+          <p className="text-muted-foreground">{appName} could not load its data from the shared database, so no page can be shown yet. Reload in a moment; if this persists, check the database connection in the deployment settings.</p>
+          <pre className="whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-3 font-mono text-[12px]">{reason}</pre>
+          <p className="text-muted-foreground">Full diagnosis: <a className="underline" href="/api/health">/api/health</a></p>
+        </main>
       </body>
     </html>
   );

@@ -275,6 +275,13 @@ async function pull(store: RemoteStore): Promise<void> {
 }
 
 /** Bring this instance's mirror up to date with the shared store. No-op without a remote store. */
+let lastError: string | null = null;
+
+/** The message of the most recent failed sync on this instance (null once a sync succeeds). */
+export function lastSyncError(): string | null {
+  return lastError;
+}
+
 export async function syncDb(): Promise<void> {
   const store = remoteStore();
   if (!store) return;
@@ -282,8 +289,14 @@ export async function syncDb(): Promise<void> {
   if (s.syncing) return s.syncing;
   s.syncing = (async () => {
     try {
-      if (!s.hydrated) await hydrate(store);
-      else await pull(store);
+      try {
+        if (!s.hydrated) await hydrate(store);
+        else await pull(store);
+        lastError = null;
+      } catch (e) {
+        lastError = `${(e as Error).message}${(e as Error & { cause?: Error }).cause ? ` (cause: ${((e as Error & { cause?: Error }).cause as Error).message})` : ""}`;
+        throw e;
+      }
       for (const fn of s.listeners) { try { fn(); } catch (e) { console.warn("[db-sync] listener failed", (e as Error).message); } }
     } finally {
       s.syncing = null;

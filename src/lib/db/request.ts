@@ -80,15 +80,16 @@ export function withDb<A extends unknown[]>(handler: (...args: A) => Response | 
   };
 }
 
-/** Call at the top of every server page and layout: brings the mirror up to date and persists any writes made while rendering. */
+/** Call at the top of every server page and layout: brings the mirror up to date and persists any writes made while rendering. Never throws; see lastSyncError(). */
 export async function pageDb(): Promise<void> {
   if (!remoteEnabled()) return;
   try {
     await syncDb();
   } catch (e) {
-    // Production hides server-component errors behind a digest; log the cause so it is visible in the function logs.
+    // Never throw from a page: production would replace the reason with a bare digest and every route would crash.
+    // The failure is recorded (lastSyncError) and the root layout renders a readable "database unavailable" screen.
     console.error(JSON.stringify({ level: "error", event: "db.page_sync_failed", error: (e as Error).message }));
-    throw new Error("The database is unavailable. Try again in a moment.", { cause: e });
+    return;
   }
   scheduleFlush();
 }
