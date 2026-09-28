@@ -18,6 +18,8 @@ import * as workspaceRoute from "@/app/api/workspace/route";
 class FakeNeon implements RemoteStore {
   db: DatabaseSync;
   queries = 0;
+  /** Largest single response (bytea as hex text), to prove hydration stays under the endpoint's response limit. */
+  maxResponseChars = 0;
   constructor() {
     const mod = (process as unknown as { getBuiltinModule: (n: string) => unknown }).getBuiltinModule("node:sqlite") as typeof import("node:sqlite");
     this.db = new mod.DatabaseSync(":memory:");
@@ -25,6 +27,7 @@ class FakeNeon implements RemoteStore {
   private sql(q: string) {
     return q
       .replace(/::text/g, "")
+      .replace(/octet_length\(/g, "length(")
       .replace(/bigserial PRIMARY KEY/g, "INTEGER PRIMARY KEY AUTOINCREMENT")
       .replace(/timestamptz NOT NULL DEFAULT now\(\)/g, "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP")
       .replace(/\bbytea\b/g, "BLOB")
@@ -41,10 +44,11 @@ class FakeNeon implements RemoteStore {
     stmt.run(...params);
     return [];
   }
-  async query(q: SqlQuery) { return this.run(q); }
+  private measure<T>(out: T): T { this.maxResponseChars = Math.max(this.maxResponseChars, JSON.stringify(out).length); return out; }
+  async query(q: SqlQuery) { return this.measure(this.run(q)); }
   async transaction(qs: SqlQuery[]) {
     this.db.exec("BEGIN");
-    try { const out = qs.map((q) => this.run(q)); this.db.exec("COMMIT"); return out; } catch (e) { this.db.exec("ROLLBACK"); throw e; }
+    try { const out = qs.map((q) => this.run(q)); this.db.exec("COMMIT"); return this.measure(out); } catch (e) { this.db.exec("ROLLBACK"); throw e; }
   }
 }
 
@@ -143,6 +147,32 @@ describe("serverless shared store (sync.ts)", () => {
     coldInstance();
     await syncDb();
     expect(db().collection("sync_probe").get("a")).toBeNull();
+  });
+
+  it("hydrates a large workspace in bounded requests (no single response carries every file)", async () => {
+    // ~12 MB of files as hex on the wire: a single-shot hydrate would return all of it in one response.
+    const files = Array.from({ length: 12 }, (_, i) => ({ id: `blob_big_${i}`, bytes: new Uint8Array(500_000).fill(i + 1) }));
+    for (const f of files) db().blobs.put(f.bytes, "application/pdf", { id: f.id, name: `${f.id}.pdf` });
+    const docs = db().collection<{ id: string; body: string }>("sync_bulk");
+    for (let i = 0; i < 800; i++) docs.put({ id: `d${i}`, body: "x".repeat(2000) });
+    await flushDb();
+
+    coldInstance();
+    remote.maxResponseChars = 0;
+    await syncDb();
+    expect(remote.maxResponseChars).toBeLessThan(6_000_000);
+    for (const f of files) {
+      const got = db().blobs.get(f.id)!;
+      expect(got.bytes.length).toBe(500_000);
+      expect(got.bytes[0]).toBe(f.bytes[0]);
+    }
+    expect(db().collection("sync_bulk").count()).toBe(800);
+
+    // A warm instance pulling the same volume of changes also stays bounded.
+    for (const f of files) await remote.transaction([{ query: "INSERT INTO lc_changes (tbl, k1, k2) VALUES ($1, $2, $3)", params: ["blobs", f.id, ""] }]);
+    remote.maxResponseChars = 0;
+    await syncDb();
+    expect(remote.maxResponseChars).toBeLessThan(6_000_000);
   });
 
   it("restores unflushed writes when the database rejects a flush", async () => {

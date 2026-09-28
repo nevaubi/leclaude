@@ -143,15 +143,60 @@ async function ensureRemoteSchema(store: RemoteStore): Promise<void> {
   await store.transaction(REMOTE_SCHEMA);
 }
 
+/** Upper bound on the payload of one hydration request (bytea travels as hex, so bytes count twice). */
+const HYDRATE_BATCH_BYTES = 2_500_000;
+const HYDRATE_BATCH_ROWS = 500;
+
+/** Group keys into batches whose summed size stays under the byte and row budgets (a single oversized row gets its own batch). */
+function sizeBatches<K>(rows: { key: K; size: number }[]): K[][] {
+  const out: K[][] = [];
+  let cur: K[] = [];
+  let bytes = 0;
+  for (const r of rows) {
+    if (cur.length && (bytes + r.size > HYDRATE_BATCH_BYTES || cur.length >= HYDRATE_BATCH_ROWS)) { out.push(cur); cur = []; bytes = 0; }
+    cur.push(r.key);
+    bytes += r.size;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+const placeholders = (n: number, from = 1) => Array.from({ length: n }, (_, i) => `$${i + from}`).join(", ");
+
+/**
+ * Cold-start hydration in size-bounded requests. One request per table used to return every document, file and
+ * embedding at once, which exceeds the database HTTP endpoint's response limit once a workspace holds real data
+ * (a demo pack alone is several MB of files) and made every server-rendered page fail on a fresh instance.
+ * Keys and sizes are listed first, then rows are fetched in batches under HYDRATE_BATCH_BYTES.
+ */
+async function fetchInBatches(store: RemoteStore): Promise<{ seq: string; docs: Row[]; kv: Row[]; blobs: Row[]; vectors: Row[] }> {
+  const [[seqRow], docKeys, kv, blobKeys, vecKeys] = await store.transaction([
+    { query: "SELECT COALESCE(MAX(seq), 0)::text AS seq FROM lc_changes" },
+    { query: "SELECT collection, id, octet_length(json)::text AS size FROM lc_docs ORDER BY collection, id" },
+    { query: "SELECT key, value, updated_at FROM lc_kv" },
+    { query: "SELECT id, (size * 2)::text AS size FROM lc_blobs ORDER BY id" },
+    { query: "SELECT collection, doc_id, SUM(octet_length(row_json) + COALESCE(octet_length(embedding), 0) * 2)::text AS size FROM lc_vectors GROUP BY collection, doc_id ORDER BY collection, doc_id" },
+  ]);
+  const docs: Row[] = [];
+  for (const batch of sizeBatches(docKeys.map((r) => ({ key: [r.collection!, r.id!] as [string, string], size: Number(r.size ?? 0) })))) {
+    const where = batch.map((_, i) => `(collection = $${i * 2 + 1} AND id = $${i * 2 + 2})`).join(" OR ");
+    docs.push(...(await store.query({ query: `SELECT collection, id, json, created_at, updated_at FROM lc_docs WHERE ${where}`, params: batch.flat() })));
+  }
+  const blobs: Row[] = [];
+  for (const batch of sizeBatches(blobKeys.map((r) => ({ key: r.id!, size: Number(r.size ?? 0) })))) {
+    blobs.push(...(await store.query({ query: `SELECT id, name, mime, size::text AS size, bytes, meta, created_at FROM lc_blobs WHERE id IN (${placeholders(batch.length)})`, params: batch })));
+  }
+  const vectors: Row[] = [];
+  for (const batch of sizeBatches(vecKeys.map((r) => ({ key: [r.collection!, r.doc_id!] as [string, string], size: Number(r.size ?? 0) })))) {
+    const where = batch.map((_, i) => `(collection = $${i * 2 + 1} AND doc_id = $${i * 2 + 2})`).join(" OR ");
+    vectors.push(...(await store.query({ query: `SELECT collection, doc_id, chunk_index::text AS chunk_index, row_json, embedding FROM lc_vectors WHERE ${where} ORDER BY collection, doc_id, chunk_index`, params: batch.flat() })));
+  }
+  return { seq: seqRow?.seq ?? "0", docs, kv, blobs, vectors };
+}
+
 async function hydrate(store: RemoteStore): Promise<void> {
   await ensureRemoteSchema(store);
-  const [[seqRow], docs, kv, blobs, vectors] = await store.transaction([
-    { query: "SELECT COALESCE(MAX(seq), 0)::text AS seq FROM lc_changes" },
-    { query: "SELECT collection, id, json, created_at, updated_at FROM lc_docs" },
-    { query: "SELECT key, value, updated_at FROM lc_kv" },
-    { query: "SELECT id, name, mime, size::text AS size, bytes, meta, created_at FROM lc_blobs" },
-    { query: "SELECT collection, doc_id, chunk_index::text AS chunk_index, row_json, embedding FROM lc_vectors ORDER BY collection, doc_id, chunk_index" },
-  ]);
+  const { seq, docs, kv, blobs, vectors } = await fetchInBatches(store);
   const db = getSqlite();
   withApplying(() => {
     db.exec("BEGIN");
@@ -174,9 +219,12 @@ async function hydrate(store: RemoteStore): Promise<void> {
   });
   cacheRegistry.clear();
   const s = state();
-  s.lastSeq = Number(seqRow?.seq ?? 0);
+  s.lastSeq = Number(seq);
   s.hydrated = true;
 }
+
+const PULL_GROUP = 100;
+const PULL_BLOB_GROUP = 4;
 
 async function pull(store: RemoteStore): Promise<void> {
   const s = state();
@@ -198,7 +246,19 @@ async function pull(store: RemoteStore): Promise<void> {
         case "vectors": return { query: "SELECT collection, doc_id, chunk_index::text AS chunk_index, row_json, embedding FROM lc_vectors WHERE collection = $1 AND doc_id = $2 ORDER BY chunk_index", params: [it.k1, it.k2] };
       }
     });
-    const results = reads.length ? await store.transaction(reads) : [];
+    // Read in small groups so one large change set (a demo load, a bulk import) never exceeds the endpoint's response
+    // limit: files alone can be several MB, so they travel a few at a time.
+    const results: Row[][] = [];
+    for (let i = 0; i < reads.length;) {
+      const group: SqlQuery[] = [];
+      let groupBlobs = 0;
+      while (i < reads.length && group.length < PULL_GROUP && groupBlobs < PULL_BLOB_GROUP) {
+        if (items[i].tbl === "blobs") groupBlobs++;
+        group.push(reads[i]);
+        i++;
+      }
+      results.push(...(await store.transaction(group)));
+    }
     const db = getSqlite();
     withApplying(() => {
       items.forEach((it, i) => {
