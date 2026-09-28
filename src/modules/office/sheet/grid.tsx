@@ -508,7 +508,7 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
           tabIndex={0}
           role="grid"
           aria-label={`Sheet ${sheet.name}`}
-          className={cn("sheet-grid relative h-full w-full overflow-auto bg-background outline-none scrollbar-thin select-none", className)}
+          className={cn("sheet-grid relative h-full w-full overflow-auto bg-background outline-none scrollbar-thin select-none", sheet.view?.showGridLines === false && "no-gridlines", className)}
           onKeyDown={onKeyDown}
           onMouseDown={onCellMouseDown}
           onDoubleClick={onCellDoubleClick}

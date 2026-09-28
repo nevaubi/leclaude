@@ -14,7 +14,7 @@
  * not in the toolset at all).
  */
 import { nanoid } from "nanoid";
-import { colToLetter, letterToCol, normalizeRange, parseA1, parseRange, quoteSheet, rangeSize, rangeToA1, toA1, type RangeRef } from "./a1";
+import { colToLetter, letterToCol, normalizeRange, parseA1, quoteSheet, rangeSize, rangeToA1, toA1, type RangeRef } from "./a1";
 import { defineTool, type ToolDef } from "@/lib/ai/tools";
 import type { OfficeAgentContext } from "@/modules/office/shared/route-factory";
 import type { EditProposal } from "@/modules/office/shared/types";

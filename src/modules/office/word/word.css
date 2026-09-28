@@ -80,6 +80,9 @@
 .word-editor .ProseMirror .docx-inline-chip { display: inline-flex; align-items: center; padding: 0 0.35em; margin: 0 0.1em; border-radius: 3px; border: 1px solid var(--paper-rule); color: var(--paper-muted); font-family: var(--font-sans); font-size: 0.72em; line-height: 1.4; vertical-align: baseline; user-select: none; }
 .word-editor .ProseMirror .docx-inline-img { display: inline-block; max-width: 100%; height: auto; vertical-align: bottom; }
 .word-editor .ProseMirror .section-break span { color: var(--primary); }
+/* Imported paragraph that ends a Word section (w:sectPr in its properties). */
+.word-editor .ProseMirror [data-section-end] { padding-bottom: 1.4em; }
+.word-editor .ProseMirror [data-section-end]::after { content: "Section break"; position: absolute; left: 0; right: 0; bottom: 0; text-align: center; border-top: 1px dashed var(--paper-rule); color: var(--paper-muted); font-family: var(--font-sans); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.6; pointer-events: none; }
 .word-editor .ProseMirror sup, .word-editor .ProseMirror sub { font-size: 0.72em; }
 
 /* Lists */

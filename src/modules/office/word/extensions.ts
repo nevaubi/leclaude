@@ -368,7 +368,7 @@ export const PageBreak = Node.create({
     section: { default: null, rendered: false },
   }),
   parseHTML: () => [{ tag: "div[data-page-break]" }],
-  renderHTML: ({ HTMLAttributes, node }) => ["div", mergeAttributes(HTMLAttributes, { "data-page-break": "", class: node.attrs.section ? "page-break section-break" : "page-break", contenteditable: "false" }), ["span", {}, node.attrs.section ? `Section break (${String((node.attrs.section as { orientation?: string }).orientation ?? "next page")})` : "Page break"]],
+  renderHTML: ({ HTMLAttributes, node }) => ["div", mergeAttributes(HTMLAttributes, { "data-page-break": "", class: node.attrs.section ? "page-break section-break" : "page-break", contenteditable: "false" }), ["span", {}, node.attrs.section ? "Section break (next page)" : "Page break"]],
   addCommands() {
     return { insertPageBreak: () => ({ chain }) => chain().insertContent({ type: this.name, attrs: { id: nanoid(8) } }).run() };
   },
@@ -628,7 +628,7 @@ export const DocxAttrs = Extension.create({
     return [
       { types: ["paragraph", "heading"], attributes: {
         styleId: { default: null, parseHTML: (el) => el.getAttribute("data-style"), renderHTML: (a) => (a.styleId ? { "data-style": a.styleId } : {}) },
-        docx: { default: null, keepOnSplit: false, rendered: false },
+        docx: { default: null, keepOnSplit: false, renderHTML: (a) => { const d = a.docx as { pPr?: unknown } | null; return typeof d?.pPr === "string" && d.pPr.includes("w:sectPr") ? { "data-section-end": "" } : {}; }, parseHTML: () => null },
       } },
       { types: ["bulletList", "orderedList", "taskList", "table", "tableRow", "tableCell", "tableHeader", "image"], attributes: { docx: { default: null, keepOnSplit: false, rendered: false } } },
     ];

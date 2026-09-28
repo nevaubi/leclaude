@@ -198,6 +198,7 @@ describe("package-preserving export with edits", () => {
     image.attrs = { ...image.attrs, width: 200 };
     const comments = [{ id: "cmt_new1", docId: "d", anchor: String(heading.attrs?.id), body: "Tie each fact to the record.", authorName: "Firm Reviewer", createdAt: "2026-09-28T12:00:00.000Z", source: "user", replies: [] }] as unknown as Parameters<typeof exportDocx>[1]["comments"];
     // 8. page setup: wide margins
+    expect(settings.orientation).toBe("landscape"); // the final section's setup
     const { bytes: out, report } = await exportImported(doc, bytes, meta, { ...settings, margins: "wide" }, { comments });
     expect(report.mode).toBe("preserve");
     expect((await validateDocx(out)).errors).toEqual([]);
@@ -225,7 +226,9 @@ describe("package-preserving export with edits", () => {
     expect(t.t.rows[3].cells[0].vMerge).toBe("continue");
     expect(t.t.grid).toEqual([2400, 3600, 3360]);
     expect(paras.find((p) => p.images.length)?.images[0].cx).toBe(200 * 9525);
-    for (const s of m.sections) expect(s.margins["w:left"]).toBe("2880");
+    // Page setup edited in the app applies to the final section; the first section keeps its own margins.
+    expect(m.sections[0].margins["w:left"]).toBe("1800");
+    expect(m.sections[1].margins["w:left"]).toBe("2880");
     expect(m.sections[1].orient).toBe("landscape");
     expect(m.sections[0].headers.first).toBe("First page header");
     // New numbering definitions were appended to the original numbering part, not replacing it.

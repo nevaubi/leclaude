@@ -10,7 +10,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { XMLValidator } from "fast-xml-parser";
 import { computeWorkbook } from "@/modules/office/sheet/engine";
-import { emptyWorkbook, styleKey, type CellStyle, type Workbook } from "@/modules/office/sheet/model";
+import { emptyWorkbook, normalizeWorkbook, styleKey, type CellStyle, type Workbook } from "@/modules/office/sheet/model";
 import { applyOp, type SheetOp } from "@/modules/office/sheet/ops";
 import { exportXlsx, exportXlsxWithReport } from "@/modules/office/sheet/export";
 import { importDocument } from "@/modules/office/sheet/import";
@@ -262,6 +262,14 @@ describe("xlsx writer — package-preserving round trip", () => {
     for (const [name, e] of a) {
       expect(Buffer.from(b.get(name)!.compressed).equals(Buffer.from(e.compressed)), `${name} compressed bytes`).toBe(true);
     }
+  });
+
+  it("stays byte-identical after the editor normalizes and JSON-round-trips the workbook", async () => {
+    const original = await fixtureBytes();
+    const stored = JSON.parse(JSON.stringify(normalizeWorkbook(readXlsx(original, { sha256: "x" }))));
+    const { bytes, report } = exportXlsxWithReport(normalizeWorkbook(stored), { original });
+    expect(report.rewritten).toEqual([]);
+    expect(Buffer.from(bytes).equals(Buffer.from(exportXlsxWithReport(readXlsx(original, { sha256: "x" }), { original }).bytes))).toBe(true);
   });
 
   it("rewrites only the edited sheet; untouched parts stay byte-identical and the model round-trips", async () => {

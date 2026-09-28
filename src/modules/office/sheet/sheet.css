@@ -13,6 +13,8 @@
   background-color: var(--background);
   color: var(--foreground);
 }
+/* sheets saved with gridlines off (xlsx showGridLines="0") */
+.sheet-grid.no-gridlines .sheet-cell { --sheet-gridline: transparent; }
 .sheet-cell.has-color { color: var(--cell-color); }
 .dark .sheet-cell.has-color { color: color-mix(in oklab, var(--cell-color) 55%, white); }
 .sheet-cell-error {

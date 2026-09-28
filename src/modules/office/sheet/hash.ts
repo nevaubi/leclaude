@@ -15,6 +15,17 @@ export function stableJson(v: unknown): string {
   return `{${Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stableJson(o[k])}`).join(",")}}`;
 }
 
+/** Drop null / undefined / empty arrays and objects, so a model that only differs by normalization defaults hashes equally. */
+export function prune(v: unknown): unknown {
+  if (Array.isArray(v)) { const a = v.map(prune); return a.length ? a : undefined; }
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) { const p = prune(x); if (p !== undefined && p !== null) out[k] = p; }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return v === null ? undefined : v;
+}
+
 /** 64-bit FNV-1a (two 32-bit lanes) as 16 hex chars. */
 export function hashString(s: string): string {
   let h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0x5bd1e995;
@@ -45,15 +56,15 @@ export function sheetFingerprint(wb: Workbook, sheet: Sheet): string {
   void _id; void _name; void _h; void _vh;
   const styleRef = (m?: Record<string, string>) => (m ? Object.fromEntries(Object.entries(m).map(([k, s]) => [k, styleKey(wb.styles[s] ?? {})])) : undefined);
   // chart series reference the sheet by name, so a renamed sheet with charts must be rewritten
-  return hashValue({ cells: resolvedCells(wb, cells), colStyles: styleRef(colStyles), rowStyles: styleRef(rowStyles), rest, page: wb.pageSetup ?? null, chartSheet: sheet.charts.length ? sheet.name : null });
+  return hashValue(prune({ cells: resolvedCells(wb, cells), colStyles: styleRef(colStyles), rowStyles: styleRef(rowStyles), rest, page: wb.pageSetup ?? null, chartSheet: sheet.charts.length ? sheet.name : null }));
 }
 
 /** Fingerprint of the workbook-level part (sheet list, states, defined names, print titles/areas). */
 export function workbookFingerprint(wb: Workbook): string {
-  return hashValue({
+  return hashValue(prune({
     sheets: wb.sheets.map((s) => ({ id: s.id, name: s.name, hidden: Boolean(s.hidden), veryHidden: Boolean(s.veryHidden), localNames: s.localNames ?? null, pa: s.pageSetup?.printArea ?? null, rr: s.pageSetup?.repeatHeaderRows ?? null, rc: s.pageSetup?.repeatCols ?? null, filter: s.filters?.range ?? null })),
     names: wb.namedRanges, extra: wb.extraNames ?? null, page: { pa: wb.pageSetup?.printArea ?? null, rr: wb.pageSetup?.repeatHeaderRows ?? null, rc: wb.pageSetup?.repeatCols ?? null },
-  });
+  }));
 }
 
 /**

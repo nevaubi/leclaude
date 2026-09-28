@@ -52,7 +52,7 @@ function styleOutline(styles: Map<string, { basedOn?: string; outline?: number; 
   return undefined;
 }
 
-/** Replace pgSz/pgMar values in every section when the document-level page setup changed after import. */
+/** Replace pgSz/pgMar values in a section when the document-level page setup changed after import. */
 function patchSections(xml: string, before: DocSettings, after: DocSettings): string {
   const sizeChanged = before.pageSize !== after.pageSize, orientChanged = before.orientation !== after.orientation, marginsChanged = before.margins !== after.margins;
   if (!sizeChanged && !orientChanged && !marginsChanged) return xml;
@@ -330,8 +330,9 @@ export async function exportPreserving(doc: PMNode, base: Uint8Array, o: Preserv
   };
   let body = writeBlocks(prepared.doc.content ?? [], env, { topLevel: true });
   body += read.raw.tail;
-  body += finalSect ?? `<w:sectPr>${sectPrInnerXml(o.settings, null, null)}</w:sectPr>`;
-  if (!settingsEqual(read.meta.importedSettings, o.settings)) body = patchSections(body, read.settings, o.settings);
+  // Page setup edited in the app applies to the final section (earlier sections keep their own setup).
+  const finalXml = finalSect ?? `<w:sectPr>${sectPrInnerXml(o.settings, null, null)}</w:sectPr>`;
+  body += finalSect && !settingsEqual(read.meta.importedSettings, o.settings) ? patchSections(finalXml, read.settings, o.settings) : finalXml;
   // Generated markup uses the standard prefixes: make sure the root declares them.
   let open = read.raw.docOpen;
   const decls: string[] = [];

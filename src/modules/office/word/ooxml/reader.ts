@@ -781,7 +781,8 @@ export async function readDocx(bytes: Uint8Array, opts: ReadOptions = {}): Promi
   const doc: PMNode = { type: "doc", content: blocks.length ? blocks : [{ type: "paragraph", attrs: { id: ctx.id() } }] };
   const sections = ctx.sections.map((s, i) => readSection(pkg, pkg.mainPart, s, i));
   const hasPageNumbers = sections.some((s) => [...Object.values(s.footers), ...Object.values(s.headers)].some((t) => /\{PAGE\}/.test(t ?? "")));
-  const settings = settingsFromSection(sections[0], st.docDefaults, hasPageNumbers);
+  // The editor's page setup is the final section's (as for documents written by the app); earlier sections keep theirs.
+  const settings = settingsFromSection(sections[sections.length - 1], st.docDefaults, hasPageNumbers);
   const comments = readComments(ctx);
   const styles: DocxStyleInfo[] = Array.from(st.map.values()).map((s) => ({ id: s.id, name: s.name, type: (["paragraph", "character", "table", "numbering"].includes(s.type) ? s.type : "paragraph") as DocxStyleInfo["type"], basedOn: s.basedOn, outlineLevel: s.outline, numId: s.numId, isDefault: s.isDefault || undefined }));
   const numbering: DocxNumberingInfo[] = Array.from(numDefs.nums.values()).map((n) => ({ numId: n.numId, abstractId: n.abstractId, levels: Array.from({ length: 9 }, (_, i) => ctx.numbering.level(n.numId, i)).filter((l): l is LevelDef => Boolean(l)).map((l) => ({ ilvl: l.ilvl, format: l.fmt, text: l.text, start: l.start })) }));
