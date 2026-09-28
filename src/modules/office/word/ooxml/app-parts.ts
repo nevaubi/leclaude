@@ -143,6 +143,45 @@ export function sectPrInnerXml(settings: DocSettings, section: SectionSpec | nul
   return `${footerRid ? `<w:footerReference w:type="default" r:id="${footerRid}"/>` : ""}${type}<w:pgSz w:w="${w}" w:h="${h}"${land ? ` w:orient="landscape"` : ""}/><w:pgMar w:top="${Math.round(m.top * 1440)}" w:right="${Math.round(m.right * 1440)}" w:bottom="${Math.round(m.bottom * 1440)}" w:left="${Math.round(m.left * 1440)}" w:header="720" w:footer="720" w:gutter="0"/>${cols}<w:docGrid w:linePitch="360"/>`;
 }
 
+const PG_SZ_RE = /<w:pgSz\b[^>]*\/>/;
+const PG_MAR_RE = /<w:pgMar\b[^>]*\/>/;
+const COLS_RE = /<w:cols\b[^>]*?(?:\/>|>[\s\S]*?<\/w:cols>)/;
+
+/** Apply a page-setup spec (orientation, size, margins, columns) to an existing w:sectPr, keeping everything else. */
+export function patchSectPr(sectPr: string, spec: SectionSpec): string {
+  let x = sectPr;
+  if (spec.orientation || spec.pageSize) {
+    const size = spec.pageSize ? PAGE_SIZES[spec.pageSize] : null;
+    const replace = (tag: string) => {
+      const w = Number(/w:w="(\d+)"/.exec(tag)?.[1] ?? 12240), h = Number(/w:h="(\d+)"/.exec(tag)?.[1] ?? 15840);
+      let land = /w:orient="landscape"/.test(tag) || w > h;
+      if (spec.orientation) land = spec.orientation === "landscape";
+      let W = Math.min(w, h), H = Math.max(w, h);
+      if (size) { W = Math.round(size.width * 1440); H = Math.round(size.height * 1440); }
+      const [nw, nh] = land ? [H, W] : [W, H];
+      return `<w:pgSz w:w="${nw}" w:h="${nh}"${land ? ` w:orient="landscape"` : ""}/>`;
+    };
+    x = PG_SZ_RE.test(x) ? x.replace(PG_SZ_RE, replace) : x.replace(/(<w:pgMar\b|<w:cols\b|<\/w:sectPr>)/, (m) => `${replace("<w:pgSz/>")}${m}`);
+  }
+  const m = spec.marginsIn ?? (spec.margins ? MARGIN_PRESETS[spec.margins] : null);
+  if (m) {
+    const set = (t: string, k: string, v: number) => { const re = new RegExp(`w:${k}="-?\\d+"`); return re.test(t) ? t.replace(re, `w:${k}="${v}"`) : t.replace(/\/>$/, ` w:${k}="${v}"/>`); };
+    const patch = (tag: string) => { let t = tag; t = set(t, "top", Math.round(m.top * 1440)); t = set(t, "right", Math.round(m.right * 1440)); t = set(t, "bottom", Math.round(m.bottom * 1440)); t = set(t, "left", Math.round(m.left * 1440)); return t; };
+    x = PG_MAR_RE.test(x) ? x.replace(PG_MAR_RE, patch) : x.replace(/(<w:cols\b|<\/w:sectPr>)/, (mm) => `${patch(`<w:pgMar w:header="720" w:footer="720" w:gutter="0"/>`)}${mm}`);
+  }
+  if (spec.columns && spec.columns > 0) {
+    const cols = spec.columns > 1 ? `<w:cols w:num="${spec.columns}" w:space="720"/>` : `<w:cols w:space="720"/>`;
+    x = COLS_RE.test(x) ? x.replace(COLS_RE, cols) : x.replace(/<\/w:sectPr>/, `${cols}</w:sectPr>`);
+  }
+  return x;
+}
+
+export function mergeSectionSpec(a: SectionSpec | null, b: SectionSpec | null | undefined): SectionSpec {
+  const out: SectionSpec = { ...(a ?? {}) };
+  for (const [k, v] of Object.entries(b ?? {})) if (v !== undefined && v !== null) (out as Record<string, unknown>)[k] = v;
+  return out;
+}
+
 export function coreXml(title: string, author: string): string {
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   return `${XML_DECL}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${T(title)}</dc:title><dc:creator>${T(author)}</dc:creator><cp:lastModifiedBy>${T(author)}</cp:lastModifiedBy><dc:description>Exported from LeClaude</dc:description><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;

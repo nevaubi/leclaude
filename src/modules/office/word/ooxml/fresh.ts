@@ -5,7 +5,7 @@
 import JSZip from "jszip";
 import type { PMNode } from "../doc-model";
 import type { DocSettings } from "../constants";
-import { appAbstractNumXml, appFontTableXml, appFooterXml, appPropsXml, appSettingsXml, appStyleDefs, appStylesXml, commentsPartXml, coreXml, initialsOf, listRefFor, notesPartXml, numXml, sectPrInnerXml, APP_LIST_REFS, type AppListRef, type CommentOut, type SectionSpec } from "./app-parts";
+import { appAbstractNumXml, appFontTableXml, appFooterXml, appPropsXml, appSettingsXml, appStyleDefs, appStylesXml, commentsPartXml, coreXml, initialsOf, listRefFor, mergeSectionSpec, notesPartXml, numXml, sectPrInnerXml, APP_LIST_REFS, type AppListRef, type CommentOut, type SectionSpec } from "./app-parts";
 import { CT, REL, serializeContentTypes, serializeRels, type Rel } from "./package";
 import { commentSpans, writeBlocks, type CommentAllocator, type ExportImageData, type NoteAllocator, type NumAllocator, type RelAllocator, type StyleResolver, type WriterEnv } from "./writer";
 import { WORD_NS_DECLS, XML_DECL } from "./xml";
@@ -157,14 +157,20 @@ export async function exportFresh(doc: PMNode, o: WriteOptions): Promise<Buffer>
   if (settings.pageNumbers) { footerRid = `rId${++relN}`; rels.push({ id: footerRid, type: REL.footer, target: "footer1.xml", external: false }); }
   let annot = 0;
   let drawing = 0;
+  // Sections: the document settings describe the first section; each break's `section` is the setup after it.
+  let currentSection: SectionSpec | null = null;
   const env: WriterEnv = {
     mode: "fresh", author: o.author, changes: o.changes, settings, styles, rels: relAlloc, numbering: numAlloc, comments: commentAlloc, notes: noteAlloc, images: o.images,
     nextId: () => ++annot, nextDrawingId: () => ++drawing,
-    sectPrInner: (section) => sectPrInnerXml(settings, section as SectionSpec | null, footerRid),
+    sectionBreak: (next) => {
+      const xml = `<w:sectPr>${sectPrInnerXml(settings, currentSection, footerRid)}</w:sectPr>`;
+      currentSection = mergeSectionSpec(currentSection, next as SectionSpec);
+      return xml;
+    },
     bookmarkIds: new Map(), commentSpan: spans, lineDefault: settings.lineSpacing, warnings: [],
   };
   const body = writeBlocks(prepared.doc.content ?? [], env, { topLevel: true });
-  const documentXml = `${XML_DECL}<w:document ${WORD_NS_DECLS}><w:body>${body}<w:sectPr>${env.sectPrInner(null)}</w:sectPr></w:body></w:document>`;
+  const documentXml = `${XML_DECL}<w:document ${WORD_NS_DECLS}><w:body>${body}<w:sectPr>${sectPrInnerXml(settings, currentSection, footerRid)}</w:sectPr></w:body></w:document>`;
 
   const zip = new JSZip();
   const ct = { defaults: { rels: CT.rels, xml: "application/xml", png: "image/png", jpeg: "image/jpeg", gif: "image/gif", bmp: "image/bmp" } as Record<string, string>, overrides: {

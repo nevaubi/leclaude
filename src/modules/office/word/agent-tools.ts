@@ -13,6 +13,7 @@
  */
 import { nanoid } from "nanoid";
 import { defineTool, type ToolDef } from "@/lib/ai/tools";
+import { hasMatterAccess } from "@/lib/auth/policy";
 import type { OfficeAgentContext } from "@/modules/office/shared/route-factory";
 import type { EditProposal } from "@/modules/office/shared/types";
 import { checkCitations, checkDefinedTerms, computeRedline, verifyBlocks, type CheckBlock } from "./agent-checks";
@@ -104,8 +105,10 @@ export function wordAgentTools(ctx: Ctx, deps: WordToolDeps = {}): ToolDef<never
    */
   const propose = (p: Omit<EditProposal, "id" | "status">, targets: SnapshotBlock[]) => {
     const base = { version: baseVersion, blocks: Object.fromEntries(targets.map((b) => [b.id, b.hash ?? ""])) };
-    return ctx.propose({ ...p, payload: { ...p.payload, base, ...(ctx.mode === "review" ? { forceTrack: true } : {}) } });
+    return ctx.propose({ ...p, base: { version: baseVersion, ...(targets[0]?.hash ? { hash: targets[0].hash } : {}) }, payload: { ...p.payload, base, ...(ctx.mode === "review" ? { forceTrack: true } : {}) } });
   };
+  /** The matter record, only when the authenticated principal may read it (fail closed: no principal → no matter data). */
+  const authorizedMatter = () => (ctx.matter && ctx.principal && hasMatterAccess(ctx.principal, ctx.matter.id) ? ctx.matter : null);
   const checkBlocks = (): CheckBlock[] => s.blocks.map((b) => ({ id: b.id, index: b.index, type: b.type, text: b.text, level: b.level }));
   const scopeBlocks = (headingId?: string) => (headingId ? sectionBlocks(s, headingId) : s.blocks);
 
@@ -659,7 +662,7 @@ export function wordAgentTools(ctx: Ctx, deps: WordToolDeps = {}): ToolDef<never
 
   const set_page_setup = defineTool<{ orientation?: "portrait" | "landscape"; page_size?: PageSizeId; margins?: MarginPresetId; section_break_after_id?: string }>({
     name: "set_page_setup",
-    description: `Change page setup: orientation, page_size (${Object.keys(PAGE_SIZES).join(" | ")}), margins preset (${Object.entries(MARGIN_PRESETS).map(([k, v]) => `${k} = ${v.label}`).join("; ")}). With section_break_after_id, a section break is inserted after that block and the new setup applies from the break to the end (e.g. a landscape exhibit section); without it the whole document changes.`,
+    description: `Change page setup: orientation, page_size (${Object.keys(PAGE_SIZES).join(" | ")}), margins preset (${Object.entries(MARGIN_PRESETS).map(([k, v]) => `${k} = ${v.label}`).join("; ")}). With section_break_after_id, a section break is inserted after that block and the new setup applies from the break until the next section break (e.g. a landscape exhibit section); without it the document's page setup changes (sections after an explicit section break keep their own).`,
     parameters: { type: "object", properties: { orientation: { type: "string", enum: ["portrait", "landscape"] }, page_size: { type: "string", enum: Object.keys(PAGE_SIZES) }, margins: { type: "string", enum: Object.keys(MARGIN_PRESETS) }, section_break_after_id: { type: "string" } }, required: [] },
     label: () => "Page setup",
     execute: ({ orientation, page_size, margins, section_break_after_id }) => {
@@ -742,9 +745,10 @@ export function wordAgentTools(ctx: Ctx, deps: WordToolDeps = {}): ToolDef<never
     parameters: { type: "object", properties: { id: { type: "string" }, position: { type: "string", enum: ["after", "before"] }, document_title: { type: "string" } }, required: ["id"] },
     label: () => "Inserting caption",
     execute: ({ id, position, document_title }) => {
-      const info = captionFromMatter(ctx.matter, document_title ?? s.title);
+      const matter = authorizedMatter();
+      const info = captionFromMatter(matter, document_title ?? s.title);
       const r = insertSection(id, position ?? "before", captionBlock(info), "court caption", "apply_template_section", { section: "caption_block" });
-      return { ...r, from_matter: Boolean(ctx.matter), note: ctx.matter ? undefined : "No matter is linked: caption fields are placeholders." };
+      return { ...r, from_matter: Boolean(matter), note: matter ? undefined : ctx.matter ? "The matter record is not accessible to you: caption fields are placeholders." : "No matter is linked: caption fields are placeholders." };
     },
   });
 
@@ -754,7 +758,8 @@ export function wordAgentTools(ctx: Ctx, deps: WordToolDeps = {}): ToolDef<never
     parameters: { type: "object", properties: { id: { type: "string" }, position: { type: "string", enum: ["after", "before"] }, attorney: { type: "string" }, bar_no: { type: "string" }, for_party: { type: "string" }, date: { type: "string" } }, required: ["id"] },
     label: () => "Inserting signature block",
     execute: ({ id, position, attorney, bar_no, for_party, date }) => {
-      const party = for_party ?? (ctx.matter ? `${ctx.matter.clientSide === "plaintiff" ? "Plaintiff" : ctx.matter.clientSide === "defendant" ? "Defendant" : ""} ${ctx.matter.client}`.trim() : undefined);
+      const matter = authorizedMatter();
+      const party = for_party ?? (matter ? `${matter.clientSide === "plaintiff" ? "Plaintiff" : matter.clientSide === "defendant" ? "Defendant" : ""} ${matter.client}`.trim() : undefined);
       return insertSection(id, position, signatureBlock({ attorney, barNo: bar_no, forParty: party, date }), "signature block", "apply_template_section", { section: "signature_block" });
     },
   });
@@ -766,7 +771,7 @@ export function wordAgentTools(ctx: Ctx, deps: WordToolDeps = {}): ToolDef<never
     label: (a) => `Inserting ${String(a.template_section).replace(/_/g, " ")}`,
     execute: ({ id, template_section, position }) => {
       if (!TEMPLATE_SECTIONS.some((t) => t.id === template_section)) throw new Error(`Unknown template section ${template_section}`);
-      const nodes = buildTemplateSection(template_section, { matter: ctx.matter, documentTitle: s.title, date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) });
+      const nodes = buildTemplateSection(template_section, { matter: authorizedMatter(), documentTitle: s.title, date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) });
       return insertSection(id, position, nodes, template_section.replace(/_/g, " "), "apply_template_section", { section: template_section });
     },
   });
@@ -795,7 +800,7 @@ export function wordAgentTools(ctx: Ctx, deps: WordToolDeps = {}): ToolDef<never
       if (!deps.polishParagraphs) throw new Error("Polishing requires the language model; rewrite paragraphs individually with rewrite_paragraph.");
       ctx.emit({ type: "status", message: `Polishing ${blocks.length} paragraph${blocks.length > 1 ? "s" : ""}…` });
       const sectionTitle = heading_id === "document" ? s.title : s.blocks.find((b) => b.id === heading_id)?.text ?? "";
-      const rewrites = await deps.polishParagraphs(blocks.slice(0, 40).map((b) => ({ id: b.id, text: b.text })), goals, { title: s.title, sectionTitle, matter: ctx.matter?.name });
+      const rewrites = await deps.polishParagraphs(blocks.slice(0, 40).map((b) => ({ id: b.id, text: b.text })), goals, { title: s.title, sectionTitle, matter: authorizedMatter()?.name });
       let changed = 0;
       for (const r of rewrites) {
         const b = s.blocks.find((x) => x.id === r.id);

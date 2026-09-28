@@ -53,8 +53,13 @@ export interface WriterEnv {
   nextId: () => number;
   nextDrawingId: () => number;
   pristine?: PristineIndex;
-  /** Section properties XML (children of w:sectPr) for the body and section-break paragraphs. */
-  sectPrInner: (section?: Record<string, unknown> | null) => string;
+  /**
+   * A section break node was reached: returns the complete w:sectPr for the section that ends here and records
+   * `next` (the setup of the content after the break) for the following section.
+   */
+  sectionBreak: (next: Record<string, unknown>) => string;
+  /** An imported paragraph that ends an original section was written: lets the writer apply pending setup. */
+  sectionEnd?: (paragraphXml: string) => string;
   bookmarkIds: Map<string, number>;
   /** Comment range bookkeeping: first/last text node per comment id in document order. */
   commentSpan: Map<string, { first: PMNode; last: PMNode }>;
@@ -235,6 +240,12 @@ interface ParaOpts { numPr?: { numId: string; ilvl: number } | null; role?: "quo
 function docxAttr(n: PMNode): Record<string, unknown> { return (n.attrs?.docx as Record<string, unknown> | undefined) ?? {}; }
 
 export function writeParagraph(n: PMNode, env: WriterEnv, o: ParaOpts = {}): string {
+  const xml = writeParagraphXml(n, env, o);
+  const pPr = docxAttr(n).pPr;
+  return env.sectionEnd && typeof pPr === "string" && pPr.includes("w:sectPr") ? env.sectionEnd(xml) : xml;
+}
+
+function writeParagraphXml(n: PMNode, env: WriterEnv, o: ParaOpts): string {
   const pristine = env.pristine?.raw(n, o.listContext === undefined ? null : o.listContext);
   if (pristine) return env.changes === "accepted" ? stripRevisionMarkup(pristine) : pristine;
   const styleId = env.styles.paragraph(n, o.role);
@@ -436,7 +447,7 @@ export function writeBlock(n: PMNode, env: WriterEnv, bc: BlockCtx = {}): string
       const pristine = env.pristine?.raw(n, null);
       if (pristine) return pristine;
       const section = n.attrs?.section as Record<string, unknown> | undefined;
-      if (section) return `<w:p><w:pPr><w:sectPr>${env.sectPrInner(section)}</w:sectPr></w:pPr></w:p>`;
+      if (section) return `<w:p><w:pPr>${env.sectionBreak(section)}</w:pPr></w:p>`;
       return `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
     }
     default: return writeBlocks(n.content ?? [], env, bc);

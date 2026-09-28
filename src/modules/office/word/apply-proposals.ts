@@ -272,18 +272,16 @@ export async function applyProposal(p: EditProposal, ctxIn: ApplyContext): Promi
       if (payload.orientation) next.orientation = payload.orientation as DocSettings["orientation"];
       if (payload.pageSize) next.pageSize = payload.pageSize as DocSettings["pageSize"];
       if (payload.margins) next.margins = payload.margins as DocSettings["margins"];
-      let at: number | null = null;
       if (payload.sectionBreakAfterId) {
-        // The break ends the current section with the current setup; the new setup applies after it.
+        // A section break carries the setup of the content after it (until the next break); the rest keeps its own.
         const { node, pos } = requireBlock(editor, String(payload.sectionBreakAfterId));
         const tr = editor.state.tr;
-        const section = { orientation: ctx.settings.orientation, pageSize: ctx.settings.pageSize, margins: ctx.settings.margins };
-        const r = insertBlocks(tr, pos + node.nodeSize, [{ type: "pageBreak", attrs: { id: newId(), section } }]);
+        const r = insertBlocks(tr, pos + node.nodeSize, [{ type: "pageBreak", attrs: { id: newId(), section: next } }]);
         dispatch(tr);
-        at = r.from;
+        return r.from;
       }
       ctx.updateSettings(next);
-      return at;
+      return null;
     }
     case "redline_compare": return applyRedline(ctx, payload, dispatch);
     case "set_alignment": {

@@ -72,6 +72,8 @@ REVIEW CHECKLIST: citations and placeholders ([VERIFY], [CITE], [DATE]); defined
 
 AVAILABLE TEMPLATE SECTIONS: ${TEMPLATE_SECTIONS.map((t) => t.id).join(", ")}.`;
 
+const WORD_REVIEW_GUIDANCE = `MODE: REVIEW. Do not restructure or reformat the document. Read the parts in scope (get_outline, then get_section / get_paragraphs), run check_defined_terms and check_citations where relevant, and record each issue with report_finding (severity, category, the block id as target, a concrete suggestion). Where a fix is a safe wording change, also propose it — review edits are always tracked changes (rewrite_paragraph, replace_text_in_paragraph, find_replace, insert/delete) or margin comments (insert_comment). Finish with a short prioritized summary.`;
+
 export type WordRequestTier = "quick" | "standard" | "deep";
 
 /**
@@ -119,24 +121,21 @@ export function productionDeps(docId?: string): WordToolDeps {
   };
 }
 
-const tierHandlers = Object.fromEntries((["quick", "standard", "deep"] as const).map((tier) => {
-  const budget = { quick: { maxSteps: 10, reasoningEffort: "low" as const }, standard: { maxSteps: 24, reasoningEffort: "medium" as const }, deep: { maxSteps: 32, reasoningEffort: "high" as const } }[tier];
-  return [tier, createOfficeAgentHandler<WordSnapshot>({
-    kind: "word",
-    parseSnapshot,
-    instructions: wordInstructions,
-    tools: (ctx) => wordAgentTools(ctx, productionDeps(ctx.docId)),
-    renderSnapshot: (s, scope) => renderSnapshot(s, scope),
-    ...budget,
-  })];
-})) as Record<WordRequestTier, (req: Request) => Promise<Response>>;
-
-/** Classifies the request (deterministically) and runs it with the matching step/effort budget. */
-export async function wordAgentHandler(req: Request): Promise<Response> {
-  let tier: WordRequestTier = "standard";
-  try {
-    const body = (await req.clone().json()) as { message?: unknown; mode?: unknown; scope?: { kind?: string } | null };
-    if (typeof body?.message === "string") tier = classifyWordRequest(body.message, body.mode === "review" || body.mode === "ask" ? body.mode : "draft", body.scope).tier;
-  } catch { /* the shared handler reports the invalid body */ }
-  return tierHandlers[tier](req);
+/** Code-decided routing for one request: quick turns run on the fast model role with a small step budget. */
+export function routeWordRequest(ctx: Pick<OfficeAgentContext<WordSnapshot>, "mode" | "scope">, message: string) {
+  const c = classifyWordRequest(message, ctx.mode, ctx.scope);
+  return { fast: c.tier === "quick", reasoningEffort: c.reasoningEffort, maxSteps: c.maxSteps, reason: `word:${c.tier}` };
 }
+
+export const wordAgentHandler = createOfficeAgentHandler<WordSnapshot>({
+  kind: "word",
+  parseSnapshot,
+  instructions: wordInstructions,
+  tools: (ctx) => wordAgentTools(ctx, productionDeps(ctx.docId)),
+  renderSnapshot: (s, scope) => renderSnapshot(s, scope),
+  // wordAgentTools enforces modes itself (Ask = read tools only, Review = read + suggestion tools).
+  modeScopedTools: true,
+  modeGuidance: { review: WORD_REVIEW_GUIDANCE },
+  maxSteps: 24,
+  route: routeWordRequest,
+});

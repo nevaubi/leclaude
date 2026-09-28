@@ -237,6 +237,26 @@ describe("package-preserving export with edits", () => {
     expect((numB.match(/<w:abstractNum /g) ?? []).length).toBe((numA.match(/<w:abstractNum /g) ?? []).length + 1);
   });
 
+  it("a section break added in the app splits the original section it falls in (headers kept, setup after the break applied)", async () => {
+    const bytes = await richDocxFixture();
+    const { doc: imported, meta, settings } = await importFixture(bytes);
+    const doc = throughEditor(imported);
+    const anchor = nodeWithText(doc, "paragraph", "Starts on a new page.");
+    doc.content!.splice(doc.content!.indexOf(anchor) + 1, 0, { type: "pageBreak", attrs: { id: "brk00001", section: { orientation: "landscape", margins: "narrow" } } });
+    const { bytes: out } = await exportImported(doc, bytes, meta, settings as unknown as Record<string, unknown>);
+    expect((await validateDocx(out)).errors).toEqual([]);
+    const m = await extractModel(out);
+    expect(m.sections.length).toBe(3);
+    // before the break: a copy of the original first section (portrait, its margins, headers and title page)
+    expect(m.sections[0]).toMatchObject({ orient: "portrait", w: 12240, titlePg: true, margins: expect.objectContaining({ "w:left": "1800" }) });
+    expect(m.sections[0].headers).toMatchObject({ first: "First page header", default: "Default header — Privileged & Confidential" });
+    // after the break until the original section end: the new setup, same headers
+    expect(m.sections[1]).toMatchObject({ orient: "landscape", w: 15840, h: 12240, margins: expect.objectContaining({ "w:left": "720" }) });
+    expect(m.sections[1].headers.first).toBe("First page header");
+    // the original second section is untouched
+    expect(m.sections[2]).toMatchObject({ orient: "landscape", cols: JSON.stringify({ "w:space": "720", "w:num": "2" }), margins: expect.objectContaining({ "w:left": "1080" }) });
+  });
+
   it("hand-written package: resolving an imported comment, editing its text and accepting changes", async () => {
     const bytes = await handDocxFixture();
     const { doc: imported, meta, settings } = await importFixture(bytes);
@@ -283,12 +303,12 @@ describe("fresh package for app-created documents", () => {
         { type: "tableRow", content: [{ type: "tableCell", attrs: { rowspan: 2 }, content: [{ type: "paragraph", content: [{ type: "text", text: "Tall" }] }] }, { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "b" }] }] }, { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "c" }] }] }] },
         { type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "b2" }] }] }, { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "c2" }] }] }] },
       ] },
-      { type: "pageBreak", attrs: { section: { orientation: "portrait", pageSize: "letter", margins: "court" } } },
+      { type: "pageBreak", attrs: { section: { orientation: "landscape", pageSize: "letter", margins: "normal" } } },
       { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Landscape section" }] },
       { type: "image", attrs: { src: "/api/blobs/x", alt: "Chart", width: 240 } },
     ] });
     const comments = [{ id: "c1", docId: "d", anchor: "x", body: "Check", authorName: "Jane Partner", createdAt: "2026-09-28T12:00:00.000Z", source: "user", replies: [] }] as unknown as Parameters<typeof exportDocx>[1]["comments"];
-    const buf = new Uint8Array(await exportDocx(doc, { title: "App doc", settings: { orientation: "landscape" }, comments, fetchImage: async () => ({ bytes: tinyPng(), type: "png", width: 4, height: 3 }) }));
+    const buf = new Uint8Array(await exportDocx(doc, { title: "App doc", settings: { orientation: "portrait", margins: "court" }, comments, fetchImage: async () => ({ bytes: tinyPng(), type: "png", width: 4, height: 3 }) }));
     const v = await validateDocx(buf);
     expect(v.errors).toEqual([]);
     const m = await extractModel(buf);

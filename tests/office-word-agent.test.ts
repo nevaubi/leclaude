@@ -4,13 +4,14 @@ import type { OfficeAgentContext } from "@/modules/office/shared/route-factory";
 import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
 import { toStrictSchema } from "@/lib/ai/tools";
 import type { Matter } from "@/lib/types/domain";
+import type { Principal } from "@/lib/auth/types";
 import { blockHash, ensureBlockIds, inlineFromMarkdown, type PMNode } from "@/modules/office/word/doc-model";
 import { buildSnapshot, renderSnapshot, type WordSnapshot } from "@/modules/office/word/snapshot";
 import { WORD_TOOL_ACCESS, wordAgentTools, wordToolAllowed } from "@/modules/office/word/agent-tools";
 import { checkCitations, checkDefinedTerms, computeRedline } from "@/modules/office/word/agent-checks";
 import { checkFreshness } from "@/modules/office/word/proposal-freshness";
 import { buildTrackedInline } from "@/modules/office/word/tracked-diff";
-import { classifyWordRequest } from "@/modules/office/word/agent";
+import { classifyWordRequest, routeWordRequest } from "@/modules/office/word/agent";
 
 const DOC_MD = `# Supply Agreement
 
@@ -30,12 +31,12 @@ The agreement terminates after five years. See Celotex Corp. v. Catrett, 477 U.S
 Governing law is FRCP 56 and 28 U.S.C.§1332. id. at 5.
 `;
 
-function makeCtx(mode: "draft" | "review" | "ask" = "draft", md = DOC_MD, matter: Matter | null = null) {
+function makeCtx(mode: "draft" | "review" | "ask" = "draft", md = DOC_MD, matter: Matter | null = null, principal: Principal | null = null) {
   const doc = ensureBlockIds(markdownToDoc(md));
   const proposals: EditProposal[] = [];
   const snapshot = buildSnapshot(doc, { title: "Supply Agreement", trackChangesOn: false });
   const ctx: OfficeAgentContext<WordSnapshot> = {
-    mode, scope: null, research: false, snapshot, matter, docTitle: "Supply Agreement", context: {}, proposals, findings: [],
+    mode, scope: null, research: false, snapshot, matter, principal, docTitle: "Supply Agreement", context: {}, proposals, findings: [],
     emit: () => {},
     propose: (p) => { const full: EditProposal = { id: `p${proposals.length + 1}`, status: "pending", ...p }; proposals.push(full); return full; },
     finding: (f) => ({ id: "f", ...f }),
@@ -282,7 +283,16 @@ describe("structural tools", () => {
     expect(r1.from_matter).toBe(false);
     expect(r1.placeholders).toEqual(expect.arrayContaining(["[PLAINTIFF]", "[DEFENDANT]"]));
     const matter = { id: "m1", name: "Rivera v. Acme Corp.", client: "Acme Corp.", clientSide: "defendant", court: "U.S. District Court for the District of South Carolina", caption: "Case No. 2:24-cv-01234", judge: "Richard M. Gergel", stage: "discovery" } as unknown as Matter;
-    const withM = makeCtx("draft", DOC_MD, matter);
+    const member: Principal = { id: "u1", name: "Associate", tenantId: "t1", roles: ["associate"] as Principal["roles"], matterIds: ["m1"], source: "dev" as Principal["source"] };
+    const outsider: Principal = { ...member, id: "u2", matterIds: ["m_other"] };
+    // Fail closed: no principal, or a principal without access to the matter, gets placeholders, not matter data.
+    for (const p of [null, outsider]) {
+      const denied = makeCtx("draft", DOC_MD, matter, p);
+      const r = (await run(wordAgentTools(denied.ctx), "legal_caption", { id: denied.snapshot.blocks[0].id })) as { from_matter: boolean };
+      expect(r.from_matter).toBe(false);
+      expect(JSON.stringify(denied.proposals[0].payload.blocks)).not.toContain("Rivera");
+    }
+    const withM = makeCtx("draft", DOC_MD, matter, member);
     const r2 = (await run(wordAgentTools(withM.ctx), "legal_caption", { id: withM.snapshot.blocks[0].id })) as { from_matter: boolean };
     expect(r2.from_matter).toBe(true);
     const text = JSON.stringify(withM.proposals[0].payload.blocks);
@@ -311,5 +321,8 @@ describe("speed: compact context and request tiers", () => {
     expect(classifyWordRequest("What is the governing law?", "ask").tier).toBe("quick");
     expect(classifyWordRequest("Draft a comprehensive 8-page memo on the state of the case", "draft")).toMatchObject({ tier: "deep", reasoningEffort: "high" });
     expect(classifyWordRequest("Tighten the argument section and strengthen the transitions between the points", "draft").tier).toBe("standard");
+    // quick turns go to the fast model role through the shared route hook
+    expect(routeWordRequest({ mode: "draft", scope: null }, "Bold the date in ¶4")).toMatchObject({ fast: true, reasoningEffort: "low", maxSteps: 10, reason: "word:quick" });
+    expect(routeWordRequest({ mode: "draft", scope: null }, "Draft a motion to compel with a full argument section")).toMatchObject({ fast: false, reasoningEffort: "high" });
   });
 });

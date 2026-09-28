@@ -11,7 +11,7 @@ import JSZip from "jszip";
 import type { PMNode } from "../doc-model";
 import type { DocSettings } from "../constants";
 import { MARGIN_PRESETS, PAGE_SIZES } from "../constants";
-import { appAbstractNumXml, appStyleDefs, commentXml, initialsOf, listRefFor, noteXml, numXml, sectPrInnerXml, type AppListRef, type SectionSpec } from "./app-parts";
+import { appAbstractNumXml, appStyleDefs, commentXml, initialsOf, listRefFor, mergeSectionSpec, noteXml, numXml, patchSectPr, sectPrInnerXml, type AppListRef, type SectionSpec } from "./app-parts";
 import { canonKey, hasTrackedMarks } from "./canon";
 import { anchorOrphanComments, type CommentInput } from "./fresh";
 import { CT, IMAGE_MIME, nextRelId, REL, relatedPart, relsPathFor, serializeContentTypes, serializeRels, type Rel } from "./package";
@@ -312,27 +312,50 @@ export async function exportPreserving(doc: PMNode, base: Uint8Array, o: Preserv
   };
 
   // ---- sections ------------------------------------------------------------------------------------------------
+  // Original section ends in body order (paragraph sectPrs, then the final body sectPr). A section break added in the
+  // app copies the setup of the original section it falls in (headers/footers included) for the part before it; its
+  // `section` (the setup after the break) is applied to that original section's end.
   const finalSect = read.raw.finalSectPr;
-  const inherited = finalSect ? ((read.raw.finalSectPrCanon ?? finalSect).match(/<w:(?:headerReference|footerReference)\b[^>]*\/>|<w:titlePg\b[^>]*\/>/g) ?? []) : [];
+  const finalCanon = read.raw.finalSectPrCanon ?? finalSect;
+  const originalEnds: string[] = [];
+  const collectEnds = (n: PMNode) => {
+    const pPr = (n.attrs?.docx as { pPr?: unknown } | undefined)?.pPr;
+    if ((n.type === "paragraph" || n.type === "heading") && typeof pPr === "string") { const m = /<w:sectPr\b[\s\S]*?<\/w:sectPr>/.exec(pPr); if (m) originalEnds.push(m[0]); }
+    for (const c of n.content ?? []) collectEnds(c);
+  };
+  collectEnds(prepared.doc);
+  let endIndex = 0;
+  let pending: SectionSpec | null = null;
+  const containing = () => (originalEnds[endIndex] ?? finalCanon ?? `<w:sectPr>${sectPrInnerXml(o.settings, null, null)}</w:sectPr>`).replace(/<w:sectPrChange\b[\s\S]*?<\/w:sectPrChange>/g, "");
   let annot = read.raw.maxAnnotationId + 1000;
   let drawing = 100000;
   const env: WriterEnv = {
     mode: "preserve", author: o.author, changes: o.changes, settings: o.settings, styles, rels: relAlloc, numbering: numAlloc, comments: commentAlloc, notes: noteAlloc, images: o.images,
     nextId: () => ++annot, nextDrawingId: () => ++drawing,
-    sectPrInner: (section) => {
-      const inner = sectPrInnerXml(o.settings, section as SectionSpec | null, null);
-      const refs = inherited.filter((x) => !/titlePg/.test(x)).join("");
-      const title = inherited.find((x) => /titlePg/.test(x)) ?? "";
-      return refs + inner.replace(/(<w:docGrid[^>]*\/>)$/, `${title}$1`);
+    sectionBreak: (next) => {
+      const base = containing();
+      const xml = pending ? patchSectPr(base, pending) : base;
+      pending = mergeSectionSpec(pending, next as SectionSpec);
+      return xml;
+    },
+    sectionEnd: (paragraphXml) => {
+      endIndex++;
+      if (!pending) return paragraphXml;
+      const spec = pending;
+      pending = null;
+      return paragraphXml.replace(/<(\w+:)?sectPr\b[\s\S]*?<\/(\w+:)?sectPr>/, (m) => patchSectPr(m, spec));
     },
     bookmarkIds: new Map(), commentSpan: spans, lineDefault: null, warnings,
     pristine,
   };
   let body = writeBlocks(prepared.doc.content ?? [], env, { topLevel: true });
   body += read.raw.tail;
-  // Page setup edited in the app applies to the final section (earlier sections keep their own setup).
-  const finalXml = finalSect ?? `<w:sectPr>${sectPrInnerXml(o.settings, null, null)}</w:sectPr>`;
-  body += finalSect && !settingsEqual(read.meta.importedSettings, o.settings) ? patchSections(finalXml, read.settings, o.settings) : finalXml;
+  // Page setup edited in the app applies to the final section (earlier sections keep their own setup); a section break
+  // added in the app before it contributes its "after the break" setup.
+  let finalXml = finalSect ?? `<w:sectPr>${sectPrInnerXml(o.settings, null, null)}</w:sectPr>`;
+  if (finalSect && !settingsEqual(read.meta.importedSettings, o.settings)) finalXml = patchSections(finalXml, read.settings, o.settings);
+  if (pending) finalXml = patchSectPr(finalXml, pending);
+  body += finalXml;
   // Generated markup uses the standard prefixes: make sure the root declares them.
   let open = read.raw.docOpen;
   const decls: string[] = [];

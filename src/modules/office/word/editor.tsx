@@ -415,7 +415,7 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
         });
         applied.push(p.id);
         if (firstPos == null && pos != null) firstPos = pos;
-      } catch (e) { failed.push({ id: p.id, error: (e as Error).message }); }
+      } catch (e) { const msg = (e as Error).message; failed.push({ id: p.id, error: msg, ...(/^Stale proposal/.test(msg) ? { stale: true } : {}) }); }
     }
     if (firstPos != null) revealPosition(editor, firstPos);
     if (commentsAdded) setCommentsOpen(true);
