@@ -38,7 +38,7 @@ async function tickOnce(state: IntelLoopState) {
   state.lastTickAt = new Date().toISOString();
   try {
     // The workflow scheduler and the scan timer run on their own timers in this process; the loop adds the sweep and the embedding backfill.
-    await runDue({ limit: 6, deadlineMs: 25_000, housekeeping: { sweep: true, reembed: true } });
+    await runDue({ limit: 6, deadlineMs: 120_000, housekeeping: { sweep: true, reembed: true } });
     state.lastError = undefined;
   } catch (e) {
     state.lastError = (e as Error).message;

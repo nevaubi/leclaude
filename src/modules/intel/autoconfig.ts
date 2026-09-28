@@ -564,6 +564,12 @@ export function applyPlans(plans: MatterIntelPlan[], opts: ApplyOptions = {}): A
 }
 
 /**
+ * Work window for runs started after a response (`after()`): the function keeps running up to its maxDuration
+ * (300s on fluid compute), and the runner aborts 15s past the deadline, so this stays well inside it.
+ */
+const AFTER_DEADLINE_MS = 150_000;
+
+/**
  * After the current response, run due jobs for a bounded time (the function's remaining budget) and persist the
  * results. Jobs hold leases, so this never double-runs work claimed by another worker; anything left over is picked
  * up by the next cron tick.
@@ -571,7 +577,7 @@ export function applyPlans(plans: MatterIntelPlan[], opts: ApplyOptions = {}): A
 export function drainQueuedRunsSoon(o: { deadlineMs?: number; limit?: number } = {}): void {
   const task = async () => {
     try {
-      await runDue({ limit: o.limit ?? 10, deadlineMs: o.deadlineMs ?? 25_000, housekeeping: false });
+      await runDue({ limit: o.limit ?? 10, deadlineMs: o.deadlineMs ?? AFTER_DEADLINE_MS, housekeeping: false });
       if (remoteEnabled()) await flushDb();
     } catch (e) {
       console.warn("[intel] could not run the configured sources now:", (e as Error).message);
@@ -672,7 +678,7 @@ export function scheduleAutoConfigure(): void {
     try {
       const flag = await maybeAutoConfigure();
       // Start the first runs in this same background step (a nested after() is not dependable here).
-      if (flag && autoconfigState()?.jobs.length) await runDue({ limit: 10, deadlineMs: 25_000, housekeeping: false });
+      if (flag && autoconfigState()?.jobs.length) await runDue({ limit: 10, deadlineMs: AFTER_DEADLINE_MS, housekeeping: false });
       if (remoteEnabled()) await flushDb();
     } catch (e) {
       console.warn("[intel] autoconfigure failed:", (e as Error).message);

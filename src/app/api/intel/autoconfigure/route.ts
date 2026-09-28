@@ -11,7 +11,7 @@ import { activeMatters, applyPlans, autoconfigState, planForMatters } from "@/mo
 import type { AutoconfigRequest, AutoconfigState, MatterIntelPlan, SourceChange } from "@/modules/intel/autoconfig-types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /** Only what the principal may see: plans for accessible matters; changes list only accessible matter ids. */
 function visible(principal: Principal, plans: MatterIntelPlan[], changes: SourceChange[]) {

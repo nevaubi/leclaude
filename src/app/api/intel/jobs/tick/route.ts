@@ -10,11 +10,13 @@ import { withAuth } from "@/lib/auth/route";
 import { refs } from "@/lib/auth/resources";
 
 export const runtime = "nodejs";
-/** Vercel Hobby functions stop at 60s; the tick works for up to ~50s and returns. */
-export const maxDuration = 60;
+/** Slow providers (CourtListener search takes 10-20s per query) need more than a minute for a full source run. */
+const TICK_DEADLINE_MS = 200_000;
+/** Fluid-compute functions run up to 300s; the tick works for up to ~200s (plus the runner's abort grace) and returns. */
+export const maxDuration = 300;
 
 /**
- * External cron driver. Runs due intel jobs for up to 50 seconds and also the
+ * External cron driver. Runs due intel jobs for up to 200 seconds and also the
  * housekeeping cadences (workflow scheduler tick, integrity scans, sweep,
  * embedding backfill) that the in-process loop would otherwise cover.
  * vercel.json schedules it hourly (each run wakes the shared database, so a tighter cadence exhausts a free-tier database quota); note that Vercel Hobby plans only
@@ -32,7 +34,7 @@ async function tick(req: NextRequest) {
   scheduleAutoConfigure();
   const url = new URL(req.url);
   const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") ?? 50) || 50, 200));
-  const deadlineMs = Math.max(1000, Math.min(Number(url.searchParams.get("deadlineMs") ?? 50_000) || 50_000, 55_000));
+  const deadlineMs = Math.max(1000, Math.min(Number(url.searchParams.get("deadlineMs") ?? TICK_DEADLINE_MS) || TICK_DEADLINE_MS, 240_000));
   const housekeeping = url.searchParams.get("housekeeping") !== "0";
   const result = await runDue({ limit, deadlineMs, housekeeping });
   return Response.json({ ...result, health: intelHealth() });

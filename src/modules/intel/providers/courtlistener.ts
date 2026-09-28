@@ -75,7 +75,7 @@ export function courtsForJurisdiction(jurisdiction?: string, courts?: string): s
 
 export function createCourtListener(opts: ProviderFactoryOptions = {}) {
   const token = envValue(opts, "COURTLISTENER_API_TOKEN");
-  const client = new ProviderClient({ name: "courtlistener", egress: providerEgress("courtlistener"), rps: token ? 2 : 0.5, burst: token ? 10 : 4, timeoutMs: 25_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
+  const client = new ProviderClient({ name: "courtlistener", egress: providerEgress("courtlistener"), rps: token ? 2 : 0.5, burst: token ? 10 : 4, timeoutMs: 45_000, cache: opts.cache, fetchImpl: opts.fetchImpl, offline: opts.offline, limiter: opts.limiter, sleep: opts.sleep, maxWaitMs: opts.maxWaitMs });
   const headers = (): Record<string, string> => (token ? { Authorization: `Token ${token}` } : {});
   const str = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : undefined);
   const num = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v) ? Number(v) : undefined);

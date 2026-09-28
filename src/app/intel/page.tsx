@@ -12,6 +12,8 @@ import { intelSources } from "@/modules/intel/store";
 import { scheduleAutoConfigure } from "@/modules/intel/autoconfig";
 
 export const dynamic = "force-dynamic";
+/** Runs started from this page continue after the response (see scheduleAutoConfigure). */
+export const maxDuration = 300;
 export const metadata: Metadata = { title: "Intelligence" };
 
 /**

@@ -1,6 +1,7 @@
 import { withDb } from "@/lib/db/request";
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/ai/sse";
+import { drainQueuedRunsSoon } from "@/modules/intel/autoconfig";
 import { kickRunner } from "@/modules/intel/background";
 import { intelBootstrap } from "@/modules/intel/bootstrap";
 import { runSourceNow } from "@/modules/intel/jobs";
@@ -8,7 +9,7 @@ import { getSource } from "@/modules/intel/service";
 import { withAuth } from "@/lib/auth/route";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /** POST { wait?: boolean, maxDocs?: number } → { job }. With wait, the run executes inline and the finished job is returned. */
 async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,7 +19,9 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = (await req.json().catch(() => ({}))) as { wait?: boolean; maxDocs?: number };
   try {
     const job = await runSourceNow(id, { wait: Boolean(body.wait), maxDocs: typeof body.maxDocs === "number" ? body.maxDocs : undefined });
-    if (!body.wait) kickRunner();
+    // A persistent host's in-process loop picks the job up; on serverless hosts there is no loop, so work the queue
+    // right after the response instead of leaving the run for the next cron tick.
+    if (!body.wait && !kickRunner()) drainQueuedRunsSoon();
     return Response.json({ job });
   } catch (e) {
     return jsonError((e as Error).message, 500);
