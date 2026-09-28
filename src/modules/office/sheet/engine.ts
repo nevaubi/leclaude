@@ -9,13 +9,18 @@
  * after they mutate the snapshot.
  */
 import { HyperFormula, DetailedCellError, type CellValue as HFCellValue, type RawCellContent, type SimpleCellAddress } from "hyperformula";
-import { parseA1, toA1 } from "./a1";
+import { normalizeRange, parseA1, parseRange, shiftFormula, toA1 } from "./a1";
 import type { Cell, CellValue, Sheet, Workbook } from "./model";
 
 export interface ComputedCell { v: CellValue; /** "d" when the engine says the number is a date; "e" on error */ t?: "d" | "e" }
 export type ComputedSheet = Record<string, ComputedCell>;
 /** Keyed by sheet id. Only formula cells are present. */
 export type Computed = Record<string, ComputedSheet>;
+
+/** Key under which formula-based conditional-format matches of a sheet are stored in Computed: "<cfId>|<ref>" → {v:true}. */
+export const cfKey = (sheetId: string) => `cf:${sheetId}`;
+/** Cap on cells evaluated per formula-based conditional-format rule. */
+const CF_EVAL_CAP = 2500;
 
 const HF_CONFIG = {
   licenseKey: "gpl-v3",
@@ -32,7 +37,13 @@ const HF_CONFIG = {
 
 function rawContent(cell: Cell | undefined): RawCellContent {
   if (!cell) return null;
-  if (cell.f) return cell.f.startsWith("=") ? cell.f : `=${cell.f}`;
+  if (cell.f) {
+    const f = cell.f.startsWith("=") ? cell.f : `=${cell.f}`;
+    // A multi-cell array formula (imported) spills in Excel; the model keeps its other cells as values, so the
+    // engine evaluates only the anchor's element instead of spilling over them.
+    if (cell.ar && cell.ar.includes(":")) return `=INDEX(${f.slice(1)},1,1)`;
+    return f;
+  }
   const v = cell.v;
   if (v === undefined || v === null) return null;
   if (typeof v === "number" || typeof v === "boolean") return v;
@@ -55,6 +66,7 @@ export function absolutizeRef(ref: string): string {
 }
 
 function contentKey(cell: Cell | undefined): string {
+  if (cell?.ar) return `a:${cell.ar}:${String(rawContent(cell))}`;
   const r = rawContent(cell);
   return r === null ? "" : typeof r === "string" ? `s:${r}` : typeof r === "number" ? `n:${r}` : `b:${r}`;
 }
@@ -92,6 +104,7 @@ export class SheetEngine {
     const a = Object.entries(this.last.namedRanges), b = Object.entries(wb.namedRanges);
     if (a.length !== b.length) return true;
     for (const [k, v] of b) if (this.last.namedRanges[k] !== v) return true;
+    for (let i = 0; i < wb.sheets.length; i++) if (JSON.stringify(this.last.sheets[i].localNames ?? {}) !== JSON.stringify(wb.sheets[i].localNames ?? {})) return true;
     return false;
   }
 
@@ -105,6 +118,15 @@ export class SheetEngine {
     catch { hf = HyperFormula.buildFromSheets(sheets, HF_CONFIG); for (const n of named) { try { hf.addNamedExpression(n.name, n.expression); } catch { /* invalid name: formulas show #NAME? */ } } }
     this.sheetIds.clear();
     for (const s of wb.sheets) { const id = hf.getSheetId(s.name); if (id !== undefined) this.sheetIds.set(s.id, id); }
+    // sheet-scoped defined names
+    for (const s of wb.sheets) {
+      const scope = this.sheetIds.get(s.id);
+      if (scope === undefined) continue;
+      for (const [name, ref] of Object.entries(s.localNames ?? {})) {
+        const expr = ref.includes("!") ? ref : `${/^[A-Za-z0-9_.]+$/.test(s.name) ? s.name : `'${s.name.replace(/'/g, "''")}'`}!${ref}`;
+        try { hf.addNamedExpression(name, `=${absolutizeRef(expr)}`, scope); } catch { /* invalid or clashing name: formulas show #NAME? */ }
+      }
+    }
     this.hf = hf;
   }
 
@@ -153,9 +175,58 @@ export class SheetEngine {
         out[ref] = cc;
       }
       computed[s.id] = out;
+      const cf = this.evaluateConditionalFormats(s, sheetId, out);
+      if (cf) computed[cfKey(s.id)] = cf;
     }
     this.lastComputed = computed;
     return computed;
+  }
+
+  /** Evaluate formula-based conditional formats (expression rules and cellIs rules with non-constant operands). */
+  private evaluateConditionalFormats(s: Sheet, sheetId: number, out: ComputedSheet): ComputedSheet | null {
+    const hf = this.hf!;
+    let result: ComputedSheet | null = null;
+    const valueOf = (ref: string): CellValue => { const c = s.cells[ref]; if (!c) return null; return c.f ? out[ref]?.v ?? null : c.v ?? null; };
+    for (const cf of s.conditionalFormats) {
+      const rule = cf.rule;
+      if (rule.kind !== "expression" && !(rule.kind === "cellIs" && rule.formulas.some((f) => !/^-?\d+(\.\d+)?$/.test(f.trim())))) continue;
+      let range;
+      try { range = normalizeRange(parseRange(cf.range)); } catch { continue; }
+      let n = 0;
+      for (let r = range.start.row; r <= range.end.row && n < CF_EVAL_CAP; r++) {
+        for (let c = range.start.col; c <= range.end.col && n < CF_EVAL_CAP; c++, n++) {
+          const ref = toA1(r, c);
+          const dr = r - range.start.row, dc = c - range.start.col;
+          const calc = (f: string): CellValue => {
+            const shifted = shiftFormula(f.startsWith("=") ? f : `=${f}`, dr, dc);
+            try { const v = hf.calculateFormula(shifted, sheetId); const x = Array.isArray(v) ? v[0]?.[0] : v; return x instanceof DetailedCellError ? null : (x as CellValue) ?? null; } catch { return null; }
+          };
+          let ok = false;
+          if (rule.kind === "expression") { const v = calc(rule.formula); ok = v === true || (typeof v === "number" && v !== 0); }
+          else if (rule.kind === "cellIs") {
+            const v = valueOf(ref);
+            if (v === null || v === "") continue;
+            const a = calc(rule.formulas[0]), b = rule.formulas[1] !== undefined ? calc(rule.formulas[1]) : null;
+            const num = (x: CellValue) => (typeof x === "number" ? x : typeof x === "string" && x.trim() !== "" && Number.isFinite(Number(x)) ? Number(x) : null);
+            const nv = num(v), na = num(a), nb = num(b);
+            const cmp = (x: number | null, y: number | null, sx: CellValue, sy: CellValue) => (x !== null && y !== null ? x - y : String(sx ?? "").toLowerCase().localeCompare(String(sy ?? "").toLowerCase()));
+            const d = cmp(nv, na, v, a);
+            switch (rule.operator) {
+              case "greaterThan": ok = d > 0; break;
+              case "lessThan": ok = d < 0; break;
+              case "greaterThanOrEqual": ok = d >= 0; break;
+              case "lessThanOrEqual": ok = d <= 0; break;
+              case "equal": ok = d === 0; break;
+              case "notEqual": ok = d !== 0; break;
+              case "between": ok = d >= 0 && cmp(nv, nb, v, b) <= 0; break;
+              case "notBetween": ok = d < 0 || cmp(nv, nb, v, b) > 0; break;
+            }
+          }
+          if (ok) (result ??= {})[`${cf.id}|${ref}`] = { v: true };
+        }
+      }
+    }
+    return result;
   }
 
   /** Evaluate a formula in the context of a sheet without storing it. */

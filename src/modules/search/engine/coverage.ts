@@ -2,6 +2,7 @@
  * Round decision: is the synthesis adequately covered by sources, or should
  * the engine run another round with refined queries? Pure and client-safe.
  */
+import { citedNumbers } from "./markers";
 import type { LaneKind, ResearchLane, ResearchSource, VerificationSummary } from "./types";
 
 export interface CoverageInput {
@@ -40,7 +41,7 @@ export function claimToQuery(claim: string): string {
 
 export function decideCoverage(input: CoverageInput): CoverageDecision {
   const readCount = input.sources.filter((s) => s.read).length;
-  const cited = new Set(Array.from(input.answer.matchAll(/\[(\d{1,2})\]/g)).map((m) => Number(m[1])));
+  const cited = citedNumbers(input.answer);
   const v = input.verification;
   const gaps = (v?.verdicts ?? []).filter((x) => x.status !== "supported").map((x) => x.claim);
   const refinements: Partial<Record<LaneKind, string[]>> = {};

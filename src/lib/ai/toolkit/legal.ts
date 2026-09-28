@@ -375,4 +375,156 @@ export const searchStatutesTool = defineTool<{ query: string; collection?: strin
   },
 });
 
+// ---------------------------------------------------------------------------
+// Research-engine additions (additive; LEGAL_TOOLS above is unchanged for existing consumers).
+// ---------------------------------------------------------------------------
+
+/** Paragraph split shared with the research reader (src/modules/search/engine/paragraphs.ts): newline runs, trimmed, empties dropped. */
+export function splitOpinionParagraphs(text: string): string[] {
+  return (text ?? "").split(/\n+/).map((p) => p.trim()).filter(Boolean);
+}
+
+async function opinionPlainText(opinionId: number, signal?: AbortSignal): Promise<{ text: string; url?: string }> {
+  const data = await fetchJSON<{ plain_text?: string; html_with_citations?: string; html?: string; html_lawbox?: string; html_columbia?: string; xml_harvard?: string; absolute_url?: string }>(`${CL}/opinions/${opinionId}/`, { headers: clHeaders(), signal });
+  const text = data.plain_text?.trim() || htmlToText(data.html_with_citations ?? data.html ?? data.html_lawbox ?? data.html_columbia ?? "", { maxChars: 2_000_000 }).text || stripXml(data.xml_harvard ?? "");
+  return { text, url: data.absolute_url ? `https://www.courtlistener.com${data.absolute_url}` : undefined };
+}
+
+export const getOpinionTool = defineTool<{ opinion_id: number; start_paragraph?: number; count?: number }>({
+  name: "get_opinion",
+  description: "Read a court opinion by CourtListener opinion id in numbered paragraph windows (¶1, ¶2 …, the same numbering the research reader shows). Use it to quote accurately and give pinpoint cites as [n ¶k]. Returns up to `count` paragraphs starting at `start_paragraph`, with `next_start` for the next window.",
+  parameters: { type: "object", properties: { opinion_id: { type: "integer" }, start_paragraph: { type: "integer", description: "1-based paragraph to start at (default 1)" }, count: { type: "integer", description: "Paragraphs to return (default 40, max 120)" } }, required: ["opinion_id"] },
+  examples: [{ opinion_id: 112120 }, { opinion_id: 112120, start_paragraph: 41, count: 40 }],
+  timeoutMs: 30_000,
+  maxResultChars: 48_000,
+  label: (a) => `Reading opinion #${a.opinion_id}${a.start_paragraph ? ` from ¶${a.start_paragraph}` : ""}`,
+  async execute({ opinion_id, start_paragraph, count }, ctx) {
+    const { text, url } = await opinionPlainText(opinion_id, ctx.signal);
+    const paras = splitOpinionParagraphs(text);
+    const start = Math.max(1, Math.floor(start_paragraph ?? 1));
+    const n = Math.min(Math.max(1, Math.floor(count ?? 40)), 120);
+    const slice = paras.slice(start - 1, start - 1 + n).map((p, i) => ({ n: start + i, text: p.length > 4000 ? p.slice(0, 4000) + truncationMarker(p.length - 4000) : p }));
+    const source = authoritySource("courtlistener", "opinion", opinion_id);
+    emitEvidence(ctx, [{ source, kind: "opinion", provider: "courtlistener", tool: "get_opinion", rank: 1, authorityId: String(opinion_id), url, retrievedAt: new Date().toISOString() }]);
+    return { source, opinion_id, url, total_paragraphs: paras.length, paragraphs: slice, next_start: start - 1 + n < paras.length ? start + n : null };
+  },
+});
+
+/** Query that restricts citing opinions to those using negative-treatment language. */
+export const NEGATIVE_TREATMENT_QUERY = '(overrul* OR abrogat* OR "declined to follow" OR "decline to follow" OR disapprov* OR "called into doubt" OR "superseded by statute" OR "no longer good law" OR "limited to its facts")';
+
+export interface CitingOpinionRow { source?: string; case_name?: string; citations: string[]; court_id?: string; date_filed?: string; snippet: string; opinion_id?: number; url?: string }
+
+function citingRows(data: CLSearchResult, limit: number): CitingOpinionRow[] {
+  return (data.results ?? []).slice(0, limit).map((r) => ({
+    source: r.opinions?.[0]?.id != null ? authoritySource("courtlistener", "opinion", r.opinions[0].id) : r.cluster_id != null ? authoritySource("courtlistener", "cluster", r.cluster_id) : undefined,
+    case_name: r.caseName,
+    citations: r.citation ?? [],
+    court_id: r.court_id,
+    date_filed: r.dateFiled,
+    snippet: (r.opinions?.[0]?.snippet ?? r.snippet ?? "").replace(/<\/?mark>/g, "").replace(/\s+/g, " ").trim().slice(0, 500),
+    opinion_id: r.opinions?.[0]?.id,
+    url: r.absolute_url ? `https://www.courtlistener.com${r.absolute_url}` : undefined,
+  }));
+}
+
+/** Citing opinions of an opinion plus those that use negative-treatment language. A signal for review, not a citator. */
+export async function findCitingOpinions(opinionId: number, opts: { limit?: number; courts?: string; signal?: AbortSignal } = {}): Promise<{ citing_count: number; negative_count: number; citing: CitingOpinionRow[]; negative: CitingOpinionRow[] }> {
+  const limit = Math.min(opts.limit ?? 8, 20);
+  const base = `cites:(${Math.floor(opinionId)})`;
+  const params = (q: string) => { const p = new URLSearchParams({ q, type: "o", order_by: "dateFiled desc" }); if (opts.courts) p.set("court", opts.courts); return p; };
+  const [all, neg] = await Promise.all([
+    fetchJSON<CLSearchResult>(`${CL}/search/?${params(base)}`, { headers: clHeaders(), signal: opts.signal }),
+    fetchJSON<CLSearchResult>(`${CL}/search/?${params(`${base} AND ${NEGATIVE_TREATMENT_QUERY}`)}`, { headers: clHeaders(), signal: opts.signal }),
+  ]);
+  return { citing_count: all.count ?? (all.results?.length ?? 0), negative_count: neg.count ?? (neg.results?.length ?? 0), citing: citingRows(all, limit), negative: citingRows(neg, limit) };
+}
+
+export const findCitingOpinionsTool = defineTool<{ opinion_id: number; courts?: string; limit?: number }>({
+  name: "find_citing_opinions",
+  description: "Find opinions that cite a given opinion (CourtListener `cites:` search) and, separately, the citing opinions that use negative-treatment language (overruled, abrogated, declined to follow, called into doubt…). Use it to flag authority whose treatment needs review. It is a signal, not a citator: never state that an authority is good law from it.",
+  parameters: { type: "object", properties: { opinion_id: { type: "integer", description: "CourtListener opinion id of the cited authority" }, courts: { type: "string", description: "Optional space-separated court ids to limit citing courts" }, limit: { type: "integer", description: "Rows per list, default 8, max 20" } }, required: ["opinion_id"] },
+  examples: [{ opinion_id: 112120, limit: 8 }, { opinion_id: 112120, courts: "ca4 dsc" }],
+  timeoutMs: 25_000,
+  maxResultChars: 20_000,
+  label: (a) => `Finding opinions citing #${a.opinion_id}`,
+  async execute({ opinion_id, courts, limit }, ctx) {
+    const r = await findCitingOpinions(opinion_id, { courts, limit, signal: ctx.signal });
+    const note = r.negative_count > 0 ? `Treatment: possibly negative, review — ${r.negative_count} citing opinion(s) use negative-treatment language.` : `No citing opinion among ${r.citing_count} uses negative-treatment language in the search index. Not a citator result.`;
+    return { source: authoritySource("courtlistener", "opinion", opinion_id), ...r, treatment_note: note };
+  },
+});
+
+export type CitationResolution =
+  | { citation: string; state: "resolved"; source: string; case_name?: string; date_filed?: string; url?: string; cluster_id: number }
+  | { citation: string; state: "ambiguous"; candidates: { source?: string; case_name?: string; date_filed?: string; url?: string }[]; reason: string }
+  | { citation: string; state: "unresolved"; reason: string };
+
+type LookupEntry = { citation: string; status: number; error_message?: string; clusters?: Array<{ case_name?: string; absolute_url?: string; date_filed?: string; id?: number }> };
+
+/**
+ * Map CourtListener citation-lookup entries to resolutions (constitution §23: never substitute).
+ * Exactly one matching cluster → resolved; several → ambiguous (no pick); none/error → unresolved.
+ */
+export function resolutionFromLookup(entries: LookupEntry[]): CitationResolution[] {
+  return entries.map((c): CitationResolution => {
+    const clusters = (c.clusters ?? []).filter((k) => k && k.id != null);
+    const row = (k: NonNullable<LookupEntry["clusters"]>[number]) => ({ source: k.id != null ? authoritySource("courtlistener", "cluster", k.id) : undefined, case_name: k.case_name, date_filed: k.date_filed, url: k.absolute_url ? `https://www.courtlistener.com${k.absolute_url}` : undefined });
+    if (c.status === 200 && clusters.length === 1) { const k = clusters[0]; return { citation: c.citation, state: "resolved", cluster_id: k.id!, ...row(k), source: authoritySource("courtlistener", "cluster", k.id!) }; }
+    if (clusters.length > 1) return { citation: c.citation, state: "ambiguous", candidates: clusters.slice(0, 5).map(row), reason: `${clusters.length} reported decisions share this citation; none was chosen` };
+    return { citation: c.citation, state: "unresolved", reason: c.error_message || (c.status === 404 ? "no reported decision has this citation" : `lookup status ${c.status}`) };
+  });
+}
+
+export const resolveCitationTool = defineTool<{ citation: string }>({
+  name: "resolve_citation",
+  description: "Resolve a reporter citation (e.g. '487 U.S. 500') to the reported decision on CourtListener. Returns state resolved (with a stable source id), ambiguous (several candidates; none chosen) or unresolved. An unresolved citation stays unresolved: never substitute a similar case.",
+  parameters: { type: "object", properties: { citation: { type: "string", description: "One reporter citation, e.g. '860 F.3d 249'" } }, required: ["citation"] },
+  examples: [{ citation: "487 U.S. 500" }, { citation: "860 F.3d 249" }],
+  timeoutMs: 20_000,
+  label: (a) => `Resolving ${a.citation}`,
+  async execute({ citation }, ctx) {
+    const body = new URLSearchParams({ text: citation.slice(0, 400) });
+    const data = await fetchJSON<LookupEntry[]>(`${CL}/citation-lookup/`, { method: "POST", headers: { ...clHeaders(), "Content-Type": "application/x-www-form-urlencoded" }, body, signal: ctx.signal });
+    const rows = resolutionFromLookup(Array.isArray(data) ? data : []);
+    return rows[0] ?? { citation, state: "unresolved", reason: "no citation was recognised in the input" };
+  },
+});
+
+/** Hosts the research fetch tool may read by default (official legal sources). Open-web fetches require web scope. */
+export const LEGAL_FETCH_ALLOWLIST = [
+  "courtlistener.com", "ecfr.gov", "federalregister.gov", "govinfo.gov", "uscode.house.gov", "congress.gov", "regulations.gov", "supremecourt.gov", "uscourts.gov",
+  "law.cornell.edu", "justice.gov", "epa.gov", "fda.gov", "sec.gov", "ftc.gov", "osha.gov", "dol.gov", "nlrb.gov", "cpsc.gov", "ca.gov", "ny.gov", "illinois.gov", "texas.gov", "delaware.gov", "courts.ca.gov", "nycourts.gov",
+];
+
+/** Whether a URL's host is on the legal allowlist (exact host or a subdomain of an allowlisted domain). */
+export function isLegalFetchHost(url: string, allow: string[] = LEGAL_FETCH_ALLOWLIST): boolean {
+  let host = "";
+  try { const u = new URL(url); if (u.protocol !== "https:" && u.protocol !== "http:") return false; host = u.hostname.toLowerCase(); } catch { return false; }
+  return allow.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+export const getStatuteSectionTool = defineTool<{ title: number; section: string; max_chars?: number; offset?: number }>({
+  name: "get_statute_section",
+  description: "Read the current text of a U.S. Code section from GovInfo, e.g. title 15 section '2607'. Returns a text window with a stable source (authority://govinfo/uscode/<title>/<section>) and `window.next_offset`.",
+  parameters: { type: "object", properties: { title: { type: "integer" }, section: { type: "string", description: "Section number, e.g. '2607' or '1442'" }, max_chars: { type: "integer", description: "Window size, default 30000" }, offset: { type: "integer" } }, required: ["title", "section"] },
+  examples: [{ title: 15, section: "2607" }, { title: 28, section: "1442", max_chars: 20000 }],
+  timeoutMs: 30_000,
+  maxResultChars: 36_000,
+  label: (a) => `Reading ${a.title} U.S.C. § ${a.section}`,
+  async execute({ title, section, max_chars, offset }, ctx) {
+    const sec = section.replace(/^§+\s*/, "").split("(")[0].trim();
+    const url = `https://www.govinfo.gov/link/uscode/${encodeURIComponent(String(title))}/${encodeURIComponent(sec)}?link-type=html`;
+    const r = await fetchText(url, { signal: ctx.signal, egress: { name: "tool:get_statute_section", allowHosts: ["govinfo.gov"] } });
+    const body = /html/i.test(r.contentType) ? htmlToText(r.text, { maxChars: 1_000_000 }).text : r.text;
+    const w = windowed(body, offset, max_chars ?? 30_000);
+    const source = authoritySource("govinfo", "uscode", title, sec);
+    emitEvidence(ctx, [{ source, kind: "statute", provider: "govinfo", tool: "get_statute_section", rank: 1, authorityId: `${title} U.S.C. § ${sec}`, url: r.finalUrl, retrievedAt: new Date().toISOString() }]);
+    return { source, cite: `${title} U.S.C. § ${sec}`, url: r.finalUrl, text: w.text, window: w.window };
+  },
+});
+
+/** Research-engine tool set: the legal tools plus paragraph reads, citing references, citation resolution and statute sections. */
+export const RESEARCH_LEGAL_TOOLS = [searchCaseLawTool, getOpinionTool, findCitingOpinionsTool, resolveCitationTool, searchDocketsTool, getDocketEntriesTool, verifyCitationsTool, searchRegulationsTool, getCfrSectionTool, searchFederalRegisterTool, getFederalRegisterDocumentTool, searchStatutesTool, getStatuteSectionTool];
+
 export const LEGAL_TOOLS = [searchCaseLawTool, getOpinionTextTool, searchDocketsTool, getDocketEntriesTool, verifyCitationsTool, searchRegulationsTool, getCfrSectionTool, searchFederalRegisterTool, getFederalRegisterDocumentTool, searchStatutesTool];

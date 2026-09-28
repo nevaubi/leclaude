@@ -110,7 +110,7 @@ export function summarizeMarks(content: PMNode[] | undefined): string[] {
 // Flattened block listing (the agent's view of the document)
 // ---------------------------------------------------------------------------
 
-export interface ListInfo { kind: "bullet" | "ordered" | "legal" | "outline" | "alpha" | "roman" | "task"; depth: number; position: number }
+export interface ListInfo { kind: "bullet" | "ordered" | "legal" | "outline" | "alpha" | "roman" | "task"; depth: number; position: number; /** id of the list node (numbering_fix targets it). */ listId?: string }
 export interface TableInfo { tableId: string; row: number; col: number; header: boolean }
 
 export interface DocBlock {
@@ -134,7 +134,27 @@ export interface DocBlock {
   comments: number;
   footnotes?: number;
   tracked?: { insertions: number; deletions: number };
+  /** Tracked changes in the block (first few): id, kind, author, text. */
+  changes?: { id: string; kind: string; author: string; text: string }[];
+  /** Field instructions in the block (TOC, REF, PAGE…). */
+  fields?: string[];
+  /** Word paragraph style id (imported .docx). */
+  styleId?: string;
   image?: { src: string; alt?: string; width?: number };
+  /** Content hash of the block (type, level, accepted text): proposals carry it so stale edits are detected. */
+  hash?: string;
+}
+
+/** FNV-1a 32-bit → base36. Isomorphic (client snapshot and server tools compute the same value). */
+export function hashString(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+
+/** Hash of a block as the agent sees it. Formatting-only changes do not change it; text, type and level do. */
+export function blockHash(b: { type: string; level?: number; text: string }): string {
+  return hashString(`${b.type}|${b.level ?? ""}|${b.text}`);
 }
 
 export interface DocSection { id: string; title: string; level: number; index: number; wordCount: number; blockCount: number; start: number; end: number }
@@ -178,6 +198,12 @@ export function flattenBlocks(doc: PMNode): FlattenResult {
       if (fn) b.footnotes = fn;
       if (tracked.insertions || tracked.deletions) b.tracked = tracked;
       if (n.type === "image") b.image = { src: String(n.attrs?.src ?? ""), alt: n.attrs?.alt ? String(n.attrs.alt) : undefined, width: n.attrs?.width ? Number(n.attrs.width) : undefined };
+      if (n.attrs?.styleId) b.styleId = String(n.attrs.styleId);
+      const changes = blockChanges(n.content);
+      if (changes.length) b.changes = changes;
+      const fields = (n.content ?? []).filter((c) => c.type === "docxInline" && c.attrs?.kind === "fieldBegin").map((c) => String(c.attrs?.instr ?? "").trim()).filter(Boolean);
+      if (fields.length) b.fields = fields;
+      b.hash = blockHash(b);
       blocks.push(b);
       if (n.type === "heading") {
         closeSection();
@@ -192,9 +218,10 @@ export function flattenBlocks(doc: PMNode): FlattenResult {
       const style = String(n.attrs?.listStyle ?? "");
       const kind: ListInfo["kind"] = n.type === "orderedList" && (style === "legal" || style === "outline" || style === "alpha" || style === "roman") ? (style as ListInfo["kind"]) : LIST_KIND[n.type];
       let position = Number(n.attrs?.start ?? 1) - 1;
+      const listId = n.attrs?.id ? String(n.attrs.id) : undefined;
       for (const item of n.content ?? []) {
         position += 1;
-        walk(item, { ...ctx, list: { kind, depth, position } });
+        walk(item, { ...ctx, list: { kind, depth, position, ...(listId ? { listId } : {}) } });
       }
       return;
     }
@@ -212,6 +239,21 @@ export function flattenBlocks(doc: PMNode): FlattenResult {
   walk(doc, { listCounters: [] });
   closeSection();
   return { blocks, sections };
+}
+
+function blockChanges(content: PMNode[] | undefined): { id: string; kind: string; author: string; text: string }[] {
+  const byId = new Map<string, { id: string; kind: string; author: string; text: string }>();
+  for (const c of content ?? []) {
+    if (c.type !== "text") continue;
+    for (const m of c.marks ?? []) {
+      if (m.type !== "insertion" && m.type !== "deletion") continue;
+      const id = String(m.attrs?.id ?? "");
+      const cur = byId.get(id);
+      if (cur) { cur.text = (cur.text + (c.text ?? "")).slice(0, 120); if (cur.kind !== m.type) cur.kind = "replacement"; }
+      else if (byId.size < 6) byId.set(id, { id, kind: m.type, author: String(m.attrs?.author ?? "Unknown"), text: (c.text ?? "").slice(0, 120) });
+    }
+  }
+  return Array.from(byId.values());
 }
 
 function countMarks(content: PMNode[] | undefined, type: string): number {

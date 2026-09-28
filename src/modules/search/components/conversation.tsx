@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, Bookmark, Check, ChevronRight, Copy, FileDown, FileText, Loader2, Lock, Pin, RotateCcw, ShieldCheck, Square } from "lucide-react";
+import { AlertCircle, ArrowRight, Bookmark, Check, ChevronRight, Copy, FileDown, FileText, ListTree, Loader2, Lock, Pin, RotateCcw, Scale, ShieldCheck, Square } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +13,7 @@ import { PersonAvatar } from "@/components/ui/avatar";
 import { NotSourceBackedBanner, TrustStateBadge } from "@/components/ai/trust-badge";
 import { AssistantMark } from "@/components/ai/chat";
 import { FAILURE_LABEL, STOP_LABEL, TERMINAL_LABEL, type RunMetrics, type RunTerminalState } from "@/lib/ai/events";
-import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
-import { formatBluebook } from "../normalize";
-import { memoTitle } from "../memo";
+import { buildResearchMemo, buildTableOfAuthorities, memoTitle } from "../memo";
 import type { CitationCrossCheck, ResearchMessage, ResearchSource } from "../engine/types";
 import { annotateAnswer, citationCounts, isMessageVerificationCurrent, messageTrustState } from "../engine/trust";
 import type { LaneView, ResearchError, ResearchState } from "./use-research";
@@ -66,7 +64,7 @@ export function Conversation({ state, sources, userName, matter, aiConfigured, o
           </div>
         )}
         {turns.map((t) => (
-          <Turn key={t.assistant.id} question={t.user.content} message={t.assistant} sources={sources} userName={userName} matter={matter} aiConfigured={aiConfigured} onSaveSearch={onSaveSearch} onRetry={onRetry} />
+          <Turn key={t.assistant.id} threadId={state.threadId} question={t.user.content} message={t.assistant} sources={sources} userName={userName} matter={matter} aiConfigured={aiConfigured} onSaveSearch={onSaveSearch} onRetry={onRetry} />
         ))}
         {state.pending && <PendingTurn pending={state.pending} lanes={state.laneOrder.map((id) => state.lanes[id]).filter(Boolean)} sources={sources} userName={userName} error={state.error} denied={state.denied} aiConfigured={aiConfigured} onStop={onStop} onRetry={onRetry} onNewThread={onNewThread} />}
         <div ref={endRef} className="h-2" />
@@ -250,7 +248,7 @@ function StatusLine({ message, sources, live }: { message: ResearchMessage; sour
   );
 }
 
-function Turn({ question, message, sources, userName, matter, aiConfigured, onSaveSearch, onRetry }: { question: string; message: ResearchMessage; sources: ResearchSource[]; userName: string; matter: ConversationProps["matter"]; aiConfigured: boolean; onSaveSearch: (name: string) => Promise<void>; onRetry: (q: string) => void }) {
+function Turn({ threadId, question, message, sources, userName, matter, aiConfigured, onSaveSearch, onRetry }: { threadId: string | null; question: string; message: ResearchMessage; sources: ResearchSource[]; userName: string; matter: ConversationProps["matter"]; aiConfigured: boolean; onSaveSearch: (name: string) => Promise<void>; onRetry: (q: string) => void }) {
   const a = useResearchActions();
   const router = useRouter();
   const [copied, setCopied] = React.useState(false);
@@ -261,30 +259,28 @@ function Turn({ question, message, sources, userName, matter, aiConfigured, onSa
   const cited = React.useMemo(() => sources.filter((s) => s.n != null && message.citeMap && message.citeMap[s.n] === s.id).sort((x, y) => (x.n ?? 0) - (y.n ?? 0)), [sources, message.citeMap]);
   const shown = React.useMemo(() => annotateAnswer(message, sources), [message, sources]);
 
-  const markdown = React.useCallback(() => {
-    const head = `# ${memoTitle(question)}\n\n**Question.** ${question}\n\n`;
-    const srcList = cited.length ? `\n\n---\n\n## Sources read\n\n${cited.map((s) => `[${s.n}] ${formatBluebook(s.hit)}${s.url ? ` — ${s.url}` : ""}${s.read ? "" : " (search excerpt only)"}`).join("\n")}` : "";
-    const outcome = message.terminal && message.terminal !== "succeeded" ? `\n\n_Run outcome: ${TERMINAL_LABEL[message.terminal]}${message.failureMessage ? ` — ${message.failureMessage}` : ""}._` : "";
-    const prov = message.provenance ? `\n\n---\n\n_Generated ${new Date(message.provenance.generatedAt).toLocaleString()} · ${message.provenance.model} · ${message.verification && isMessageVerificationCurrent(message) ? `${message.verification.supported} supported, ${message.verification.unsupported} unsupported, ${message.verification.contradicted} contradicted` : "not verified against this text"}_` : "";
-    return `${head}${shown}${srcList}${outcome}${prov}`;
-  }, [question, message, cited, shown]);
+  // The memo carries the answer with its [VERIFY] markers, source states, verification flags and a table of authorities.
+  const markdown = React.useCallback(() => buildResearchMemo({ question, message, sources, matterName: matter?.name, matterCaption: matter?.caption }), [question, message, sources, matter]);
 
   const copy = () => navigator.clipboard.writeText(shown).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); toast.success("Answer copied"); }).catch(() => toast.error("Clipboard unavailable"));
-  const download = () => {
-    const blob = new Blob([markdown()], { type: "text/markdown;charset=utf-8" });
+  const saveFile = (name: string, text: string) => {
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const el = document.createElement("a");
-    el.href = url; el.download = `${memoTitle(question).replace(/[^\w\- ]+/g, "").slice(0, 60)}.md`; el.click();
+    el.href = url; el.download = `${name.replace(/[^\w\- ]+/g, "").slice(0, 60)}.md`; el.click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   };
+  const download = () => saveFile(memoTitle(question), markdown());
+  const downloadToa = () => saveFile(`Authorities — ${question.slice(0, 40)}`, buildTableOfAuthorities(question, message, sources));
   const toWord = async () => {
+    if (!threadId) { toast.error("Save the thread first", { description: "The memo is built from the stored answer." }); return; }
     setWording(true);
     try {
-      const content = markdownToDoc(markdown(), { title: memoTitle(question) });
-      const res = await fetch("/api/office/docs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "word", title: memoTitle(question), content, matterId: matter?.id, tags: ["research", "memo"], meta: { source: "search-research", runId: message.runId, provenance: message.provenance, artifactHash: message.artifactHash, terminal: message.terminal } }) });
+      const res = await fetch(`/api/search/threads/${encodeURIComponent(threadId)}/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ format: "word", messageId: message.id }) });
       const j = (await res.json()) as { doc?: { id: string }; error?: string };
+      if (res.status === 403) throw new Error(j.error ?? "You do not have access to this thread's matter.");
       if (!res.ok || !j.doc) throw new Error(j.error ?? res.statusText);
-      toast.success("Opened in Word", { description: "The memo carries the answer, sources and provenance." });
+      toast.success("Memo sent to Word", { description: "Question presented, short answer, analysis, contrary authority, open issues, sources and table of authorities." });
       router.push(`/office/word/${j.doc.id}`);
     } catch (e) { toast.error("Could not create the Word document", { description: e instanceof Error ? e.message : String(e) }); } finally { setWording(false); }
   };
@@ -319,14 +315,16 @@ function Turn({ question, message, sources, userName, matter, aiConfigured, onSa
               )}
             </div>
           )}
+          {message.subQuestions && message.subQuestions.length > 0 && <PlanLine questions={message.subQuestions} />}
           {message.citations && message.citations.length > 0 && <CitationsStrip checks={message.citations} />}
-          {message.verification && message.verification.verdicts && message.verification.verdicts.length > 0 && <VerdictSummary message={message} />}
+          {message.verification && message.verification.verdicts && message.verification.verdicts.length > 0 && <VerdictSummary message={message} sources={sources} />}
           <StatusLine message={message} sources={sources} />
           {message.content && (
             <div className="mt-2 flex flex-wrap items-center gap-1 font-sans">
               <Tip label="Copy the answer as markdown"><Button variant="ghost" size="xs" onClick={copy}>{copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />} Copy</Button></Tip>
-              <Tip label="Download as .md with sources and provenance"><Button variant="ghost" size="xs" onClick={download}><FileDown className="size-3" /> Markdown</Button></Tip>
-              <Tip label="Open as a Word memo (answer, sources, provenance)"><Button variant="ghost" size="xs" onClick={toWord} disabled={wording}>{wording ? <Loader2 className="size-3 animate-spin" /> : <FileText className="size-3" />} Word</Button></Tip>
+              <Tip label="Download the research memo (.md): answer, source states, verification flags, table of authorities"><Button variant="ghost" size="xs" onClick={download}><FileDown className="size-3" /> Memo</Button></Tip>
+              <Tip label="Download the table of authorities (.md) with the pinpoints the answer uses"><Button variant="ghost" size="xs" onClick={downloadToa}><Scale className="size-3" /> Authorities</Button></Tip>
+              <Tip label="Send the memo to Word (built on the server from the stored answer)"><Button variant="ghost" size="xs" onClick={toWord} disabled={wording} data-action="send-to-word">{wording ? <Loader2 className="size-3 animate-spin" /> : <FileText className="size-3" />} Send to Word</Button></Tip>
               <Popover open={saveOpen} onOpenChange={setSaveOpen}>
                 <PopoverTrigger asChild><Button variant="ghost" size="xs"><Bookmark className="size-3" /> Save</Button></PopoverTrigger>
                 <PopoverContent align="start" className="w-72 space-y-2 p-3">
@@ -357,15 +355,32 @@ function Turn({ question, message, sources, userName, matter, aiConfigured, onSa
   );
 }
 
-function VerdictSummary({ message }: { message: ResearchMessage }) {
+function PlanLine({ questions }: { questions: string[] }) {
   const [open, setOpen] = React.useState(false);
+  return (
+    <div className="mt-3 font-sans text-xs" data-plan>
+      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={open}>
+        <ListTree className="size-3.5" /> Research plan · {questions.length} sub-question{questions.length === 1 ? "" : "s"}
+        <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
+      </button>
+      {open && <ol className="mt-1 list-decimal space-y-0.5 pl-9 text-[12px] text-foreground/85">{questions.map((q) => <li key={q}>{q}</li>)}</ol>}
+    </div>
+  );
+}
+
+/** Per-claim verification (constitution §34): flagged claims are shown by default; each claim opens its source at the quoted paragraph. */
+function VerdictSummary({ message, sources }: { message: ResearchMessage; sources: ResearchSource[] }) {
+  const a = useResearchActions();
   const list = message.verification?.verdicts ?? [];
   const flagged = list.filter((v) => v.status !== "supported");
+  const [open, setOpen] = React.useState(flagged.length > 0);
   const current = isMessageVerificationCurrent(message);
   if (!list.length) return null;
+  // Resolve through this answer's own cite map (older turns number their sources differently).
+  const byN = (n: number | null) => { const id = n == null ? undefined : message.citeMap?.[n]; return id ? sources.find((s) => s.id === id) : undefined; };
   return (
     <div className="mt-3 rounded-md border bg-muted/30 font-sans text-xs" data-verdicts data-current={current}>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-muted-foreground hover:text-foreground cursor-pointer">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-muted-foreground hover:text-foreground cursor-pointer" aria-expanded={open}>
         <ShieldCheck className={cn("size-3.5", !current ? "text-muted-foreground" : flagged.length ? "text-warning" : "text-success")} />
         <span className="flex-1">{list.length - flagged.length} of {list.length} claims supported by the sources read{flagged.length ? ` · ${flagged.length} flagged` : ""}{!current ? " · checked against an earlier draft" : ""}</span>
         <span className="text-[10.5px]">{open ? "Hide" : "Show"}</span>
@@ -373,17 +388,20 @@ function VerdictSummary({ message }: { message: ResearchMessage }) {
       {!current && <div className="border-t px-2.5 py-1.5 text-[11px] text-warning-foreground dark:text-warning">These verdicts were computed for an earlier version of the answer. The text shown was revised afterwards and was not re-verified, so they are not current.</div>}
       {open && (
         <ul className="divide-y border-t">
-          {list.map((v, i) => (
-            <li key={i} className="flex items-start gap-2 px-2.5 py-1.5">
-              <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", v.status === "supported" ? "bg-success" : v.status === "contradicted" ? "bg-destructive" : "bg-warning")} />
-              <div className="min-w-0 flex-1">
-                <div className="text-foreground/90">{v.claim}{v.sourceN != null && <span className="ml-1 tabular text-primary">[{v.sourceN}]</span>}</div>
-                {v.quote && <div className="mt-0.5 truncate font-serif italic text-muted-foreground" title={v.quote}>“{v.quote}”</div>}
-                {v.note && <div className="mt-0.5 text-[11px] text-muted-foreground">{v.note}</div>}
-              </div>
-              <span className="shrink-0 text-[10.5px] capitalize text-muted-foreground">{v.status}</span>
-            </li>
-          ))}
+          {[...flagged, ...list.filter((v) => v.status === "supported")].map((v, i) => {
+            const src = byN(v.sourceN);
+            return (
+              <li key={i} className="flex items-start gap-2 px-2.5 py-1.5" data-claim-status={v.status}>
+                <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", v.status === "supported" ? "bg-success" : v.status === "contradicted" ? "bg-destructive" : "bg-warning")} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-foreground/90">{v.claim}{v.sourceN != null && (src ? <button onClick={() => a.openSource(src, { paragraph: v.paragraph, quote: v.quoteVerified !== false ? v.quote : undefined })} className="ml-1 tabular text-primary hover:underline cursor-pointer" title={`Open source [${v.sourceN}]${v.paragraph ? ` at ¶${v.paragraph}` : ""}`}>[{v.sourceN}{v.paragraph ? ` ¶${v.paragraph}` : ""}]</button> : <span className="ml-1 tabular text-primary">[{v.sourceN}]</span>)}</div>
+                  {v.quote && <div className="mt-0.5 flex min-w-0 items-center gap-1.5"><span className="truncate font-serif italic text-muted-foreground" title={v.quote}>“{v.quote}”</span>{v.quoteVerified === true && <Badge variant="info" size="xs" className="shrink-0">Quote found in text</Badge>}{v.quoteVerified === false && <Badge variant="destructive" size="xs" className="shrink-0">Quote not in source</Badge>}</div>}
+                  {v.note && <div className="mt-0.5 text-[11px] text-muted-foreground">{v.note}</div>}
+                </div>
+                <span className={cn("shrink-0 text-[10.5px] capitalize", v.status === "supported" ? "text-muted-foreground" : v.status === "contradicted" ? "text-destructive" : "text-warning-foreground dark:text-warning")}>{v.status}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

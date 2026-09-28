@@ -61,7 +61,35 @@ function groupThousands(intPart: string): string {
   return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-function formatNumberSection(n: number, section: string): string {
+/** Strip Excel format decorations that do not change the digits: [Red]/[<0] tags, _x padding, *x fill; keep quoted literals and escaped chars. */
+function cleanSection(section: string): { core: string; prefix: string; suffix: string } {
+  let s = section.replace(/\[\$([^\]-]*)(-[^\]]*)?\]/g, '"$1"').replace(/\[[^\]]*\]/g, "").replace(/_./g, "").replace(/\*./g, "");
+  // literal text: "..." or \x
+  const lit = (t: string) => t.replace(/"([^"]*)"/g, "$1").replace(/\\(.)/g, "$1");
+  const first = s.search(/[#0?]/);
+  if (first < 0) return { core: s, prefix: "", suffix: "" };
+  let last = -1;
+  for (let i = s.length - 1; i >= 0; i--) if (/[#0?%]/.test(s[i])) { last = i; break; }
+  const prefix = lit(s.slice(0, first));
+  const suffix = lit(s.slice(last + 1));
+  s = s.slice(first, last + 1);
+  return { core: s, prefix, suffix };
+}
+
+function formatNumberSection(n: number, rawSection: string): string {
+  const cleaned = cleanSection(rawSection);
+  if (cleaned.prefix || cleaned.suffix || rawSection !== cleaned.core) {
+    const hasParens = /\(/.test(cleaned.prefix) && /\)/.test(cleaned.suffix);
+    const prefix = cleaned.prefix.replace(/[()]/g, "").trim();
+    const suffix = cleaned.suffix.replace(/[()]/g, "").trim();
+    const core = cleaned.core.replace(/\$/g, "");
+    const inner = !/[#0]/.test(core) && n === 0 ? "" : formatNumberSection(n, core.replace(/\?/g, "#"));
+    const body = inner.startsWith("-") ? inner.slice(1) : inner;
+    const out = `${prefix}${body}${suffix && !suffix.startsWith("%") ? ` ${suffix}`.replace(/^ (?=[%)])/, "") : suffix}`;
+    if (hasParens) return `(${out})`;
+    return inner.startsWith("-") ? `-${out}` : out;
+  }
+  const section = rawSection;
   // Detect features of the section
   const percent = section.includes("%");
   const hasComma = /#,#|0,0/.test(section);
@@ -98,40 +126,65 @@ export function formatNumber(n: number, fmt: NumFmt | undefined): string {
   if (!fmt || fmt === "General") return formatGeneral(n);
   if (fmt === "text" || fmt === "@") return String(n);
   if (isDateFormat(fmt)) return formatDatePattern(serialToDate(n), fmt);
-  const sections = fmt.split(";");
+  const sections = splitSections(fmt);
   if (sections.length > 1) {
     if (n < 0 && sections[1]) {
-      const body = formatNumberSection(-n, sections[1]);
-      return sections[1].includes("(") && sections[1].includes(")") ? `(${body})` : sections[1].trim().startsWith("-") ? `-${body}` : body;
+      const sec = sections[1];
+      const body = formatNumberSection(-n, sec);
+      if (body.startsWith("(")) return body;
+      const bare = sec.replace(/"[^"]*"|\[[^\]]*\]|_.|\*./g, "");
+      return bare.includes("(") && bare.includes(")") ? `(${body})` : body;
     }
-    if (n === 0 && sections[2]) return sections[2].replace(/[#0.,]+/, "0");
+    if (n === 0 && sections[2]) {
+      const zero = sections[2];
+      if (!/[#0?]/.test(zero)) return cleanSection(zero).core.replace(/"([^"]*)"/g, "$1").replace(/\\(.)/g, "$1").trim() || "0";
+      return formatNumberSection(0, zero);
+    }
     return formatNumberSection(n, sections[0]);
   }
   return formatNumberSection(n, fmt);
 }
 
+/** Split a format into its ;-sections, ignoring semicolons inside quotes. */
+function splitSections(fmt: string): string[] {
+  const out: string[] = [];
+  let cur = "", q = false;
+  for (const ch of fmt) { if (ch === '"') q = !q; if (ch === ";" && !q) { out.push(cur); cur = ""; } else cur += ch; }
+  out.push(cur);
+  return out;
+}
+
 export interface Formatted { text: string; align: "left" | "right" | "center"; isError?: boolean; isNumber?: boolean }
+
+/** Screen alignment for an OOXML horizontal alignment (justify/fill/distributed render left; centerContinuous centers). */
+function hAlign(style: CellStyle | undefined): Formatted["align"] | undefined {
+  const a = style?.align;
+  if (!a) return undefined;
+  if (a === "center" || a === "centerContinuous") return "center";
+  if (a === "right") return "right";
+  return "left";
+}
 
 /** Format any cell value for display. `computed` is the value shown for formula cells. */
 export function formatValue(value: CellValue | undefined, style: CellStyle | undefined, type?: string): Formatted {
-  if (value === undefined || value === null || value === "") return { text: "", align: style?.align ?? "left" };
+  if (value === undefined || value === null || value === "") return { text: "", align: hAlign(style) ?? "left" };
   const numFmt = style?.numFmt;
-  if (typeof value === "string" && /^#(REF!|DIV\/0!|NAME\?|VALUE!|NUM!|N\/A|NULL!|CYCLE!|ERROR!|SPILL!)$/.test(value)) return { text: value, align: style?.align ?? "center", isError: true };
-  if (typeof value === "boolean") return { text: value ? "TRUE" : "FALSE", align: style?.align ?? "center" };
+  if (typeof value === "string" && /^#(REF!|DIV\/0!|NAME\?|VALUE!|NUM!|N\/A|NULL!|CYCLE!|ERROR!|SPILL!)$/.test(value)) return { text: value, align: hAlign(style) ?? "center", isError: true };
+  if (typeof value === "boolean") return { text: value ? "TRUE" : "FALSE", align: hAlign(style) ?? "center" };
   if (typeof value === "number") {
-    if (numFmt === "text") return { text: String(value), align: style?.align ?? "left" };
-    return { text: formatNumber(value, numFmt), align: style?.align ?? "right", isNumber: true };
+    if (numFmt === "text") return { text: String(value), align: hAlign(style) ?? "left" };
+    return { text: formatNumber(value, numFmt), align: hAlign(style) ?? "right", isNumber: true };
   }
   // strings
   if (type === "d" || (isDateFormat(numFmt) && /^\d{4}-\d{2}-\d{2}/.test(value))) {
     const serial = isoToSerial(value);
-    if (serial !== null) return { text: formatDatePattern(serialToDate(serial), numFmt && isDateFormat(numFmt) ? numFmt : "mmm d, yyyy"), align: style?.align ?? "right" };
+    if (serial !== null) return { text: formatDatePattern(serialToDate(serial), numFmt && isDateFormat(numFmt) ? numFmt : "mmm d, yyyy"), align: hAlign(style) ?? "right" };
   }
   if (numFmt && numFmt !== "General" && numFmt !== "text" && !isDateFormat(numFmt)) {
     const num = Number(value);
-    if (value.trim() !== "" && Number.isFinite(num)) return { text: formatNumber(num, numFmt), align: style?.align ?? "right", isNumber: true };
+    if (value.trim() !== "" && Number.isFinite(num)) return { text: formatNumber(num, numFmt), align: hAlign(style) ?? "right", isNumber: true };
   }
-  return { text: value, align: style?.align ?? "left" };
+  return { text: value, align: hAlign(style) ?? "left" };
 }
 
 /** Numeric interpretation of a value for stats/charts (dates → serial). */

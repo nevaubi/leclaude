@@ -18,7 +18,7 @@ import type { ResearchSource, ResearchThread } from "../engine/types";
 import { annotateAnswer } from "../engine/trust";
 import { useSearchStore } from "./store";
 import { useResearch } from "./use-research";
-import { ResearchProvider, type ResearchActions } from "./research-context";
+import { ResearchProvider, type ReaderFocus, type ResearchActions } from "./research-context";
 import { Conversation } from "./conversation";
 import { ResearchComposer } from "./composer";
 import { RightPanel } from "./right-panel";
@@ -186,7 +186,8 @@ export function ResearchPage(props: ResearchPageProps) {
       toast.success("Saved to firm library", { description: "Library → Saved research", action: { label: "Open", onClick: () => router.push(`/library?item=${j.item!.id}`) } });
     } catch (e) { toast.error("Could not save to library", { description: e instanceof Error ? e.message : String(e) }); }
   }, [router]);
-  const openSource = React.useCallback((s: ResearchSource | SearchHit) => { const hit = "hit" in s ? s.hit : s; setReaderHit(hit); setReaderOpen(true); }, []);
+  const [readerFocus, setReaderFocus] = React.useState<ReaderFocus | null>(null);
+  const openSource = React.useCallback((s: ResearchSource | SearchHit, focus?: ReaderFocus) => { const hit = "hit" in s ? s.hit : s; setReaderHit(hit); setReaderFocus(focus ?? null); setReaderOpen(true); }, []);
   const pinSourceAction = React.useCallback((s: ResearchSource) => {
     const r = pinSource(s.hit, s.id);
     if (r === "exists") { toast.info("Already pinned"); return; }
@@ -333,7 +334,7 @@ export function ResearchPage(props: ResearchPageProps) {
           </div>
         )}
 
-        <ReaderDrawer hit={readerHit} open={readerOpen} onOpenChange={setReaderOpen} onCite={copyCite} onPin={(hit) => { const s = sourceList.find((x) => x.hit.id === hit.id); pinSourceAction(s ?? { id: hit.id, kind: hit.source, title: hit.title, cite: hit.cite, url: hit.url, read: false, laneIds: [], hit, scope: "authority", foundAt: Date.now() }); }} onPinPassage={(text, hit) => pinPassageAction(text, sourceList.find((x) => x.hit.id === hit.id)?.id)} onSave={saveToLibrary} pinned={readerHit ? pinnedIds.has(sourceList.find((x) => x.hit.id === readerHit.id)?.id ?? readerHit.id) : false} aiConfigured={props.aiConfigured} terms={terms} />
+        <ReaderDrawer hit={readerHit} focus={readerFocus} open={readerOpen} onOpenChange={setReaderOpen} onCite={copyCite} onPin={(hit) => { const s = sourceList.find((x) => x.hit.id === hit.id); pinSourceAction(s ?? { id: hit.id, kind: hit.source, title: hit.title, cite: hit.cite, url: hit.url, read: false, laneIds: [], hit, scope: "authority", foundAt: Date.now() }); }} onPinPassage={(text, hit) => pinPassageAction(text, sourceList.find((x) => x.hit.id === hit.id)?.id)} onSave={saveToLibrary} pinned={readerHit ? pinnedIds.has(sourceList.find((x) => x.hit.id === readerHit.id)?.id ?? readerHit.id) : false} aiConfigured={props.aiConfigured} terms={terms} />
       </div>
     </ResearchProvider>
   );

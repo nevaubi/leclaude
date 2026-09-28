@@ -24,7 +24,7 @@ const COMPONENTS: Components = {
   li: ({ children }) => <li className="[&>p]:my-0"><Sentences>{children}</Sentences></li>,
   blockquote: ({ children }) => <blockquote className="my-2 border-l-2 pl-3 font-sans text-[12.5px] not-italic text-foreground [&_p]:my-0">{children}</blockquote>,
   a: ({ href, children }) => {
-    if (href?.startsWith("#cite-")) return <CiteChip n={Number(href.slice(6))} />;
+    if (href?.startsWith("#cite-")) { const m = href.match(/^#cite-(\d+)(?:-p(\d+))?$/); return <CiteChip n={Number(m?.[1] ?? href.slice(6))} paragraph={m?.[2] ? Number(m[2]) : undefined} />; }
     if (href === "#verify") return <VerifyFlag />;
     return <a href={href} target="_blank" rel="noreferrer" className="font-sans text-[13px] text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary break-words">{children}</a>;
   },
@@ -48,18 +48,20 @@ export const AnswerMarkdown = React.memo(function AnswerMarkdown({ text, classNa
   );
 });
 
-/** Turn "[3]" into a link the renderer can intercept; "[VERIFY]" likewise. Skips fenced code. */
+/** Turn "[3]" (and pinpoints "[3 ¶12]") into a link the renderer can intercept; "[VERIFY]" likewise. Skips fenced code. */
 export function prepare(text: string): string {
   return text
     // "[n] Cite — url" lines (Sources section) become list items so each source sits on its own line.
     .replace(/^\[(\d{1,2})\]\s+(?=\S)/gm, "- [$1] ")
     .replace(/\[VERIFY\]/g, "[VERIFY](#verify)")
+    // "[n ¶k]" / "[n, ¶k]" pinpoints keep the paragraph so the chip opens the reader at ¶k.
+    .replace(/\[(\d{1,2}),?\s*¶{1,2}\s*(\d{1,4})(?:\s*[-–]\s*\d{1,4})?\](?!\()/g, (_m, n: string, p: string) => `[${n} ¶${p}](#cite-${n}-p${p})`)
     .replace(/\[(\d{1,2})\](?!\()/g, (_m, n: string) => `[${n}](#cite-${n})`)
     // "[1][2]" → keep both; "[1], [2]" already fine.
     .replace(/\]\(#cite-(\d+)\)\[(\d{1,2})\](?!\()/g, "](#cite-$1)[$2](#cite-$2)");
 }
 
-function CiteChip({ n }: { n: number }) {
+function CiteChip({ n, paragraph }: { n: number; paragraph?: number }) {
   const a = useResearchActions();
   const s = a.sourceByN(n);
   const active = a.hoverN === n;
@@ -72,18 +74,19 @@ function CiteChip({ n }: { n: number }) {
       onMouseLeave={() => a.setHoverN(null)}
       onFocus={() => a.setHoverN(n)}
       onBlur={() => a.setHoverN(null)}
-      onClick={(e) => { e.preventDefault(); if (s) a.openSource(s); }}
+      onClick={(e) => { e.preventDefault(); if (s) a.openSource(s, paragraph != null ? { paragraph } : undefined); }}
       className={cn(
         "mx-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded px-1 align-[2px] font-sans text-[10.5px] font-semibold tabular transition-colors cursor-pointer",
         s ? (active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary hover:bg-primary/20") : "bg-muted text-muted-foreground",
         s && !s.read && "ring-1 ring-inset ring-warning/60",
       )}
-      aria-label={label}
+      aria-label={paragraph != null ? `${label}, paragraph ${paragraph}` : label}
+      data-paragraph={paragraph}
     >
-      {n}
+      {n}{paragraph != null && <span className="ml-0.5 font-normal opacity-75">¶{paragraph}</span>}
     </button>
   );
-  return <Tip label={<span className="block max-w-xs">{label}{s && !s.read && <span className="block opacity-80">Cited from a search excerpt (not read)</span>}</span>}>{chip}</Tip>;
+  return <Tip label={<span className="block max-w-xs">{label}{paragraph != null && <span className="block opacity-80">Opens the reader at ¶{paragraph}</span>}{s && !s.read && <span className="block opacity-80">Cited from a search excerpt (not read)</span>}</span>}>{chip}</Tip>;
 }
 
 function VerifyFlag() {
@@ -129,7 +132,7 @@ export function groupSentences(nodes: React.ReactNode[]): Group[] {
     }
     if (React.isValidElement(node)) {
       const props = node.props as { href?: string; children?: React.ReactNode };
-      const m = typeof props.href === "string" ? props.href.match(/^#cite-(\d+)$/) : null;
+      const m = typeof props.href === "string" ? props.href.match(/^#cite-(\d+)(?:-p\d+)?$/) : null;
       if (m) cur.cites.add(Number(m[1]));
       cur.nodes.push(React.cloneElement(node, { key: key++ }));
       continue;

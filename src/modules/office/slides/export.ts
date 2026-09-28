@@ -4,8 +4,12 @@
  * notes, hidden slides, theme fonts/colors, on a 13.333"×7.5" (16:9) page that
  * maps 1:1 to the 1280×720 px canvas at 96 dpi (1 pt font = 1 pt).
  */
+import JSZip from "jszip";
 import PptxGenJS from "pptxgenjs";
 import { hexForExport, parseMarkdownLite, plainText, resolveFontFace, type ChartSpec, type DeckContent, type DeckElement, type DeckSlide, type DeckTheme } from "./model";
+import { exportWithPackage, type PackageExportReport } from "./ooxml/package-export";
+import { patchTheme } from "./ooxml/theme";
+import { parseXml, serializeDoc } from "./ooxml/xml";
 
 export interface ExportOptions {
   title: string;
@@ -15,6 +19,14 @@ export interface ExportOptions {
   fetchImage?: (src: string) => Promise<string | null>;
   includeHidden?: boolean;
   includeNotes?: boolean;
+  /**
+   * Bytes of the original .pptx this deck was imported from. Server code must load it from the stored document
+   * (never from client input) and only pass it when its sha256 equals `deck.meta.pptx.sha256`. When present the
+   * export is package-preserving (see ooxml/package-export.ts).
+   */
+  sourcePackage?: Uint8Array | null;
+  /** Receives what the package-preserving exporter kept / patched / created. */
+  onReport?: (r: PackageExportReport & { mode: "package" | "generated" }) => void;
 }
 
 export const PAGE_W_IN = 13.333;
@@ -50,7 +62,9 @@ function chartColors(theme: DeckTheme): string[] {
 }
 
 async function addElement(pptx: PptxGenJS, slide: PptxGenJS.Slide, e: DeckElement, theme: DeckTheme, opts: ExportOptions) {
-  const pos = { x: inch(e.x), y: inch(e.y), w: inch(Math.max(4, e.w)), h: inch(Math.max(4, e.h)) };
+  // Role tag in the shape name ("lc:title") so a re-import recovers placeholder roles without layout placeholders.
+  const objectName = e.role && e.role !== "decor" ? `lc:${e.role}` : e.name;
+  const pos = { x: inch(e.x), y: inch(e.y), w: inch(Math.max(4, e.w)), h: inch(Math.max(4, e.h)), objectName, flipH: e.flipH || undefined, flipV: e.flipV || undefined };
   const st = e.style;
   const opacity = st.opacity ?? 1;
   const transparency = opacity < 1 ? Math.round((1 - opacity) * 100) : undefined;
@@ -105,10 +119,19 @@ async function addElement(pptx: PptxGenJS, slide: PptxGenJS.Slide, e: DeckElemen
       const headerFill = hexForExport(st.headerFill ?? "accent", theme);
       const headerColor = hexForExport(st.headerColor ?? "bg", theme);
       const bandFill = hexForExport("surface", theme, "F3F4F6");
-      const rows: PptxGenJS.TableRow[] = [
-        t.header.map((h) => ({ text: h, options: { bold: true, color: headerColor, fill: { color: headerFill }, fontSize, fontFace, border, valign: "middle" as const, margin: 4 } })),
-        ...t.rows.map((r, ri) => Array.from({ length: cols }, (_, ci) => ({ text: r[ci] ?? "", options: { color, fontSize, fontFace, border, fill: st.banded !== false && ri % 2 === 1 ? { color: bandFill } : undefined, valign: "top" as const, margin: 4 } }))),
-      ];
+      const grid = t.cells && t.cells.length === t.rows.length + 1 ? t.cells : null;
+      const rows: PptxGenJS.TableRow[] = grid
+        ? grid.map((row, ri) => row.filter((c) => !c.hMerge && !c.vMerge).map((c, ci) => {
+          const text = ri === 0 ? t.header[row.indexOf(c)] ?? c.text : t.rows[ri - 1]?.[row.indexOf(c)] ?? c.text;
+          const header = ri === 0 && t.firstRow !== false;
+          const fill = c.fill ? hexForExport(c.fill, theme, "") : header ? headerFill : st.banded !== false && ri % 2 === 0 ? bandFill : "";
+          void ci;
+          return { text, options: { bold: header || c.bold || undefined, color: header ? headerColor : color, fill: fill ? { color: fill } : undefined, fontSize, fontFace, border, valign: header ? ("middle" as const) : ("top" as const), align: c.align, margin: 4, colspan: c.gridSpan && c.gridSpan > 1 ? c.gridSpan : undefined, rowspan: c.rowSpan && c.rowSpan > 1 ? c.rowSpan : undefined } };
+        }))
+        : [
+          t.header.map((h) => ({ text: h, options: { bold: true, color: headerColor, fill: { color: headerFill }, fontSize, fontFace, border, valign: "middle" as const, margin: 4 } })),
+          ...t.rows.map((r, ri) => Array.from({ length: cols }, (_, ci) => ({ text: r[ci] ?? "", options: { color, fontSize, fontFace, border, fill: st.banded !== false && ri % 2 === 1 ? { color: bandFill } : undefined, valign: "top" as const, margin: 4 } }))),
+        ];
       const rowH = Math.min(pos.h / rows.length, inch(44));
       slide.addTable(rows, { x: pos.x, y: pos.y, w: pos.w, colW, rowH, fontFace, fontSize, autoPage: false });
       return;
@@ -143,6 +166,18 @@ function addChart(pptx: PptxGenJS, slide: PptxGenJS.Slide, chart: ChartSpec, pos
 }
 
 export async function exportPptx(deck: DeckContent, opts: ExportOptions): Promise<Buffer> {
+  if (opts.sourcePackage && deck.meta?.pptx) {
+    const { bytes, report } = await exportWithPackage(deck, opts.sourcePackage, { fetchImage: opts.fetchImage, includeHidden: opts.includeHidden });
+    opts.onReport?.({ ...report, mode: "package" });
+    return bytes;
+  }
+  const buf = await exportGenerated(deck, opts);
+  opts.onReport?.({ kept: 0, patched: 0, created: deck.slides.length, copied: 0, removed: 0, notesWritten: 0, themePatched: true, mode: "generated" });
+  return buf;
+}
+
+/** New decks: pptxgenjs renders every element; the theme part then receives the deck's color and font scheme. */
+async function exportGenerated(deck: DeckContent, opts: ExportOptions): Promise<Buffer> {
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: "LECLAUDE_WIDE", width: PAGE_W_IN, height: PAGE_H_IN });
   pptx.layout = "LECLAUDE_WIDE";
@@ -166,11 +201,31 @@ export async function exportPptx(deck: DeckContent, opts: ExportOptions): Promis
     if (opts.includeNotes !== false && s.notes.trim()) slide.addNotes(s.notes);
   }
   const out = await pptx.write({ outputType: "nodebuffer" });
-  if (Buffer.isBuffer(out)) return out;
-  if (out instanceof Uint8Array) return Buffer.from(out);
-  if (out instanceof ArrayBuffer) return Buffer.from(new Uint8Array(out));
-  if (typeof out === "string") return Buffer.from(out, "base64");
-  return Buffer.from(await (out as Blob).arrayBuffer());
+  let buf: Buffer;
+  if (Buffer.isBuffer(out)) buf = out;
+  else if (out instanceof Uint8Array) buf = Buffer.from(out);
+  else if (out instanceof ArrayBuffer) buf = Buffer.from(new Uint8Array(out));
+  else if (typeof out === "string") buf = Buffer.from(out, "base64");
+  else buf = Buffer.from(await (out as Blob).arrayBuffer());
+  return applyDeckTheme(buf, deck.theme);
+}
+
+/** Write the deck theme's colors and fonts into every theme part of a generated package. */
+async function applyDeckTheme(buf: Buffer, theme: DeckTheme): Promise<Buffer> {
+  try {
+    const zip = await JSZip.loadAsync(buf);
+    const parts = Object.keys(zip.files).filter((f) => /^ppt\/theme\/theme\d+\.xml$/.test(f));
+    if (!parts.length) return buf;
+    for (const part of parts) {
+      const doc = parseXml(await zip.file(part)!.async("string"));
+      patchTheme(doc, theme);
+      zip.file(part, serializeDoc(doc));
+    }
+    return await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  } catch (e) {
+    console.warn("[slides export] theme patch skipped", (e as Error).message);
+    return buf;
+  }
 }
 
 /** Plain-text export (outline with notes), handy for a quick share. */

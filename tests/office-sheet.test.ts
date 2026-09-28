@@ -11,7 +11,8 @@ import { applyOp, filteredRows, opTarget, type SheetOp } from "@/modules/office/
 import { buildSnapshot, parseSnapshot, renderSnapshot, type SheetSnapshot } from "@/modules/office/sheet/snapshot";
 import { sheetAgentTools } from "@/modules/office/sheet/agent-tools";
 import { sheetInstructions, SHEET_SUGGESTIONS } from "@/modules/office/sheet/agent";
-import { exportCsv, exportXlsx, workbookToXlsx } from "@/modules/office/sheet/export";
+import { exportCsv, exportXlsx } from "@/modules/office/sheet/export";
+import * as XLSX from "xlsx";
 import { importDocument, xlsxToWorkbook } from "@/modules/office/sheet/import";
 import { SHEET_TEMPLATES } from "@/modules/office/sheet/templates";
 import { seedSheet } from "@/modules/office/sheet/seed";
@@ -313,13 +314,14 @@ describe("XLSX export/import", () => {
       { type: "set_cells", sheet: "Fees", cells: [{ ref: "A1", formula: "=Sheet1!B4*0.3333" }] },
     ]);
     wb = applyOp(wb, { type: "add_chart", sheet: "Sheet1", chart: { type: "bar", title: "Amounts", range: "B1:B3", categoryRange: "A2:A3" } });
-    const book = workbookToXlsx(wb);
+    const bytes = exportXlsx(wb);
+    // independent reader (SheetJS) sees the same structure the direct writer produced
+    const book = XLSX.read(bytes, { type: "array", cellFormula: true, cellNF: true });
     expect(book.SheetNames).toEqual(["Sheet1", "Fees"]);
     expect(book.Sheets.Sheet1.B4.f).toBe("SUM(B2:B3)");
     expect(book.Sheets.Sheet1.B4.v).toBe(475000);
     expect(book.Sheets.Sheet1.B2.z).toBe("$#,##0.00");
     expect(book.Sheets.Sheet1["!merges"]?.length).toBe(1);
-    const bytes = exportXlsx(wb);
     expect(bytes.byteLength).toBeGreaterThan(1000);
     const imported = await importDocument(bytes, "tracker.xlsx");
     const back = imported.content as Workbook;
@@ -332,17 +334,18 @@ describe("XLSX export/import", () => {
     expect(back.styles[s1.cells.B2.s!].numFmt).toBe("$#,##0.00");
     expect(s1.cells.C2).toMatchObject({ v: "2026-07-02", t: "d" });
     expect(s1.merges).toEqual(["A7:C7"]);
-    // freeze panes are not written by the xlsx community build (Pro feature) — model keeps them, file does not
-    expect(s1.colWidths.A).toBeGreaterThan(150);
+    expect(s1.freeze).toEqual({ rows: 1, cols: 0 });
+    expect(s1.colWidths.A).toBe(180);
     expect(back.namedRanges.GrandTotal).toBe("Sheet1!B4");
     expect(back.sheets[1].cells.A1.f).toBe("=Sheet1!B4*0.3333");
     expect(computeWorkbook(back)[back.sheets[1].id].A1.v).toBeCloseTo(158317.5, 1);
-    expect(s1.charts).toEqual([]); // charts are not carried through XLSX
+    expect(s1.charts.map((c) => ({ type: c.type, title: c.title, range: c.range, categoryRange: c.categoryRange }))).toEqual([{ type: "bar", title: "Amounts", range: "B1:B3", categoryRange: "A2:A3" }]);
     const csv = exportCsv(wb, "Sheet1");
     expect(csv.split("\n")[3]).toBe("Total,475000,");
     const fromCsv = await importDocument(new TextEncoder().encode("name,amount\nA,1\nB,2\n"), "x.csv");
     expect((fromCsv.content as Workbook).sheets[0].cells.B3.v).toBe(2);
     expect(xlsxToWorkbook(book).sheets[0].cells.A1.v).toBe("Claimant");
+    expect(imported.meta?.reader).toBe("ooxml");
   });
 });
 

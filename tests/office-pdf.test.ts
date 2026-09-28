@@ -219,7 +219,9 @@ describe("apply pipeline (pdf-lib)", () => {
     const ex2 = await extractPdf(flat);
     expect(ex2.pageCount).toBe(ex.pageCount);
     expect(ex2.pages[0].text).toContain("CONFIDENTIAL");
-    expect(ex2.pages[0].text).toContain("Gregory Hale"); // a box alone does not remove text — documented
+    // True redaction: the redacted occurrence is removed from the content stream (other occurrences stay).
+    const count = (t: string) => (t.match(/Gregory\s+Hale/g) ?? []).length;
+    expect(count(ex2.pages[0].text)).toBe(count(ex.pages[0].text) - 1);
     const native = await applyModel(cmoBytes, m, { flattenAnnotations: false });
     const doc = await PDFDocument.load(native);
     const annots = doc.getPage(0).node.Annots();
@@ -284,7 +286,10 @@ describe("apply pipeline (pdf-lib)", () => {
     expect(ex.pages[0].text).toContain("PRIVILEGED & CONFIDENTIAL");
     expect(ex.pages[0].text).toContain("DRAFT");
     expect(ex.pages[1].text).toContain(`Page 2 of ${ex.pageCount}`);
-    expect(ex.outline).toEqual([{ title: "Schedule table", page: 2, children: [{ title: "Nested", page: 2, children: undefined }] }]);
+    // Bookmarks are appended after the document's own outline, which is preserved.
+    const original = (await extractPdf(cmoBytes)).outline;
+    expect(ex.outline.slice(0, original.length)).toEqual(original);
+    expect(ex.outline.slice(original.length)).toEqual([{ title: "Schedule table", page: 2, children: [{ title: "Nested", page: 2, children: undefined }] }]);
   }, 40_000);
 });
 
@@ -391,7 +396,13 @@ describe("agent tools", () => {
     expect(after.unredacted).toBe(after.total - 1);
     await expect(tool(tools, "add_redaction")({ preset: "nope" }) as Promise<unknown>).rejects.toThrow(/Unknown preset/);
     expect((await tool(tools, "summarize_document")({ focus: "deadlines" })) as object).toMatchObject({ summary: expect.stringContaining("SUMMARY(deadlines)") });
-    expect((await tool(tools, "extract_table")({ page: 3 })) as object).toMatchObject({ markdown: expect.stringContaining("| MW-7 | 1,140 |") });
+    // Deterministic, position-based: the lab table's columns and every row (the wrapped "(dup)" cell joins its row).
+    const table = (await tool(tools, "extract_table")({ page: 3 })) as { method: string; columns: string[]; rowCount: number; markdown: string };
+    expect(table.method).toBe("layout");
+    expect(table.columns).toEqual(["Well", "Sample ID", "PFOA", "PFOS", "PFHxS", "Qualifier", "Analyst"]);
+    expect(table.rowCount).toBe(14); // MW-1…MW-12, the MW-7 duplicate and the trip blank
+    expect(table.markdown).toContain("| MW-7 | LET-060228-07 | 1,140 | 2,360 | 412 |  | K. Ortiz |");
+    expect(table.markdown).toContain("| MW-7 (dup) | LET-060228-07D | 1,102 |");
     expect((await tool(tools, "create_word_document")({ title: "Memo", from_text: true })) as object).toMatchObject({ url: expect.stringContaining("/office/word/w1") });
     const cmp = (await tool(tools, "compare_to_document")({ other_doc_id: "x" })) as { identical: boolean; addedLines: number };
     expect(cmp.identical).toBe(false);

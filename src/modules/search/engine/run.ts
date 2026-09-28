@@ -15,20 +15,28 @@ import { formatBluebook } from "../normalize";
 import { datePresetRange } from "../query-builder";
 import { providerMessage, researchPrincipalId, savedSearches, searchRuns, updateSavedSearch } from "../service";
 import { ALL_SOURCES, type SearchHit, type SearchRun, type SearchSettings, type SearchSource } from "../types";
+import { configuredTenantId } from "@/lib/ai/vector-store";
 import { answerArtifactId, answerHash } from "./binding";
 import { createReadRegistry, sweepCache } from "./cache";
 import { buildCitationCheck, crossCheckCitations, normCite, withCitationStates } from "./citecheck";
 import { decideCoverage, type CoverageDecision } from "./coverage";
-import { defaultDeps, type EngineDeps } from "./deps";
+import { defaultDeps, type EngineDeps, type ResearchPlan } from "./deps";
+import { buildEvidenceBlocks, evidenceSourceId, evidenceText } from "./evidence";
 import { runLane, type LaneResult } from "./lanes";
-import { planLanes } from "./planner";
-import { CORRECTION_INSTRUCTIONS, LANE_NOTE_HEADER, SYNTHESIS_FORMAT, SYNTHESIS_RULES } from "./prompts";
+import { citedNumbers, hasCiteMarker } from "./markers";
+import { focusTerms } from "./paragraphs";
+import { planLanes, planSubQuestions, questionTopic } from "./planner";
+import { CORRECTION_INSTRUCTIONS, LANE_NOTE_HEADER, NO_ANSWER_SENTENCE, synthesisInstructions } from "./prompts";
 import { assembleProvenance } from "./provenance";
-import { MetricsRecorder, resolvePolicy, scheduleLanes, timedModelCall, withRetry, type RunPolicy } from "./runtime";
+import { checkClaimEvidence, recountVerification } from "./quotes";
+import { createLaneBoard, MetricsRecorder, resolvePolicy, scheduleLanes, settleWithin, timedModelCall, withRetry, type RunPolicy } from "./runtime";
 import { compactSource, mergeSources, numberSources, renderSourcesForPrompt } from "./sources";
 import { appendToThread, createThread, deleteThreadIfEmpty, getThread } from "./threads";
+import { currentnessOf } from "./treatment";
 import { messageTrustState } from "./trust";
-import type { AnswerBanner, CoverageSummary, LaneKind, LaneSummary, ResearchEventInput, ResearchLane, ResearchMessage, ResearchMode, ResearchSource, ResearchStreamEvent, ResearchThread, RunStats, VerificationSummary } from "./types";
+import type { AnswerBanner, AuthorityTreatment, CoverageSummary, LaneKind, LaneSummary, ResearchEventInput, ResearchLane, ResearchMessage, ResearchMode, ResearchSource, ResearchStreamEvent, ResearchThread, RunStats, VerificationSummary } from "./types";
+
+export { questionTopic };
 
 export interface RunResearchInput {
   question: string;
@@ -135,9 +143,20 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   const metrics = new MetricsRecorder(requestedAt);
 
   const emitter = createEmitter<ResearchStreamEvent>(runId, send);
+  // Treatment checks start the moment a case is read (in parallel with the other lanes), bounded in number and time.
+  const treatments = new Map<string, Promise<AuthorityTreatment | null>>();
+  const MAX_TREATMENT_CHECKS = 4;
   const emit = (e: ResearchEventInput) => {
     if (e.type === "source.found") metrics.mark("firstEvidence");
-    if (e.type === "source.read") metrics.mark("firstRead");
+    if (e.type === "source.read") {
+      metrics.mark("firstRead");
+      const src = e.source;
+      const opinionId = src.hit.readRef?.kind === "opinion" ? src.hit.readRef.id : src.hit.opinionId;
+      if (deps.citing && mode === "deep" && src.kind === "caselaw" && opinionId != null && !treatments.has(src.id) && treatments.size < MAX_TREATMENT_CHECKS) {
+        const t0 = Date.now();
+        treatments.set(src.id, deps.citing({ opinionId, signal }).then((t) => { metrics.addToolTime(Date.now() - t0); return t; }, () => null));
+      }
+    }
     if (e.type === "answer.delta") metrics.mark("firstModelToken");
     emitter.emit(e as never);
   };
@@ -167,7 +186,7 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   let citationChecks: ResearchMessage["citations"] = [];
   let citationCheck: ResearchMessage["citationCheck"];
   let banner: AnswerBanner = null;
-  let synthesisInstructions = "";
+  let synthesisInstructionsText = "";
   let refinements: Partial<Record<LaneKind, string[]>> | undefined;
   let noKey = !deps.hasKey;
   let failure: FailureKind | undefined;
@@ -175,6 +194,12 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   let coverage: CoverageDecision | null = null;
   let timeExceeded = false;
   const laneNotes: string[] = [];
+  const board = createLaneBoard<ResearchSource[]>();
+  let noAnswer = false;
+  const tenantId = safeTenantId();
+  const textOf = (s: ResearchSource) => texts.get(s.id) ?? s.excerpt;
+  let subQuestions = planSubQuestions({ question, settings, mode, hasMatter: Boolean(matter), matterName: matter?.shortName });
+  let plan: Promise<ResearchPlan | null> | undefined;
 
   const matterLine = matter
     ? `Active matter: ${matter.name} (${matter.caption ?? matter.shortName}); client ${matter.client} (${matter.clientSide}); ${matter.court ?? ""}; stage: ${matter.stage ?? "n/a"}. ${matter.description ?? ""}`
@@ -190,15 +215,23 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   };
 
   const verifiableSources = () => numbered.filter((s) => s.read && (texts.get(s.id) ?? s.excerpt));
-  const verifyInput = (list: ResearchSource[]) => list.map((s) => ({ title: s.title, cite: s.cite ?? formatBluebook(s.hit), url: s.url, text: texts.get(s.id) ?? s.excerpt ?? "" }));
+  let terms: string[] = focusTerms([question]);
+  let evidence: ReturnType<typeof buildEvidenceBlocks> = [];
+  // The verifier sees the same focused, paragraph-numbered passages the synthesis cited (not an arbitrary prefix).
+  const verifyInput = (list: ResearchSource[]) => list.map((s) => {
+    const block = evidence[(s.n ?? 0) - 1];
+    return { title: s.title, cite: s.cite ?? formatBluebook(s.hit), url: s.url, text: block ? evidenceText(block) : textOf(s) ?? "" };
+  });
 
-  /** One verification pass over the current answer text, bound to its hash. */
+  /** One verification pass over the current answer text, bound to its hash; quotes and read-state are then checked in code. */
   const runVerification = async (pass: number, verifiable: ResearchSource[]): Promise<VerificationSummary> => {
     const hash = artifactHash;
     emit({ type: "verification.started", artifactHash: hash, sources: verifiable.length, pass });
     const v = await timedModelCall(metrics, () => withRetry(() => deps.verify({ answer, sources: verifyInput(verifiable), signal }), modelRetry));
     agents++;
-    const summary = toSummary(v, verifiable, hash, pass);
+    const raw = toSummary(v, verifiable, hash, pass);
+    const checked = checkClaimEvidence(answer, raw.verdicts, numbered, textOf);
+    const summary = checked.demoted || checked.misquotes || checked.verdicts.some((x) => x.paragraph != null) ? recountVerification({ ...raw, verdicts: checked.verdicts }) : raw;
     for (const x of summary.verdicts) {
       if (x.status === "supported") emit({ type: "claim.supported", artifactHash: hash, claim: x.claim, sourceN: x.sourceN, quote: x.quote });
       else if (x.status === "contradicted") emit({ type: "claim.contradicted", artifactHash: hash, claim: x.claim, sourceN: x.sourceN, quote: x.quote, note: x.note });
@@ -215,12 +248,28 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
       rounds = round;
       const lanes: ResearchLane[] = planLanes({ question, settings, mode, hasMatter: Boolean(matter), round, refinements });
       emit({ type: "plan.created", round, reason: round === 1 ? undefined : "coverage was thin; refined queries", lanes });
+      // Fast-model planning runs concurrently with the first retrieval wave (lanes start on deterministic queries).
+      if (round === 1 && mode === "deep" && deps.hasKey && deps.planQueries) {
+        const planner = deps.planQueries.bind(deps);
+        const planToolId = `${runId}:plan`;
+        const planStarted = Date.now();
+        emit({ type: "tool.started", toolId: planToolId, name: "plan_research", label: "Planning sub-questions and queries" });
+        plan = timedModelCall(metrics, () => planner({ question, context: planContext(settings, matterLine, subQuestions), laneKinds: lanes.map((l) => l.kind), signal }))
+          .then((p) => {
+            subQuestions = mergeSubQuestions(subQuestions, p.subQuestions);
+            emit({ type: "tool.completed", toolId: planToolId, name: "plan_research", label: `Planned ${subQuestions.length} sub-questions`, durationMs: Date.now() - planStarted });
+            return p;
+          }, (e) => {
+            if (!isAbortError(e)) emit({ type: "tool.failed", toolId: planToolId, name: "plan_research", label: "Planning sub-questions", error: `Planner unavailable (${providerMessage(e)}); deterministic queries used`, failure: classifyFailure(e), durationMs: Date.now() - planStarted, retrying: false });
+            return null;
+          });
+      }
 
       // --- lanes: bounded concurrency, dependency-aware, per-lane timeouts ------
       const known = pool;
       const laneResults = await scheduleLanes<ResearchLane, LaneResult>(
         lanes,
-        (lane, slot) => runLane(lane, { question, settings, matter, deps, emit, signal: slot.signal, runSignal: signal, timedOut: slot.timedOut, texts, reads, known, policy, metrics, priors: slot.priors }, { queuedMs: slot.queuedMs }),
+        (lane, slot) => runLane(lane, { question, settings, matter, deps, emit, signal: slot.signal, runSignal: signal, timedOut: slot.timedOut, texts, reads, known, policy, metrics, priors: slot.priors, board, plan: round === 1 ? plan : undefined }, { queuedMs: slot.queuedMs }),
         {
           concurrency: policy.laneConcurrency,
           signal,
@@ -242,45 +291,80 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
       }
       if (aborted()) break;
 
+      // --- treatment signals (started when cases were read; bounded wait) and currentness flags ----
+      if (treatments.size) {
+        const settled = await settleWithin(Promise.all(Array.from(treatments.entries()).map(async ([id, p]) => [id, await p] as const)), policy.treatmentWaitMs, signal);
+        const byId = new Map((settled ?? []).filter(([, t]) => t).map(([id, t]) => [id, t!] as const));
+        pool = pool.map((s) => {
+          const t = byId.get(s.id);
+          if (!t || s.treatment) return s;
+          const next = { ...s, treatment: t };
+          emit({ type: "source.found", laneId: s.laneIds[0] ?? "treatment", sourceId: s.id, title: s.title, cite: s.cite, kind: s.kind, source: next });
+          return next;
+        });
+      }
+      pool = pool.map((s) => ({ ...s, currentness: s.currentness ?? currentnessOf(s), evidenceId: s.evidenceId ?? evidenceSourceId(s, { matterId: settings.matterId, tenantId }) }));
+
       const n = numberSources(pool);
       numbered = n.sources;
       citeMap = n.citeMap;
 
       // --- synthesis (primary model, lane sources only) ----------------------
       if (noKey) break;
+      if (!numbered.length) {
+        // Nothing retrieved: broaden and retry while rounds remain; then say so explicitly instead of writing from memory (§44).
+        if (round < maxRounds && !timeExceeded) {
+          coverage = decideCoverage({ round, maxRounds, sources: pool, answer: "", verification: null, lanes, emptyLaneIds: results.map((r) => r.laneId) });
+          emit({ type: "coverage.gap", round, reason: coverage.reason, gaps: coverage.gaps, refinements: coverage.refinements as Record<string, string[]> });
+          emit({ type: "round.completed", round, complete: false, reason: coverage.reason });
+          refinements = coverage.refinements;
+          continue;
+        }
+        answer = noAnswerMemo(question, settings, matter, subQuestions);
+        noAnswer = true;
+        emit({ type: "answer.delta", delta: answer });
+        publishVersion(answer, "draft");
+        verificationUnavailable = "No sources were retrieved, so no claim could be checked";
+        emit({ type: "verification.unavailable", artifactHash, reason: verificationUnavailable, failure: "no_result" });
+        coverage = { complete: true, exhausted: false, reason: "no sources were retrieved; the answer states that the sources reviewed do not establish the point", refinements: {}, gaps: [] };
+        emit({ type: "round.completed", round, complete: true, reason: coverage.reason });
+        break;
+      }
       await rehydration;
       emit({ type: "synthesis.started", round, sources: numbered.length, read: numbered.filter((s) => s.read).length });
       const j = jurisdictionByKey(settings.jurisdiction);
       const courts = resolveCourts(settings.jurisdiction, settings.courts);
       const range = datePresetRange(settings.datePreset, { from: settings.dateFrom, to: settings.dateTo });
-      synthesisInstructions = [
-        `You are the legal research agent for ${firmLabel()}, writing the synthesis for a research thread. ${todayLine()}`,
+      // Byte-stable per mode: the cacheable prefix. Date, matter, jurisdiction and the question travel in the user turn.
+      synthesisInstructionsText = synthesisInstructions(mode, firmLabel(), LEGAL_STYLE_RULES);
+      terms = focusTerms([question, ...lanes.flatMap((l) => l.queries), ...subQuestions]);
+      evidence = buildEvidenceBlocks(numbered, textOf, { terms, matterId: settings.matterId, tenantId });
+      const prior = thread.messages.slice(-4).filter((m) => m.content).map((m) => `${m.role === "user" ? "Earlier question" : "Earlier answer"}: ${m.content.slice(0, m.role === "user" ? 600 : 2500)}`).join("\n\n");
+      const context = [
+        todayLine(),
         matterLine,
         `Jurisdiction: ${j.label}${courts ? ` (courts: ${courts})` : ""}.${range.from ? ` Date range from ${range.from}.` : ""}${range.to ? ` Through ${range.to}.` : ""}`,
-        LEGAL_STYLE_RULES,
-        SYNTHESIS_RULES,
-        SYNTHESIS_FORMAT,
-      ].join("\n\n");
-      const sourceBlock = renderSourcesForPrompt(numbered, texts);
-      const prior = thread.messages.slice(-4).filter((m) => m.content).map((m) => `${m.role === "user" ? "Earlier question" : "Earlier answer"}: ${m.content.slice(0, m.role === "user" ? 600 : 2500)}`).join("\n\n");
+        subQuestions.length ? `Sub-questions to cover:\n${subQuestions.map((q) => `- ${q}`).join("\n")}` : "",
+      ].filter(Boolean).join("\n");
+      // Documents first (the evidence blocks are prepended by the runtime), then notes and context, question last.
       const synthInput: ResponseInput = [{
         role: "user",
-        content: [{ type: "input_text", text: [prior ? `Conversation so far:\n${prior}` : "", `Research question: ${question}`, laneNotes.length ? `${LANE_NOTE_HEADER}\n${laneNotes.join("\n\n")}` : "", `SOURCES (${numbered.length}; cite by number):\n${sourceBlock || "(none)"}`].filter(Boolean).join("\n\n") }],
+        content: [{ type: "input_text", text: [prior ? `Conversation so far:\n${prior}` : "", laneNotes.length ? `${LANE_NOTE_HEADER}\n${laneNotes.join("\n\n")}` : "", context, `Before writing, identify the exact passages in the numbered sources that answer each sub-question; quote them verbatim in the Analysis with [n ¶k] pinpoints. Where the sources are silent, write "${NO_ANSWER_SENTENCE}"`, `Research question: ${question}`].filter(Boolean).join("\n\n") }],
       } as ResponseInputItem];
       let draft = "";
       let tail = "";
       const sourceCount = numbered.length;
       try {
         const res = await timedModelCall(metrics, () => deps.synthesize({
-          instructions: synthesisInstructions,
+          instructions: synthesisInstructionsText,
           input: synthInput,
+          evidence,
           signal,
           onDelta: (d) => {
             emit({ type: "answer.delta", delta: d });
             if (!metrics.has("firstSourceBacked")) {
-              tail = (tail + d).slice(-12);
-              const m = tail.match(/\[(\d{1,2})\]/);
-              if (m && Number(m[1]) >= 1 && Number(m[1]) <= sourceCount) metrics.mark("firstSourceBacked");
+              tail = (tail + d).slice(-20);
+              if (hasCiteMarker(tail, sourceCount)) metrics.mark("firstSourceBacked");
             }
           },
         }), (r) => (typeof r === "string" ? undefined : r.usage));
@@ -308,7 +392,7 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
             const draftHash = artifactHash;
             emit({ type: "correction.started", artifactHash: draftHash, unsupported: first.unsupported, contradicted: first.contradicted });
             try {
-              const correctionInput = `ANSWER:\n${answer}\n\nSOURCES (read):\n${renderSourcesForPrompt(verifiable, texts, { maxCharsPerSource: 4000, maxTotalChars: 50_000 })}\n\nVERDICTS:\n${first.verdicts.map((x) => `- [${x.status}] ${x.claim}${x.sourceN ? ` (source [${x.sourceN}])` : ""}${x.quote ? ` — "${x.quote}"` : ""}${x.note ? ` — ${x.note}` : ""}`).join("\n")}`;
+              const correctionInput = `ANSWER:\n${answer}\n\nSOURCES (read):\n${verifiable.map((s) => { const b = evidence[(s.n ?? 0) - 1]; return b ? `[${s.n}] ${b.title}\n${evidenceText(b).slice(0, 5000)}` : renderSourcesForPrompt([s], texts, { maxCharsPerSource: 4000 }); }).join("\n\n")}\n\nVERDICTS:\n${first.verdicts.map((x) => `- [${x.status}] ${x.claim}${x.sourceN ? ` (source [${x.sourceN}])` : ""}${x.quote ? ` — "${x.quote}"` : ""}${x.note ? ` — ${x.note}` : ""}`).join("\n")}`;
               const revisedRaw = await timedModelCall(metrics, () => withRetry(() => deps.correct({ instructions: CORRECTION_INSTRUCTIONS, input: correctionInput, signal }), modelRetry));
               agents++;
               const revised = revisedRaw.trim();
@@ -408,7 +492,7 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   const finalNumbered = numbered.map((s) => (cited.has(s.n ?? -1) ? s : { ...s, n: undefined }));
   // Provenance describes an answer. A retrieval-only turn (no key, synthesis failed) has nothing to attest or review,
   // so it carries no provenance and never lands in the review queue.
-  const provenance = answer && !noKey ? assembleProvenance({ sources: finalNumbered, verification: verificationCurrent ? verification : null, instructions: synthesisInstructions || undefined, question, model: deps.model, citationMismatches: citationChecks?.filter((c) => !c.matched).length ?? 0 }) : undefined;
+  const provenance = answer && !noKey ? assembleProvenance({ sources: finalNumbered, verification: verificationCurrent ? verification : null, instructions: synthesisInstructionsText || undefined, question, model: deps.model, citationMismatches: citationChecks?.filter((c) => !c.matched).length ?? 0 }) : undefined;
   if (provenance && !wasAborted) {
     try { attachProvenance({ kind: "research", recordId: runId, matterId: settings.matterId ?? undefined, title: question.slice(0, 140), href: `/search?thread=${thread.id}`, provenance }); } catch (e) { console.warn("[research] provenance sidecar failed", (e as Error).message); }
     if (provenance.review?.status === "pending") emit({ type: "review.required", artifactHash, reason: provenance.review.note ?? "Below the confidence gate" });
@@ -440,6 +524,8 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
     metrics: finalMetrics,
     coverage: coverageSummary,
     mode,
+    subQuestions: subQuestions.length ? subQuestions : undefined,
+    noAnswer: noAnswer || undefined,
   };
   message.trust = answer ? messageTrustState(message, finalNumbered) : "generated";
   const compact = pool.map(compactSource);
@@ -468,10 +554,41 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   return { runId, threadId: thread.id, message, sources: compact, stats, aborted: wasAborted, terminal: outcome.terminal, stop: outcome.stop, failure: outcome.failure, metrics: finalMetrics };
 }
 
-function citedNumbers(answer: string): Set<number> {
-  const out = new Set<number>();
-  for (const m of answer.matchAll(/\[(\d{1,2})\]/g)) out.add(Number(m[1]));
-  return out;
+/** Tenant for evidence ids (library://, intel://); tolerant of environments without a configured tenant. */
+function safeTenantId(): string {
+  try { return configuredTenantId(); } catch { return "firm"; }
+}
+
+/** Volatile planning context (user turn; the planner instructions stay byte-stable). */
+function planContext(settings: SearchSettings, matterLine: string, subQuestions: string[]): string {
+  const j = jurisdictionByKey(settings.jurisdiction);
+  return [todayLine(), matterLine, `Jurisdiction: ${j.label}. Sources in scope: ${settings.sources.join(", ")}.`, `Draft sub-questions:\n${subQuestions.map((q) => `- ${q}`).join("\n")}`].join("\n");
+}
+
+/** Model sub-questions replace the deterministic ones but the adverse-authority question is always kept. */
+export function mergeSubQuestions(base: string[], model: string[]): string[] {
+  const clean = model.map((q) => q.trim()).filter((q) => q.length > 8);
+  if (!clean.length) return base;
+  const adverse = base.find((q) => /rejects, distinguishes or limits/.test(q));
+  const hasAdverse = clean.some((q) => /contrar|advers|reject|distinguish|limit|split|declin/i.test(q));
+  return Array.from(new Set([...clean, ...(adverse && !hasAdverse ? [adverse] : [])])).slice(0, 6);
+}
+
+/** Deterministic memo when nothing was retrieved (§44 "no answer in record"): no model call, no invented authority. */
+export function noAnswerMemo(question: string, settings: SearchSettings, matter: Matter | null, subQuestions: string[]): string {
+  const j = jurisdictionByKey(settings.jurisdiction);
+  const searched = settings.sources.map((s) => ({ caselaw: "case law", statutes: "statutes", regulations: "regulations", federal_register: "the Federal Register", dockets: "dockets", web: "the web", library: "the firm library", ediscovery: matter ? `the ${matter.shortName} record` : "matter documents" })[s]).join(", ");
+  return [
+    "## Question Presented",
+    question.trim(),
+    "",
+    "## Short Answer",
+    `${NO_ANSWER_SENTENCE} No source was retrieved from ${searched || "the selected sources"} for ${j.label.split(" (")[0]}, so nothing in this answer is source-backed and no authority is cited.`,
+    "",
+    "## Open Issues",
+    ...subQuestions.map((q) => `- Not established: ${q}`),
+    `- Broaden the query (fewer terms, synonyms), widen the date range, or add sources such as case law or statutes${matter ? "" : ", or select a matter to search its record"}.`,
+  ].join("\n");
 }
 
 function toSummary(v: VerificationResult, sources: ResearchSource[], artifactHash: string, pass: number): VerificationSummary {
@@ -486,20 +603,6 @@ function toSummary(v: VerificationResult, sources: ResearchSource[], artifactHas
     pass,
     verdicts: v.verdicts.map((x) => ({ claim: x.claim, status: x.status, sourceN: x.sourceIndex != null ? sources[x.sourceIndex]?.n ?? null : null, quote: x.quote, note: x.note })),
   };
-}
-
-/** Ordinary legal words that read better lower-cased mid-sentence (a capitalised first word that is not on this list is treated as a name or acronym). */
-const LOWERCASE_LEAD = new Set(["the", "a", "an", "government", "federal", "state", "court", "courts", "manufacturer", "manufacturers", "plaintiff", "plaintiffs", "defendant", "defendants", "removal", "preemption", "standard", "statute", "statutes", "regulation", "regulations", "consequential", "punitive", "strict", "comparative", "joint", "class", "expert", "discovery", "deposition", "privilege", "attorney", "work", "damages", "liability", "negligence", "breach", "contract", "warranty", "design", "failure", "product", "products", "jurisdiction", "venue", "choice", "forum", "collateral", "summary", "motion", "motions", "rule", "rules", "evidence", "testimony", "notice", "reporting", "liability"]);
-
-/** The proposition inside a question, for deterministic follow-ups ("Is X available in Y?" → "X available in Y"). */
-export function questionTopic(question: string): string {
-  let t = question.replace(/\s+/g, " ").replace(/[?!.\s]+$/, "").trim();
-  t = t.replace(/^(is|are|was|were|does|do|did|can|could|may|might|must|should|would|will|has|have|had)\s+(?:(?:a|an|the)\s+)?/i, "");
-  t = t.replace(/^(what|which|when|how|whether|why|where|who)\s+(?:(?:is|are|does|do|did|can|must|should|would|will)\s+)?(?:(?:the|a|an)\s+)?/i, "");
-  if (!t) return question.trim();
-  // Lower-case a leading ordinary word ("Removal…" → "removal…") but leave acronyms and case names alone ("TSCA", "PAGA", "Boyle v.").
-  if (/^[A-Z][a-z]+\s/.test(t) && !/^[A-Z][a-z]+\s+v\.\s/.test(t) && LOWERCASE_LEAD.has(t.split(" ")[0].toLowerCase())) t = t.charAt(0).toLowerCase() + t.slice(1);
-  return t.length > 140 ? t.slice(0, 139).trimEnd() + "…" : t;
 }
 
 /** Deterministic follow-ups when the model is unavailable: bound to jurisdiction and matter. */

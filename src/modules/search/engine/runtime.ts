@@ -9,6 +9,12 @@ import { classifyFailure, emptyMetrics, isAbortError, isTransientFailure, type F
  */
 
 export interface RunPolicy {
+  /** How long a lane waits for the fast-model plan after its first retrieval wave. */
+  planWaitMs: number;
+  /** How long a soft-dependent lane waits for its dependency's first retrieval wave. */
+  softDepWaitMs: number;
+  /** How long synthesis waits for in-flight treatment checks once the lanes are done. */
+  treatmentWaitMs: number;
   /** Lanes running at once. */
   laneConcurrency: number;
   /** Default per-lane wall-clock budget when the planner sets none. */
@@ -24,7 +30,10 @@ export interface RunPolicy {
 }
 
 export const DEFAULT_POLICY: Readonly<RunPolicy> = {
-  laneConcurrency: 4,
+  planWaitMs: 4_000,
+  softDepWaitMs: 30_000,
+  treatmentWaitMs: 2_500,
+  laneConcurrency: 5,
   laneTimeoutMs: 120_000,
   runTimeMs: 8 * 60_000,
   retrievalRetries: 2,
@@ -204,6 +213,57 @@ export async function scheduleLanes<L extends SchedulableLane, R>(lanes: L[], ru
     await Promise.race(Array.from(running.values()));
   }
   return results;
+}
+
+/**
+ * Soft-dependency board: a lane publishes its retrieval results as soon as its first wave settles,
+ * and dependent lanes wait for them with a bound instead of waiting for the whole lane (constitution §14
+ * dependency-aware scheduling without serialising independent retrieval).
+ */
+export interface LaneBoard<T> {
+  publish(id: string, value: T): void;
+  /** Resolves with the published value, or undefined after `timeoutMs` / on abort. Never rejects. */
+  wait(id: string, timeoutMs: number, signal?: AbortSignal): Promise<T | undefined>;
+  get(id: string): T | undefined;
+}
+
+export function createLaneBoard<T>(): LaneBoard<T> {
+  const values = new Map<string, T>();
+  const waiters = new Map<string, ((v: T) => void)[]>();
+  return {
+    publish(id, value) {
+      values.set(id, value);
+      for (const w of waiters.get(id) ?? []) w(value);
+      waiters.delete(id);
+    },
+    get: (id) => values.get(id),
+    wait(id, timeoutMs, signal) {
+      if (values.has(id)) return Promise.resolve(values.get(id));
+      return new Promise<T | undefined>((resolve) => {
+        let done = false;
+        const finish = (v: T | undefined) => { if (done) return; done = true; clearTimeout(t); signal?.removeEventListener("abort", onAbort); resolve(v); };
+        const onAbort = () => finish(undefined);
+        const t = setTimeout(() => finish(undefined), Math.max(0, timeoutMs));
+        signal?.addEventListener("abort", onAbort, { once: true });
+        const list = waiters.get(id) ?? [];
+        list.push((v) => finish(v));
+        waiters.set(id, list);
+      });
+    },
+  };
+}
+
+/** Await a promise for at most `ms` (undefined on timeout, rejection or abort). Never rejects. */
+export function settleWithin<T>(p: Promise<T> | undefined, ms: number, signal?: AbortSignal): Promise<T | undefined> {
+  if (!p) return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: T | undefined) => { if (done) return; done = true; clearTimeout(t); signal?.removeEventListener("abort", onAbort); resolve(v); };
+    const onAbort = () => finish(undefined);
+    const t = setTimeout(() => finish(undefined), Math.max(0, ms));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    p.then((v) => finish(v), () => finish(undefined));
+  });
 }
 
 // ---------------------------------------------------------------------------

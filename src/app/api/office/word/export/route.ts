@@ -7,6 +7,7 @@ import { getOfficeDoc, listComments } from "@/modules/office/shared/docs-service
 import type { DocSettings } from "@/modules/office/word/constants";
 import { ensureBlockIds, type PMNode } from "@/modules/office/word/doc-model";
 import { exportDocx, exportMarkdown, exportText, imageDimensions, type ExportImage } from "@/modules/office/word/export";
+import { isDocxMeta, type DocxImportedComment } from "@/modules/office/word/ooxml/types";
 import { withAuth } from "@/lib/auth/route";
 import { officeDocFromBody } from "@/modules/office/shared/route-auth";
 
@@ -35,6 +36,8 @@ async function handlePOST(req: NextRequest) {
   let title = body.title;
   let settings = body.settings;
   let comments: OfficeComment[] = [];
+  let basePackage: Uint8Array | null = null;
+  let importedComments: DocxImportedComment[] | undefined;
   if (body.docId) {
     const doc = getOfficeDoc(body.docId);
     if (!doc) return jsonError("Document not found", 404);
@@ -42,6 +45,14 @@ async function handlePOST(req: NextRequest) {
     title = title ?? doc.title;
     settings = settings ?? ((doc.meta?.settings as Partial<DocSettings> | undefined) ?? undefined);
     if (body.includeComments !== false) comments = listComments(body.docId);
+    // Imported .docx: write back into the original package (styles, theme, headers/footers, custom XML stay byte-identical).
+    const docxMeta = doc.meta?.docx;
+    const originalId = typeof doc.meta?.originalBlobId === "string" ? doc.meta.originalBlobId : null;
+    if (isDocxMeta(docxMeta) && originalId) {
+      const original = blobs.get(originalId);
+      if (original) basePackage = new Uint8Array(original.bytes);
+      if (body.includeComments !== false) importedComments = docxMeta.comments;
+    }
   }
   if (!content || content.type !== "doc") return jsonError("`content` (ProseMirror doc) or `docId` is required");
   const doc = ensureBlockIds(content);
@@ -50,8 +61,9 @@ async function handlePOST(req: NextRequest) {
   if (format === "md") return new Response(exportMarkdown(doc, title ?? "Document"), { headers: { "Content-Type": "text/markdown; charset=utf-8", "Content-Disposition": `attachment; filename="${safe}.md"` } });
   if (format === "txt") return new Response(exportText(doc), { headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": `attachment; filename="${safe}.txt"` } });
   try {
-    const buf = await exportDocx(doc, { title: title ?? "Document", settings, comments, fetchImage, changes: body.changes ?? "revisions" });
-    return new Response(new Uint8Array(buf), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Content-Disposition": `attachment; filename="${safe}.docx"`, "Content-Length": String(buf.byteLength) } });
+    let mode = "fresh";
+    const buf = await exportDocx(doc, { title: title ?? "Document", settings, comments, fetchImage, changes: body.changes ?? "revisions", basePackage, importedComments, onReport: (r) => { mode = r.mode; if (r.warnings.length) console.warn("[word export]", r.warnings.join("; ")); } });
+    return new Response(new Uint8Array(buf), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Content-Disposition": `attachment; filename="${safe}.docx"`, "Content-Length": String(buf.byteLength), "X-Docx-Export-Mode": mode } });
   } catch (e) {
     return jsonError(`Export failed: ${(e as Error).message}`, 500);
   }

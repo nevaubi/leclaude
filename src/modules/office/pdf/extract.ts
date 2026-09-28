@@ -5,18 +5,26 @@ import "server-only";
  * document metadata. Extractions are cached per blob id so the agent's
  * find/highlight/redact tools can resolve rectangles without re-parsing.
  */
-import { PDFDocument } from "pdf-lib";
+import { PDFDict, PDFDocument, PDFName, PDFRef, PDFStream, type PDFObject } from "pdf-lib";
 import type { PdfFormField, PdfOutlineItem } from "./model";
 import { runsToText, type TextRun } from "./text-search";
 
-export interface ExtractedPage { page: number; width: number; height: number; rotation: number; text: string; runs: TextRun[] }
+export interface ExtractedPage {
+  page: number; width: number; height: number; rotation: number; text: string; runs: TextRun[];
+  /** Page draws at least one image. */
+  hasImages?: boolean;
+  /** Image-only page: no machine-readable text (needs OCR; excluded from text-based claims). */
+  needsOcr?: boolean;
+}
 
 export interface Extraction {
   pageCount: number;
   pages: ExtractedPage[];
   outline: PdfOutlineItem[];
-  meta: { title?: string; author?: string; subject?: string; producer?: string; creator?: string; created?: string; hasForm?: boolean; version?: string };
+  meta: { title?: string; author?: string; subject?: string; keywords?: string; producer?: string; creator?: string; created?: string; modified?: string; hasForm?: boolean; version?: string };
   fields: PdfFormField[];
+  /** Page labels (/PageLabels) by page index, or null when the document defines none. */
+  pageLabels: string[] | null;
   extractedAt: string;
 }
 
@@ -57,12 +65,16 @@ async function doExtract(bytes: Uint8Array): Promise<Extraction> {
     const page = await doc.getPage(i);
     const vp = page.getViewport({ scale: 1, rotation: 0 });
     const tc = await page.getTextContent();
+    const glyphWidths = await fontGlyphWidths(lib, page).catch(() => new Map<string, Map<string, number>>());
     const runs: TextRun[] = [];
     for (const it of tc.items) {
       if (!("str" in it)) continue;
       const t = it.transform as number[];
       const fontH = Math.hypot(t[2], t[3]) || it.height || 10;
-      runs.push({ s: it.str, x: t[4], y: t[5], w: it.width, h: fontH, eol: it.hasEOL });
+      const run: TextRun = { s: it.str, x: t[4], y: t[5], w: it.width, h: fontH, eol: it.hasEOL };
+      const cw = relativeWidths(it.str, glyphWidths.get(it.fontName));
+      if (cw) run.cw = cw;
+      runs.push(run);
     }
     pages.push({ page: i, width: vp.width, height: vp.height, rotation: page.rotate, text: runsToText(runs), runs });
     page.cleanup();
@@ -72,11 +84,60 @@ async function doExtract(bytes: Uint8Array): Promise<Extraction> {
   try {
     const m = await doc.getMetadata();
     const info = (m.info ?? {}) as Record<string, unknown>;
-    meta = { title: str(info.Title), author: str(info.Author), subject: str(info.Subject), producer: str(info.Producer), creator: str(info.Creator), created: str(info.CreationDate), hasForm: Boolean(info.IsAcroFormPresent), version: str(info.PDFFormatVersion) };
+    meta = { title: str(info.Title), author: str(info.Author), subject: str(info.Subject), keywords: str(info.Keywords), producer: str(info.Producer), creator: str(info.Creator), created: str(info.CreationDate), modified: str(info.ModDate), hasForm: Boolean(info.IsAcroFormPresent), version: str(info.PDFFormatVersion) };
   } catch { /* ignore */ }
+  let pageLabels: string[] | null = null;
+  try { pageLabels = (await doc.getPageLabels()) ?? null; } catch { pageLabels = null; }
   await task.destroy();
   const fields = await readFormFields(bytes).catch(() => [] as PdfFormField[]);
-  return { pageCount: pages.length, pages, outline, meta: { ...meta, hasForm: meta.hasForm || fields.length > 0 }, fields, extractedAt: new Date().toISOString() };
+  const images = await pageImageFlags(bytes).catch(() => [] as boolean[]);
+  for (const p of pages) {
+    p.hasImages = images[p.page - 1] || undefined;
+    if (p.hasImages && p.text.replace(/\s+/g, "").length < 16) p.needsOcr = true;
+  }
+  return { pageCount: pages.length, pages, outline, meta: { ...meta, hasForm: meta.hasForm || fields.length > 0 }, fields, pageLabels, extractedAt: new Date().toISOString() };
+}
+
+/**
+ * Glyph advance widths per font (pdf.js loaded font name → character → width in glyph units), read from the page's
+ * operator list, so match rectangles follow real glyph positions instead of an average character width.
+ */
+async function fontGlyphWidths(lib: PdfJs, page: { getOperatorList: () => Promise<{ fnArray: number[]; argsArray: unknown[][] }> }): Promise<Map<string, Map<string, number>>> {
+  const ops = await page.getOperatorList();
+  const OPS = lib.OPS as Record<string, number>;
+  const out = new Map<string, Map<string, number>>();
+  let font = "";
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const fn = ops.fnArray[i];
+    const args = ops.argsArray[i];
+    if (fn === OPS.setFont) font = String(args?.[0] ?? "");
+    else if (fn === OPS.showText && Array.isArray(args?.[0])) {
+      let m = out.get(font);
+      if (!m) { m = new Map(); out.set(font, m); }
+      for (const g of args[0] as unknown[]) {
+        if (!g || typeof g !== "object") continue;
+        const gg = g as { unicode?: string; width?: number };
+        if (typeof gg.unicode === "string" && typeof gg.width === "number" && gg.unicode) {
+          const chars = Array.from(gg.unicode);
+          for (const ch of chars) if (!m.has(ch)) m.set(ch, gg.width / chars.length);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Per-character width fractions for a text item, or undefined when too few glyph widths are known. */
+function relativeWidths(s: string, widths: Map<string, number> | undefined): number[] | undefined {
+  if (!widths || !s) return undefined;
+  const chars = s.split("");
+  const known = chars.map((c) => widths.get(c));
+  const have = known.filter((w): w is number => typeof w === "number" && w > 0);
+  if (have.length < chars.length * 0.6) return undefined;
+  const avg = have.reduce((a, b) => a + b, 0) / have.length;
+  const ws = known.map((w, i) => (typeof w === "number" && w > 0 ? w : chars[i] === " " ? avg * 0.5 : avg));
+  const total = ws.reduce((a, b) => a + b, 0);
+  return total > 0 ? ws.map((w) => w / total) : undefined;
 }
 
 function str(v: unknown) { return typeof v === "string" && v.trim() ? v.trim() : undefined; }
@@ -152,6 +213,27 @@ export async function readFormFields(bytes: Uint8Array): Promise<PdfFormField[]>
     out.push({ name, type, value, options, page, rect, readOnly: f.isReadOnly() || undefined });
   }
   return out;
+}
+
+/** Per page: whether the page (or a form XObject it draws, one level deep) uses an image XObject. */
+export async function pageImageFlags(bytes: Uint8Array): Promise<boolean[]> {
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+  const lk = (o: PDFObject | undefined) => (o instanceof PDFRef ? doc.context.lookup(o) : o);
+  const hasImage = (res: PDFObject | undefined, depth: number): boolean => {
+    const r = lk(res);
+    if (!(r instanceof PDFDict)) return false;
+    const xo = lk(r.get(PDFName.of("XObject")));
+    if (!(xo instanceof PDFDict)) return false;
+    for (const [, v] of xo.entries()) {
+      const s = lk(v);
+      if (!(s instanceof PDFStream)) continue;
+      const sub = s.dict.lookup(PDFName.of("Subtype"));
+      if (sub instanceof PDFName && sub.decodeText() === "Image") return true;
+      if (depth < 2 && sub instanceof PDFName && sub.decodeText() === "Form" && hasImage(s.dict.get(PDFName.of("Resources")), depth + 1)) return true;
+    }
+    return false;
+  };
+  return doc.getPages().map((p) => hasImage(p.node.Resources(), 0));
 }
 
 /** Page sizes (points) and intrinsic rotation via pdf-lib (cheap; no text parsing). */

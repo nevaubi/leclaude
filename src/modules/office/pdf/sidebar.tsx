@@ -93,6 +93,8 @@ function AnnotationsTab({ onOpen }: { onOpen: (a: PdfAnnotation) => void }) {
                 <span className="text-muted-foreground tabular">{display ? `p. ${display}` : "deleted page"}</span>
                 {a.reason && <Badge variant="destructive" className="py-0 text-[9px]">{a.reason}</Badge>}
                 {a.applied && <Badge variant="muted" className="py-0 text-[9px]">applied</Badge>}
+                {a.native && a.type !== "redaction" && <Tip label="Already in the PDF file (e.g. from Acrobat); kept as is unless you edit or delete it"><Badge variant="muted" className="py-0 text-[9px]">in PDF</Badge></Tip>}
+                {a.type === "redaction" && !a.applied && <Tip label="Pending: the content under the box is removed when you apply edits to the source or export"><Badge variant="muted" className="py-0 text-[9px]">pending</Badge></Tip>}
                 <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   <Tip label="Edit"><button className="rounded p-0.5 hover:bg-background cursor-pointer" onClick={(e) => { e.stopPropagation(); onOpen(a); }} aria-label="Edit annotation"><Pencil className="size-3" /></button></Tip>
                   <Tip label={a.resolved ? "Reopen" : "Resolve"}><button className="rounded p-0.5 hover:bg-background cursor-pointer" onClick={(e) => { e.stopPropagation(); store.getState().applyOp({ op: "resolve_annotations", ids: [a.id], resolved: !a.resolved }); }} aria-label="Resolve"><CheckCircle2 className={cn("size-3", a.resolved && "text-success")} /></button></Tip>

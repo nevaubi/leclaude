@@ -1,25 +1,45 @@
 import "server-only";
 import * as XLSX from "xlsx";
+import { sha256 } from "@/lib/integrity/hash";
 import { colToLetter, toA1 } from "./a1";
 import { serialToISO } from "./format";
 import { createSheet, DEFAULT_PAGE_SETUP, internStyle, type Cell, type CellStyle, type Sheet, type Workbook } from "./model";
+import { readXlsx } from "./xlsx/reader";
+
+const OOXML_EXT = new Set(["xlsx", "xlsm", "xltx", "xltm"]);
+
+function isZip(bytes: Uint8Array) { return bytes.length > 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04; }
 
 /**
- * Import .xlsx/.xlsm/.xls/.csv/.tsv into the workbook model. Formulas are
- * preserved where the file carries them; number formats become cell styles;
- * column widths, row heights, merges and freeze panes carry over.
+ * Import a spreadsheet into the workbook model.
+ * - .xlsx/.xlsm (OOXML): the direct reader (styles, formulas, number formats, merges, freeze panes, validation,
+ *   conditional formatting, hyperlinks, notes, print settings, charts…) with an XlsxSource so export can keep the
+ *   original package and rewrite only what changed (the import route stores the bytes as doc.meta.originalBlobId).
+ * - .xls / .csv / .tsv, or an OOXML file the direct reader rejects: SheetJS (values, formulas, number formats).
  */
 export async function importDocument(bytes: Uint8Array, filename: string): Promise<{ title: string; content: unknown; meta?: Record<string, unknown> }> {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-  const isText = ext === "csv" || ext === "tsv" || ext === "txt";
-  const book = isText
-    ? XLSX.read(new TextDecoder().decode(bytes), { type: "string", raw: false, FS: ext === "tsv" ? "\t" : undefined, cellDates: false })
-    : XLSX.read(bytes, { type: "array", cellFormula: true, cellNF: true, cellStyles: true, cellDates: false });
-  const workbook = xlsxToWorkbook(book);
   const title = filename.replace(/\.[^.]+$/, "");
-  return { title, content: workbook, meta: { importedFrom: filename, sheets: workbook.sheets.length, cells: workbook.sheets.reduce((n, s) => n + Object.keys(s.cells).length, 0) } };
+  const isText = ext === "csv" || ext === "tsv" || ext === "txt";
+  let workbook: Workbook | null = null;
+  let reader = "sheetjs";
+  let fallbackReason: string | undefined;
+  if (!isText && (OOXML_EXT.has(ext) || isZip(bytes)) && isZip(bytes)) {
+    try { workbook = readXlsx(bytes, { sha256: sha256(bytes) }); reader = "ooxml"; }
+    catch (e) { fallbackReason = (e as Error).message; workbook = null; }
+  }
+  if (!workbook) {
+    const book = isText
+      ? XLSX.read(new TextDecoder().decode(bytes), { type: "string", raw: false, FS: ext === "tsv" ? "\t" : undefined, cellDates: false })
+      : XLSX.read(bytes, { type: "array", cellFormula: true, cellNF: true, cellStyles: true, cellDates: false });
+    workbook = xlsxToWorkbook(book);
+  }
+  const meta: Record<string, unknown> = { importedFrom: filename, reader, sheets: workbook.sheets.length, cells: workbook.sheets.reduce((n, s) => n + Object.keys(s.cells).length, 0) };
+  if (fallbackReason) meta.readerFallback = fallbackReason;
+  return { title, content: workbook, meta };
 }
 
+/** SheetJS fallback reader (legacy .xls, CSV/TSV). */
 export function xlsxToWorkbook(book: XLSX.WorkBook): Workbook {
   const styles: Record<string, CellStyle> = {};
   const sheets: Sheet[] = [];

@@ -5,7 +5,8 @@ import { aiConfig } from "@/lib/ai/config";
 import type { TokenUsage } from "@/lib/ai/events";
 import type { ToolContext, ToolDef } from "@/lib/ai/tools";
 import { webSearchTool } from "@/lib/ai/toolkit/web";
-import { searchCaseLawTool, searchDocketsTool, searchRegulationsTool, searchFederalRegisterTool, searchStatutesTool, verifyCitationsTool } from "@/lib/ai/toolkit/legal";
+import { findCitingOpinions, resolveCitationTool, searchCaseLawTool, searchDocketsTool, searchRegulationsTool, searchFederalRegisterTool, searchStatutesTool, verifyCitationsTool, type CitationResolution } from "@/lib/ai/toolkit/legal";
+import type { SearchResultBlock } from "@/lib/ai/providers/types";
 import { searchLibraryTool, searchEdiscoveryTool } from "@/lib/ai/toolkit/internal";
 import { verifyClaims, type VerificationResult } from "@/lib/ai/verify";
 import { getDocumentText, intelDocuments, primaryDate, searchIntel } from "@/modules/intel/store";
@@ -15,7 +16,16 @@ import { normalizeToolResult } from "../normalize";
 import { datePresetRange, toCourtListenerSyntax } from "../query-builder";
 import { readSource } from "../service";
 import type { ReadRef, SearchHit, SearchSettings, SearchSource } from "../types";
-import type { LaneKind } from "./types";
+import { RESEARCH_MODEL_POLICY as POLICY } from "./model-policy";
+import { PLAN_INSTRUCTIONS } from "./prompts";
+import { classifyTreatment } from "./treatment";
+import type { AuthorityTreatment, LaneKind } from "./types";
+
+/** Model-derived plan: jurisdiction-aware sub-questions and extra retrieval queries per lane kind. */
+export interface ResearchPlan {
+  subQuestions: string[];
+  queries: Partial<Record<LaneKind, string[]>>;
+}
 
 /**
  * Everything the research engine needs from the outside world, so the
@@ -31,14 +41,25 @@ export interface EngineDeps {
   read(ref: ReadRef, opts: { title?: string; signal?: AbortSignal }): Promise<{ text: string; title?: string; cite?: string; url?: string; cached: boolean }>;
   /** A bounded lane agent run. Returns the lane note (and token usage when the runtime reports it). */
   laneAgent(input: { instructions: string; input: string; tools: ToolDef<never, unknown>[]; web: boolean; maxSteps: number; signal?: AbortSignal; onEvent: (e: AgentEvent) => void }): Promise<{ text: string; steps: number; usage?: TokenUsage }>;
-  /** Synthesis with streaming deltas (primary model, no tools). A plain string is accepted; an object may carry token usage. */
-  synthesize(input: { instructions: string; input: string | ResponseInput; signal?: AbortSignal; onDelta: (d: string) => void }): Promise<string | { text: string; usage?: TokenUsage }>;
+  /**
+   * Synthesis with streaming deltas (primary model, no tools). `instructions` are byte-stable per mode (cacheable prefix);
+   * `evidence` carries the numbered sources as citation-native search_result blocks. A plain string is accepted; an object
+   * may carry token usage.
+   */
+  synthesize(input: { instructions: string; input: string | ResponseInput; evidence?: SearchResultBlock[]; signal?: AbortSignal; onDelta: (d: string) => void }): Promise<string | { text: string; usage?: TokenUsage }>;
   verify(input: { answer: string; sources: { title?: string; cite?: string; url?: string; text: string }[]; signal?: AbortSignal }): Promise<VerificationResult>;
   correct(input: { instructions: string; input: string; signal?: AbortSignal }): Promise<string>;
   refine(input: { question: string; gaps: string[]; laneKinds: LaneKind[]; signal?: AbortSignal }): Promise<Partial<Record<LaneKind, string[]>>>;
   followUps(input: { question: string; answer: string; matterLine: string; signal?: AbortSignal }): Promise<string[]>;
   /** Resolve case citations on CourtListener; returns the normalised citations that resolved. */
   verifyCitationsRemote(text: string, signal?: AbortSignal): Promise<string[]>;
+  // ---- optional capabilities (absent in minimal fakes; the run degrades to the deterministic path) ----
+  /** Fast-model planning: sub-questions and per-lane queries. Runs concurrently with the first retrieval wave. */
+  planQueries?(input: { question: string; context: string; laneKinds: LaneKind[]; signal?: AbortSignal }): Promise<ResearchPlan>;
+  /** Citing-reference treatment signal for a case (never an assertion of good law). */
+  citing?(input: { opinionId: number; signal?: AbortSignal }): Promise<AuthorityTreatment>;
+  /** Resolve one reporter citation without substitution. */
+  resolveCitation?(citation: string, signal?: AbortSignal): Promise<CitationResolution>;
 }
 
 function toolCtx(signal?: AbortSignal): ToolContext {
@@ -116,6 +137,7 @@ export function mergeIntelHits(provider: SearchHit[], intel: SearchHit[]): Searc
   return [...provider, ...intel.filter((h) => !(h.url && urls.has(h.url.toLowerCase())) && !(h.cite && cites.has(h.cite.toLowerCase().replace(/\s+/g, " "))))];
 }
 
+const PLAN_SCHEMA = { type: "object", properties: { subQuestions: { type: "array", items: { type: "string" } }, lanes: { type: "array", items: { type: "object", properties: { lane: { type: "string", enum: ["controlling", "contrary", "regulatory", "record", "secondary", "fast"] }, queries: { type: "array", items: { type: "string" } } }, required: ["lane", "queries"] } } }, required: ["subQuestions", "lanes"] };
 const FOLLOWUP_SCHEMA = { type: "object", properties: { questions: { type: "array", items: { type: "string" } } }, required: ["questions"] };
 const REFINE_SCHEMA = { type: "object", properties: { refinements: { type: "array", items: { type: "object", properties: { lane: { type: "string", enum: ["controlling", "contrary", "regulatory", "record", "secondary", "fast"] }, queries: { type: "array", items: { type: "string" } } }, required: ["lane", "queries"] } } }, required: ["refinements"] };
 
@@ -181,10 +203,12 @@ export function defaultDeps(): EngineDeps {
         tools: input.tools,
         builtinTools: input.web ? [webSearchTool({ contextSize: "low" })] : [],
         model: cfg.fastModel,
-        reasoningEffort: "low",
+        taskType: POLICY.laneAgent.taskType,
+        reasoningEffort: POLICY.laneAgent.reasoningEffort,
+        cacheStablePrefix: POLICY.laneAgent.cacheStablePrefix,
         verbosity: "low",
         maxSteps: input.maxSteps,
-        maxOutputTokens: 1800,
+        maxOutputTokens: POLICY.laneAgent.maxOutputTokens,
         signal: input.signal,
         metadata: { app: "leclaude", surface: "research-lane" },
         onEvent: input.onEvent,
@@ -196,6 +220,10 @@ export function defaultDeps(): EngineDeps {
       const res = await runAgent({
         instructions: input.instructions,
         input: input.input,
+        evidence: input.evidence?.length ? input.evidence : undefined,
+        taskType: POLICY.synthesize.taskType,
+        cacheStablePrefix: POLICY.synthesize.cacheStablePrefix,
+        maxOutputTokens: POLICY.synthesize.maxOutputTokens,
         maxSteps: 1,
         verbosity: "medium",
         signal: input.signal,
@@ -210,14 +238,16 @@ export function defaultDeps(): EngineDeps {
     },
 
     async correct(input) {
-      const r = await generateText({ fast: true, reasoningEffort: "low", instructions: input.instructions, input: input.input, maxOutputTokens: 4000, signal: input.signal });
+      const r = await generateText({ fast: POLICY.correct.fast, taskType: POLICY.correct.taskType, reasoningEffort: POLICY.correct.reasoningEffort, cacheStablePrefix: POLICY.correct.cacheStablePrefix, instructions: input.instructions, input: input.input, maxOutputTokens: POLICY.correct.maxOutputTokens, signal: input.signal });
       return r.text;
     },
 
     async refine(input) {
       const r = await generateJSON<{ refinements: { lane: LaneKind; queries: string[] }[] }>({
-        fast: true,
-        reasoningEffort: "low",
+        fast: POLICY.refine.fast,
+        taskType: POLICY.refine.taskType,
+        reasoningEffort: POLICY.refine.reasoningEffort,
+        cacheStablePrefix: POLICY.refine.cacheStablePrefix,
         instructions: "You are a legal research librarian planning a second search round. For each research lane listed, write up to two precise boolean search queries (AND/OR/NOT, quoted phrases, wildcards*) that would locate authority for the unsupported claims. Skip lanes that cannot help. Under 20 words per query.",
         input: `Question: ${input.question}\nLanes: ${input.laneKinds.join(", ")}\nUnsupported claims:\n${input.gaps.map((g) => `- ${g}`).join("\n")}`,
         schema: REFINE_SCHEMA,
@@ -232,8 +262,10 @@ export function defaultDeps(): EngineDeps {
 
     async followUps(input) {
       const r = await generateJSON<{ questions: string[] }>({
-        fast: true,
-        reasoningEffort: "low",
+        fast: POLICY.followUps.fast,
+        taskType: POLICY.followUps.taskType,
+        reasoningEffort: POLICY.followUps.reasoningEffort,
+        cacheStablePrefix: POLICY.followUps.cacheStablePrefix,
         instructions: "Propose exactly three precise follow-up research questions a litigator would ask next, each bound to the matter, jurisdiction and posture in play (name the court, standard or authority where it sharpens the question). One sentence each, no numbering.",
         input: `${input.matterLine}\n\nQuestion: ${input.question}\n\nAnswer:\n${input.answer.slice(0, 6000)}`,
         schema: FOLLOWUP_SCHEMA,
@@ -242,6 +274,34 @@ export function defaultDeps(): EngineDeps {
         signal: input.signal,
       });
       return (r.questions ?? []).map((q) => q.trim()).filter(Boolean).slice(0, 3);
+    },
+
+    async planQueries(input) {
+      const r = await generateJSON<{ subQuestions: string[]; lanes: { lane: LaneKind; queries: string[] }[] }>({
+        fast: POLICY.plan.fast,
+        taskType: POLICY.plan.taskType,
+        reasoningEffort: POLICY.plan.reasoningEffort,
+        cacheStablePrefix: POLICY.plan.cacheStablePrefix,
+        instructions: PLAN_INSTRUCTIONS,
+        input: `${input.context}\nLanes: ${input.laneKinds.join(", ")}\n\nResearch question: ${input.question}`,
+        schema: PLAN_SCHEMA,
+        name: "research_plan",
+        maxOutputTokens: POLICY.plan.maxOutputTokens,
+        signal: input.signal,
+      });
+      const queries: ResearchPlan["queries"] = {};
+      for (const x of r.lanes ?? []) if (x.queries?.length) queries[x.lane] = x.queries.map((q) => q.trim()).filter(Boolean).slice(0, 2);
+      return { subQuestions: (r.subQuestions ?? []).map((q) => q.trim()).filter(Boolean).slice(0, 5), queries };
+    },
+
+    async citing(input) {
+      const r = await withTimeout(findCitingOpinions(input.opinionId, { limit: 6, signal: input.signal }), 12_000, input.signal);
+      const row = (c: (typeof r.citing)[number]) => ({ title: c.case_name ?? "Citing opinion", cite: c.citations[0], date: c.date_filed, url: c.url, snippet: c.snippet });
+      return classifyTreatment({ citing: r.citing.map(row), citingCount: r.citing_count, negative: r.negative.map(row) });
+    },
+
+    async resolveCitation(citation, signal) {
+      return (await withTimeout(Promise.resolve(resolveCitationTool.execute({ citation }, toolCtx(signal))), 15_000, signal)) as CitationResolution;
     },
 
     async verifyCitationsRemote(text, signal) {

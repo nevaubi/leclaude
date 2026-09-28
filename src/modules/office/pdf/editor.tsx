@@ -19,7 +19,7 @@ import { TopbarSlot } from "@/components/shell/app-shell";
 import { OfficeAgentPanel, saveStateLabel, useOfficeDoc, type ApplyResult, type EditProposal, type OfficeScope } from "@/modules/office/shared";
 import { KindBadge, OfficeChrome, OfficeErrorState, OfficeStatusBar, StatusItem, ToolbarSkeleton, useNarrowViewport, type ChromeMenuEntry } from "@/modules/office/shared/office-chrome";
 import "./pdf.css";
-import { clearRunsCache, clearThumbCache, downloadBlob, downloadExport, fmtBytes, pageImageForAgent, postForm, postJson, rasterizeRedactedPages, safeFilename, searchDocument } from "./client-utils";
+import { clearRunsCache, clearThumbCache, downloadBlob, downloadExport, fmtBytes, pageImageForAgent, postForm, postJson, safeFilename, searchDocument } from "./client-utils";
 import { AnnotationDialog, ApplyDialog, BatesDialog, CustomStampDialog, DecorationsDialog, MergeDialog, ShortcutsDialog, SignatureDialog, SplitDialog, type ApplyOptions } from "./dialogs";
 import { activePages, annotationStats, boundsOf, emptyModel, normalizeModel, sourceToDisplay, type PdfAnnotation, type PdfModel } from "./model";
 import { openPdf, type PDFDocumentProxy } from "./pdfjs";
@@ -248,9 +248,8 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
     setExporting("pdf");
     try {
       const m = store.getState().model;
-      let rasterizedPages: Record<number, string> | undefined;
-      if (pdfDoc && m.annotations.some((a) => a.type === "redaction" && !a.applied)) rasterizedPages = await rasterizeRedactedPages(pdfDoc, m);
-      await downloadExport({ docId: doc.id, content: m, title: doc.title, options: { flattenAnnotations: !opts.native, applyRedactions: true, bates: Boolean(m.bates && !m.bates.applied), fillForms: true, flattenForms: opts.flattenForms ?? false, rasterizedPages } }, opts.native ? "-annotated" : "");
+      // Redactions are applied on the server by removing the content under each box (verified by re-extraction).
+      await downloadExport({ docId: doc.id, content: m, title: doc.title, options: { flattenAnnotations: !opts.native, applyRedactions: true, bates: Boolean(m.bates && !m.bates.applied), fillForms: true, flattenForms: opts.flattenForms ?? false } }, opts.native ? "-annotated" : "");
     } catch (e) { toast.error(`Export failed: ${(e as Error).message}`); } finally { setExporting(null); }
   };
   const exportText = async () => { if (!doc) return; setExporting("txt"); try { const r = await fetch(`/api/office/pdf/${doc.id}/text`); if (!r.ok) throw new Error(r.statusText); downloadBlob(await r.blob(), `${safeFilename(doc.title)}.txt`); } catch (e) { toast.error((e as Error).message); } finally { setExporting(null); } };
@@ -262,12 +261,12 @@ function PdfEditor({ id, templateId, matterId, matters }: PdfEditorPageProps) {
   const doApply = async (o: ApplyOptions) => {
     if (!doc) return;
     const m = store.getState().model;
-    let rasterizedPages: Record<number, string> | undefined;
-    if (o.applyRedactions && o.rasterize && pdfDoc) { setApplyProgress("Rasterizing redacted pages…"); rasterizedPages = await rasterizeRedactedPages(pdfDoc, m, { onProgress: (d, t) => setApplyProgress(`Rasterizing redacted pages ${d}/${t}…`) }); }
-    setApplyProgress("Writing the new source PDF…");
+    setApplyProgress(o.applyRedactions && m.annotations.some((a) => a.type === "redaction" && !a.applied) ? "Removing content under redactions and verifying…" : "Writing the new source PDF…");
     try {
-      const r = await postJson<{ model: PdfModel }>(`/api/office/pdf/${doc.id}/burn`, { content: m, applyRedactions: o.applyRedactions, flattenAnnotations: o.flattenAnnotations, flattenForms: o.flattenForms, bates: o.bates, rasterizedPages });
-      afterSourceChange(r.model, "Edits applied to the source PDF");
+      const r = await postJson<{ model: PdfModel; report?: { redaction?: { pages: { page: number; method: string }[]; verification?: { status: string } } | null } }>(`/api/office/pdf/${doc.id}/burn`, { content: m, applyRedactions: o.applyRedactions, flattenAnnotations: o.flattenAnnotations, flattenForms: o.flattenForms, bates: o.bates, forceRasterize: o.applyRedactions && o.rasterize });
+      const red = r.report?.redaction;
+      const rastered = red?.pages.filter((p) => p.method === "rasterized").length ?? 0;
+      afterSourceChange(r.model, red ? `Redactions applied and verified on ${red.pages.length} page${red.pages.length === 1 ? "" : "s"}${rastered ? ` (${rastered} rasterized)` : ""}` : "Edits applied to the source PDF");
     } catch (e) { toast.error(`Apply failed: ${(e as Error).message}`); throw e; } finally { setApplyProgress(null); }
   };
   const insertBlank = () => store.getState().applyOp({ op: "insert_blank_page", afterDisplay: currentPage });

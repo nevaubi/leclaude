@@ -63,6 +63,8 @@ export interface PendingTurn {
   claims: { supported: number; unsupported: number; contradicted: number };
   metrics?: RunMetrics;
   outcome?: RunOutcome;
+  /** "fast" (one pass, orientation) or "deep" (lanes, reads, verification): shown so the two never look alike (§26). */
+  mode?: string;
 }
 
 export interface ResearchError {
@@ -133,7 +135,7 @@ export function useResearch(opts: { onRunDone?: (r: { runId: string; threadId: s
           threadId: ev.threadId ?? s.threadId,
           threadTitle: s.threadTitle || ev.question,
           stale: ev.threadReplaced ? "The thread you were in no longer exists on the server, so this question started a new thread." : s.stale,
-          pending: s.pending ? { ...s.pending, runId: ev.runId, stage: "planning", current: "Planning research lanes" } : s.pending,
+          pending: s.pending ? { ...s.pending, runId: ev.runId, stage: "planning", mode: ev.mode, current: ev.mode === "fast" ? "Fast orientation: one pass over the providers" : "Planning research lanes and sub-questions" } : s.pending,
         }));
         break;
       case "plan.created":

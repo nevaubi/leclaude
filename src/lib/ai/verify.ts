@@ -3,6 +3,9 @@ import { generateJSON } from "./agent";
 import { aiConfig } from "./config";
 import type { Provenance } from "@/lib/integrity/types";
 
+/** Characters of each source shown to the verifier: room for focused, ¶-numbered passages without cutting them off. */
+const SOURCE_CHARS = 9000;
+
 export interface ClaimVerdict {
   claim: string;
   status: "supported" | "unsupported" | "contradicted";
@@ -62,7 +65,7 @@ export async function verifyClaims(input: { answer: string; sources: VerifySourc
   const checkedAt = new Date().toISOString();
   const sources = input.sources.filter((s) => s.text?.trim()).slice(0, 24);
   if (!sources.length) return unverified(checkedAt);
-  const sourceBlock = sources.map((s, i) => `[${i}] ${s.title ?? s.cite ?? s.url ?? "source"}${s.cite ? ` (${s.cite})` : ""}\n${s.text.slice(0, 6000)}`).join("\n\n");
+  const sourceBlock = sources.map((s, i) => `[${i}] ${s.title ?? s.cite ?? s.url ?? "source"}${s.cite ? ` (${s.cite})` : ""}\n${s.text.slice(0, SOURCE_CHARS)}`).join("\n\n");
   const res = await generateJSON<{ verdicts: ClaimVerdict[] }>({
     fast: input.fast ?? true,
     reasoningEffort: "low",

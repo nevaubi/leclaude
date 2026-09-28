@@ -5,7 +5,7 @@
  * which mutate it as they propose edits so subsequent reads see the new state.
  */
 import type { OfficeScope } from "@/modules/office/shared/types";
-import { docStats, estimatePages, flattenBlocks, type DocBlock, type DocSection, type DocStats, type PMNode } from "./doc-model";
+import { blockHash, docStats, estimatePages, flattenBlocks, hashString, wordCount, type DocBlock, type DocSection, type DocStats, type PMNode } from "./doc-model";
 
 export type SnapshotBlock = DocBlock;
 
@@ -20,6 +20,12 @@ export interface WordSnapshot {
   comments?: { id: string; anchor: string; body: string; author: string; resolved?: boolean; quote?: string }[];
   matterId?: string | null;
   templateId?: string | null;
+  /** Hash of the document the client sent (all block hashes); proposals record it as their base version. */
+  version: string;
+  /** Word styles available in an imported .docx (paragraph/character), for apply_style. */
+  styles?: { id: string; name: string; type: string; outline?: number }[];
+  /** Bookmarks defined in the document (cross-reference targets). */
+  bookmarks?: string[];
 }
 
 export interface BuildSnapshotOptions {
@@ -30,7 +36,17 @@ export interface BuildSnapshotOptions {
   comments?: WordSnapshot["comments"];
   matterId?: string | null;
   templateId?: string | null;
+  styles?: WordSnapshot["styles"];
+  bookmarks?: string[];
 }
+
+/** Document version: hash over the ordered block hashes. */
+export function snapshotVersion(blocks: { id: string; hash?: string; type: string; level?: number; text: string }[]): string {
+  return hashString(blocks.map((b) => `${b.id}:${b.hash ?? blockHash(b)}`).join(","));
+}
+
+/** Recompute derived fields after a tool changed a block's text/type. */
+export function touchBlock(b: SnapshotBlock) { b.wordCount = wordCount(b.text); b.hash = blockHash(b); }
 
 export function buildSnapshot(doc: PMNode, opts: BuildSnapshotOptions): WordSnapshot {
   const { blocks, sections } = flattenBlocks(doc);
@@ -46,6 +62,9 @@ export function buildSnapshot(doc: PMNode, opts: BuildSnapshotOptions): WordSnap
     comments: opts.comments,
     matterId: opts.matterId ?? null,
     templateId: opts.templateId ?? null,
+    version: snapshotVersion(blocks),
+    ...(opts.styles?.length ? { styles: opts.styles.slice(0, 80) } : {}),
+    ...(opts.bookmarks?.length ? { bookmarks: opts.bookmarks.slice(0, 200) } : {}),
   };
 }
 
@@ -70,9 +89,14 @@ export function parseSnapshot(raw: unknown): WordSnapshot {
     comments: Number((b as SnapshotBlock).comments ?? 0),
     footnotes: (b as SnapshotBlock).footnotes,
     tracked: (b as SnapshotBlock).tracked,
+    changes: Array.isArray((b as SnapshotBlock).changes) ? (b as SnapshotBlock).changes : undefined,
+    fields: Array.isArray((b as SnapshotBlock).fields) ? (b as SnapshotBlock).fields : undefined,
+    styleId: (b as SnapshotBlock).styleId,
     image: (b as SnapshotBlock).image,
   }));
   if (blocks.some((b) => !b.id)) throw new Error("every snapshot block needs an id");
+  // The hash is recomputed server-side from the text the client sent; a client-supplied hash is never trusted.
+  for (const b of blocks) b.hash = blockHash(b);
   const sections = Array.isArray(s.sections) ? s.sections : deriveSections(blocks);
   const stats = (s.stats ?? {}) as Partial<WordSnapshot["stats"]>;
   return {
@@ -86,6 +110,9 @@ export function parseSnapshot(raw: unknown): WordSnapshot {
     comments: Array.isArray(s.comments) ? s.comments : undefined,
     matterId: s.matterId ?? null,
     templateId: s.templateId ?? null,
+    version: snapshotVersion(blocks),
+    styles: Array.isArray(s.styles) ? s.styles.slice(0, 80) : undefined,
+    bookmarks: Array.isArray(s.bookmarks) ? s.bookmarks.slice(0, 200).map(String) : undefined,
   };
 }
 
@@ -143,6 +170,7 @@ export function describeBlock(b: SnapshotBlock): string {
   if (b.listInfo) parts.push(`${LIST_LABEL[b.listInfo.kind] ?? b.listInfo.kind} L${b.listInfo.depth}#${b.listInfo.position}`);
   if (b.table) parts.push(`${b.table.header ? "th" : "td"} ${b.table.row},${b.table.col}`);
   if (b.align) parts.push(b.align);
+  if (b.styleId) parts.push(`style:${b.styleId}`);
   return parts.length ? parts.join(" ") : "Body";
 }
 
@@ -151,40 +179,41 @@ function line(b: SnapshotBlock, maxChars: number): string {
   if (b.comments) flags.push(`${b.comments} comment${b.comments > 1 ? "s" : ""}`);
   if (b.tracked) flags.push(`tracked +${b.tracked.insertions}/−${b.tracked.deletions}`);
   if (b.footnotes) flags.push(`${b.footnotes} fn`);
+  if (b.changes?.length) flags.push(`changes by ${Array.from(new Set(b.changes.map((c) => c.author))).join(", ")}`);
+  if (b.fields?.length) flags.push(`fields ${b.fields.map((f) => f.split(/\s+/)[0]).join(",")}`);
   if (b.marks?.length) flags.push(b.marks.slice(0, 3).join("; "));
   const text = b.text.length > maxChars ? `${b.text.slice(0, maxChars)}… [${b.wordCount} words]` : b.text;
   return `¶${b.index} [id:${b.id}] (${describeBlock(b)})${flags.length ? ` {${flags.join(" | ")}}` : ""} ${text}`;
 }
 
 /**
- * Compact listing for the prompt. Full text for the scoped region; for very
- * long documents outside the scope only the outline is printed. Kept under
- * ~35k characters.
+ * Compact context for the prompt: header, outline and — only for small documents or the scoped region — full
+ * block text. Everything else is a one-line preview per block (id, ¶, style, first words); the agent reads exact
+ * text with get_paragraphs/get_section (targeted range reads) instead of carrying the whole document in context.
  */
-export function renderSnapshot(s: WordSnapshot, scope: OfficeScope | null, budget = 35_000): string {
+export function renderSnapshot(s: WordSnapshot, scope: OfficeScope | null, budget = 16_000): string {
   const header = [
     `Title: ${s.title}`,
-    `Stats: ${s.stats.words} words · ${s.blocks.length} blocks · ${s.sections.length} sections · ~${s.stats.pages} pages · tables ${s.stats.tables} · images ${s.stats.images} · footnotes ${s.stats.footnotes} · comments ${s.stats.comments}`,
+    `Version: ${s.version} · ${s.stats.words} words · ${s.blocks.length} blocks · ${s.sections.length} sections · ~${s.stats.pages} pages · tables ${s.stats.tables} · images ${s.stats.images} · footnotes ${s.stats.footnotes} · comments ${s.stats.comments}`,
     `Track changes: ${s.trackChangesOn ? "ON (edits will be tracked)" : "OFF"}${s.stats.insertions + s.stats.deletions ? ` · pending: ${s.stats.insertions} insertions, ${s.stats.deletions} deletions` : ""}`,
     s.page ? `Page: ${s.page.size} · ${s.page.orientation} · margins ${s.page.margins}` : "",
+    s.styles?.length ? `Word styles: ${s.styles.filter((x) => x.type === "paragraph").slice(0, 30).map((x) => x.id).join(", ")}` : "",
     s.selection?.text ? `Selection: "${s.selection.text.slice(0, 600)}" (blocks ${s.selection.blockIds.join(", ")})` : "",
   ].filter(Boolean);
 
-  // Decide which blocks get full text.
   let focusIds: Set<string> | null = null;
   if (scope && scope.kind === "section" && scope.ref) focusIds = new Set(sectionBlocks(s, scope.ref).map((b) => b.id));
   else if (scope && scope.kind === "paragraph" && scope.ref) focusIds = new Set([scope.ref]);
   else if (scope && scope.kind === "selection" && s.selection?.blockIds?.length) focusIds = new Set(s.selection.blockIds);
 
-  const outlineLine = (sec: DocSection) => `${"  ".repeat(Math.max(0, sec.level - 1))}¶${sec.index} [id:${sec.id}] H${sec.level} ${sec.title.slice(0, 120)} (${sec.wordCount} words, ${sec.blockCount} blocks)`;
+  const outlineLine = (sec: DocSection) => `${"  ".repeat(Math.max(0, sec.level - 1))}¶${sec.index} [id:${sec.id}] H${sec.level} ${sec.title.slice(0, 100)} (${sec.wordCount}w)`;
   let outline: string[];
   if (!s.sections.length) outline = ["Outline: (no headings)"];
   else {
     const lines = s.sections.map(outlineLine);
-    const outlineBudget = Math.floor(budget * 0.25);
+    const outlineBudget = Math.floor(budget * 0.3);
     if (lines.join("\n").length <= outlineBudget) outline = ["Outline:", ...lines];
     else {
-      // Keep the sections nearest the focus (or the first ones) and summarize the rest.
       const focusIdx = focusIds ? s.sections.findIndex((sec) => focusIds!.has(sec.id)) : 0;
       const center = Math.max(0, focusIdx);
       const keep: number[] = [];
@@ -202,25 +231,22 @@ export function renderSnapshot(s: WordSnapshot, scope: OfficeScope | null, budge
 
   const fixed = [...header, "", ...outline, ""].join("\n");
   const fullText = s.blocks.map((b) => line(b, 1200)).join("\n");
-  if (fixed.length + fullText.length + 20 <= budget) return `${fixed}Blocks:\n${fullText}`;
+  // Small documents: the whole text is cheaper than the extra read round trip.
+  if (!focusIds && fixed.length + fullText.length <= Math.min(budget, 9_000)) return `${fixed}Blocks:\n${fullText}`;
+  if (focusIds && fixed.length + fullText.length <= Math.min(budget, 6_000)) return `${fixed}Blocks:\n${fullText}`;
 
-  // Over budget: full text in focus (or the first part of the document), short previews elsewhere, then a hard cap.
   const remaining = Math.max(2000, budget - fixed.length - 200);
-  const focusChars = focusIds ? s.blocks.filter((b) => focusIds!.has(b.id)).reduce((n, b) => n + Math.min(b.text.length, 1200) + 60, 0) : 0;
-  const perBlock = Math.max(0, remaining - focusChars) / Math.max(1, s.blocks.length - (focusIds?.size ?? 0));
-  const previewChars = Math.max(0, Math.min(160, Math.floor(perBlock) - 50));
   const lines: string[] = [];
   let used = 0;
+  let omitted = 0;
   for (const b of s.blocks) {
     let l: string;
     if (focusIds?.has(b.id)) l = line(b, 1200);
-    else if (!focusIds && used < remaining * 0.6) l = line(b, 500);
-    else if (previewChars >= 24) l = line(b, previewChars);
-    else l = `¶${b.index} [id:${b.id}] (${describeBlock(b)}) ${b.wordCount}w`;
+    else if (used < remaining * 0.85) l = line(b, 60);
+    else { omitted++; continue; }
     lines.push(l);
     used += l.length + 1;
-    if (used > remaining) { lines.push(`… ${s.blocks.length - lines.length} more blocks omitted (use get_paragraphs / get_section)`); break; }
   }
-  const body = lines.join("\n");
-  return `${fixed}Blocks (text truncated outside scope; use get_paragraphs/get_section for full text):\n${body}`;
+  if (omitted) lines.push(`… ${omitted} more blocks not listed (use get_outline / get_paragraphs with from_index/to_index)`);
+  return `${fixed}Blocks (${focusIds ? "full text in scope; " : ""}text truncated outside scope — read exact text with get_paragraphs/get_section before editing):\n${lines.join("\n")}`;
 }

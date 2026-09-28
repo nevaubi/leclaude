@@ -5,6 +5,8 @@ import { markdownToDoc } from "@/modules/office/shared/markdown-doc";
 import { ensureBlockIds, docStats, type PMNode } from "./doc-model";
 import { htmlToDoc } from "./html-import";
 import { settingsForTemplate } from "./constants";
+import { docxImageBlobId, docxImageSrc } from "./ooxml/images";
+import { readDocx } from "./ooxml/reader";
 
 const STYLE_MAP = [
   "p[style-name='Title'] => h1.title:fresh",
@@ -28,15 +30,45 @@ const STYLE_MAP = [
 ];
 
 /**
- * Import a Word-editor file (.docx via mammoth, .html, .md, .txt) into the
- * TipTap content model. Embedded images are stored as blobs.
+ * Import a .docx with the direct OOXML reader: styles, numbering, tables, sections, notes, tracked changes,
+ * comments, fields, bookmarks and images map onto the editor model, and the original package (stored by the
+ * import route as meta.originalBlobId) is what the package-preserving export writes back into.
+ * Embedded images are stored as content-addressed blobs. Throws when the package cannot be read.
+ */
+export async function importDocxDirect(bytes: Uint8Array, opts: { persistImages?: boolean } = {}) {
+  const read = await readDocx(bytes, {
+    storeImage: (data, mime, name, sha) => {
+      if (opts.persistImages !== false) {
+        const id = docxImageBlobId(sha);
+        if (!blobs.meta(id)) blobs.put(data, mime, { id, name, meta: { source: "docx-import", sha256: sha } });
+      }
+      return docxImageSrc(sha);
+    },
+  });
+  return read;
+}
+
+/**
+ * Import a Word-editor file (.docx via the OOXML reader with mammoth as fallback, .html, .md, .txt) into the
+ * TipTap content model.
  */
 export async function importDocument(bytes: Uint8Array, filename: string): Promise<{ title: string; content: unknown; meta?: Record<string, unknown> }> {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";
   const title = filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Imported document";
   let doc: PMNode;
   const meta: Record<string, unknown> = { importedFrom: ext, settings: settingsForTemplate(null) };
+  let direct: Awaited<ReturnType<typeof importDocxDirect>> | null = null;
   if (ext === "docx") {
+    try { direct = await importDocxDirect(bytes); } catch (e) { meta.importMessages = [`OOXML reader failed (${(e as Error).message}); used the HTML fallback.`]; }
+  }
+  if (direct) {
+    doc = direct.doc;
+    meta.settings = direct.settings;
+    meta.docx = direct.meta;
+    meta.importer = "ooxml";
+    if (direct.meta.warnings.length) meta.importMessages = direct.meta.warnings.slice(0, 10);
+  } else if (ext === "docx") {
+    meta.importer = "mammoth";
     const result = await mammoth.convertToHtml(
       { buffer: Buffer.from(bytes) },
       {
@@ -50,7 +82,7 @@ export async function importDocument(bytes: Uint8Array, filename: string): Promi
       },
     );
     doc = htmlToDoc(result.value);
-    meta.importMessages = result.messages.slice(0, 10).map((m) => `${m.type}: ${m.message}`);
+    meta.importMessages = [...((meta.importMessages as string[] | undefined) ?? []), ...result.messages.slice(0, 10).map((m) => `${m.type}: ${m.message}`)];
   } else if (ext === "html" || ext === "htm") {
     doc = htmlToDoc(Buffer.from(bytes).toString("utf8"));
   } else if (ext === "md" || ext === "markdown") {

@@ -4,6 +4,7 @@
  * run starts and tests can pin the behaviour.
  */
 import type { SearchSettings, SearchSource } from "../types";
+import { jurisdictionByKey } from "../jurisdictions";
 import { toCourtListenerSyntax } from "../query-builder";
 import type { LaneKind, ResearchLane, ResearchMode, ResearchSource } from "./types";
 
@@ -18,11 +19,11 @@ export interface PlanInput {
 }
 
 const LANE_TOOLS: Record<LaneKind, string[]> = {
-  controlling: ["search_case_law", "get_opinion_text", "search_statutes", "fetch_url", "verify_citations"],
-  contrary: ["search_case_law", "get_opinion_text", "verify_citations"],
-  regulatory: ["search_cfr", "get_cfr_section", "search_federal_register", "get_federal_register_document", "fetch_url"],
-  record: ["search_dockets", "get_docket_entries", "search_ediscovery", "get_ediscovery_document", "get_matter_context"],
-  secondary: ["web_search", "fetch_url", "search_library", "get_library_item"],
+  controlling: ["search_case_law", "get_opinion", "find_citing_opinions", "resolve_citation", "compare_authorities", "build_citation", "search_statutes", "fetch_url", "verify_citations"],
+  contrary: ["search_case_law", "get_opinion", "find_citing_opinions", "resolve_citation", "compare_authorities", "verify_citations"],
+  regulatory: ["search_cfr", "search_federal_register", "fetch_url", "build_citation"],
+  record: ["search_dockets", "search_matter_documents", "read_matter_document", "get_matter_context"],
+  secondary: ["web_search", "fetch_url", "search_library"],
   fast: ["search_case_law", "search_statutes", "search_cfr", "search_library"],
 };
 
@@ -109,10 +110,11 @@ export function planLanes(input: PlanInput): ResearchLane[] {
   // Later rounds only re-run lanes that received refinements (the thin ones); round 1 keeps everything.
   const planned = round > 1 && input.refinements ? lanes.filter((l) => input.refinements?.[l.kind]?.length) : lanes;
   const out = (planned.length ? planned : lanes).slice(0, 5);
-  // The contrary lane builds on what the controlling lane found (authority that rejects or limits it), so it waits for it.
+  // The contrary lane builds on what the controlling lane found (authority that rejects or limits it).
   const controlling = out.find((l) => l.kind === "controlling");
   const contrary = out.find((l) => l.kind === "contrary");
-  if (controlling && contrary) contrary.dependsOn = [controlling.id];
+  // Soft dependency: it starts at once (its own adverse queries) and, after its first wave, targets what the controlling lane found.
+  if (controlling && contrary) contrary.after = [controlling.id];
   // Matter documents were requested but no matter is selected: say so on the lane that would have read them.
   if (has("ediscovery") && !input.hasMatter && out.length) {
     const host = out.find((l) => l.kind === "record") ?? out[0];
@@ -144,4 +146,37 @@ export function priorQueries(lane: Pick<ResearchLane, "kind">, priors: { sources
 /** Tools relevant to a lane, filtered against what the toolkit exposes. */
 export function laneToolNames(lane: ResearchLane): string[] {
   return lane.tools;
+}
+
+/** Ordinary legal words that read better lower-cased mid-sentence (a capitalised first word that is not on this list is treated as a name or acronym). */
+const LOWERCASE_LEAD = new Set(["the", "a", "an", "government", "federal", "state", "court", "courts", "manufacturer", "manufacturers", "plaintiff", "plaintiffs", "defendant", "defendants", "removal", "preemption", "standard", "statute", "statutes", "regulation", "regulations", "consequential", "punitive", "strict", "comparative", "joint", "class", "expert", "discovery", "deposition", "privilege", "attorney", "work", "damages", "liability", "negligence", "breach", "contract", "warranty", "design", "failure", "product", "products", "jurisdiction", "venue", "choice", "forum", "collateral", "summary", "motion", "motions", "rule", "rules", "evidence", "testimony", "notice", "reporting", "liability"]);
+
+/** The proposition inside a question, for deterministic follow-ups ("Is X available in Y?" → "X available in Y"). */
+export function questionTopic(question: string): string {
+  let t = question.replace(/\s+/g, " ").replace(/[?!.\s]+$/, "").trim();
+  t = t.replace(/^(is|are|was|were|does|do|did|can|could|may|might|must|should|would|will|has|have|had)\s+(?:(?:a|an|the)\s+)?/i, "");
+  t = t.replace(/^(what|which|when|how|whether|why|where|who)\s+(?:(?:is|are|does|do|did|can|must|should|would|will)\s+)?(?:(?:the|a|an)\s+)?/i, "");
+  if (!t) return question.trim();
+  // Lower-case a leading ordinary word ("Removal…" → "removal…") but leave acronyms and case names alone ("TSCA", "PAGA", "Boyle v.").
+  if (/^[A-Z][a-z]+\s/.test(t) && !/^[A-Z][a-z]+\s+v\.\s/.test(t) && LOWERCASE_LEAD.has(t.split(" ")[0].toLowerCase())) t = t.charAt(0).toLowerCase() + t.slice(1);
+  return t.length > 140 ? t.slice(0, 139).trimEnd() + "…" : t;
+}
+
+
+/**
+ * Deterministic, jurisdiction-aware sub-questions (the fast-model plan refines them when available).
+ * Always includes the adverse-authority question in deep mode.
+ */
+export function planSubQuestions(input: { question: string; settings: SearchSettings; mode: ResearchMode; hasMatter: boolean; matterName?: string }): string[] {
+  const j = jurisdictionByKey(input.settings.jurisdiction);
+  const label = j.label.split(" (")[0];
+  const where = j.key === "all-federal" ? "the federal courts" : j.group === "State" ? `${label} courts` : `the ${label}`;
+  const topic = questionTopic(input.question);
+  const has = (s: SearchSource) => input.settings.sources.includes(s);
+  const out = [`What rule or standard governs ${topic} in ${where}, and which authority binds there?`];
+  if (input.mode === "fast") return out;
+  if (has("caselaw")) out.push(`What authority rejects, distinguishes or limits that rule, and is there a split outside ${where}?`);
+  if (has("statutes") || has("regulations") || has("federal_register")) out.push(`Which statutes or regulations control ${topic}, and are they current?`);
+  if (input.hasMatter && (has("ediscovery") || has("dockets"))) out.push(`What does the record in ${input.matterName ?? "the matter"} show on ${topic}?`);
+  return out;
 }

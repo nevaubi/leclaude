@@ -28,6 +28,7 @@ export function ActivityStrip({ pending, lanes, sources, onStop, onRetry, classN
     <div className={cn("rounded-md border bg-card font-sans text-xs", live && "border-primary/30", failed && "border-destructive/40", className)} data-activity-strip role="status" aria-live="polite">
       <div className="flex items-center gap-2 px-2.5 py-1.5">
         {icon}
+        {pending.mode && <span data-mode={pending.mode} className={cn("shrink-0 rounded px-1 py-px text-[10px] font-medium uppercase tracking-wide", pending.mode === "fast" ? "bg-warning/15 text-warning-foreground dark:text-warning" : "bg-muted text-muted-foreground")} title={pending.mode === "fast" ? "Fast orientation: one lane, at most two sources read, lighter verification" : "Deep research: parallel lanes including adverse authority, sources read in full, claims checked"}>{pending.mode === "fast" ? "Fast" : "Deep"}</span>}
         <span className={cn("min-w-0 flex-1 truncate", failed ? "text-destructive" : "text-foreground")} title={label}>{label}</span>
         <span className="hidden items-center gap-2 tabular text-[11px] text-muted-foreground sm:flex">
           {lanes.length > 0 && <span>{settledLanes.length}/{lanes.length} lanes</span>}
@@ -74,7 +75,7 @@ export function ActivityStrip({ pending, lanes, sources, onStop, onRetry, classN
 
 function LaneRow({ lane }: { lane: LaneView }) {
   const active = lane.status === "queued" || lane.status === "retrieving" || lane.status === "reading";
-  const statusText = lane.status === "queued" ? (lane.lane.dependsOn?.length ? "waiting" : "queued") : lane.status === "retrieving" ? "searching" : lane.status === "reading" ? "reading" : lane.status === "timeout" ? "timed out" : lane.status === "skipped" ? "skipped" : lane.status === "stopped" ? "stopped" : lane.status === "error" ? "failed" : lane.error ? "done, with failures" : "done";
+  const statusText = lane.status === "queued" ? (lane.lane.dependsOn?.length ? "waiting" : "queued") : lane.status === "retrieving" && lane.lane.after?.length ? "searching · targets leading cases" : lane.status === "retrieving" ? "searching" : lane.status === "reading" ? "reading" : lane.status === "timeout" ? "timed out" : lane.status === "skipped" ? "skipped" : lane.status === "stopped" ? "stopped" : lane.status === "error" ? "failed" : lane.error ? "done, with failures" : "done";
   return (
     <li className="flex min-w-0 items-center gap-1.5" title={lane.error}>
       {lane.status === "timeout" ? <TimerOff className="size-3 shrink-0 text-warning-foreground dark:text-warning" /> : lane.status === "skipped" ? <SkipForward className="size-3 shrink-0 text-muted-foreground" /> : <span className={cn("size-1.5 shrink-0 rounded-full", lane.status === "done" && !lane.error ? "bg-success" : lane.status === "done" ? "bg-warning" : lane.status === "error" ? "bg-destructive" : lane.status === "stopped" ? "bg-muted-foreground" : active ? "bg-primary animate-pulse-soft" : "bg-muted-foreground/50")} />}

@@ -189,3 +189,17 @@ export function buildTemplateSection(id: TemplateSectionId, ctx: { matter?: Matt
     case "exhibit_list": return exhibitList();
   }
 }
+
+/**
+ * Table of contents as a real Word TOC field: the entries built from the current headings are the field's cached
+ * result, and the field is marked dirty so Word rebuilds it (with page numbers) when the file is opened.
+ */
+export function tableOfContentsField(sections: DocSection[]): PMNode[] {
+  const blocks = tableOfContents(sections);
+  const entries = blocks.slice(1);
+  if (!entries.length) return blocks;
+  const first = entries[0], last = entries[entries.length - 1];
+  first.content = [{ type: "docxInline", attrs: { kind: "fieldBegin", instr: " TOC \\o \"1-3\" \\h \\z \\u ", dirty: true } }, { type: "docxInline", attrs: { kind: "fieldSep" } }, ...(first.content ?? [])];
+  last.content = [...(last.content ?? []), { type: "docxInline", attrs: { kind: "fieldEnd" } }];
+  return blocks;
+}

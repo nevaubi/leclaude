@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 import { boundingRange, colToLetter, iterateRange, letterToCol, normalizeRange, parseA1, parseRange, rangeToA1, toA1, type RangeRef } from "./a1";
 
 export type CellValue = string | number | boolean | null;
-export type CellType = "n" | "s" | "b" | "d";
+export type CellType = "n" | "s" | "b" | "d" | "e";
 export type StyleId = string;
 
 export interface Cell {
@@ -17,12 +17,18 @@ export interface Cell {
   f?: string;
   /** Style id into Workbook.styles. */
   s?: StyleId;
-  /** Type hint: number, string, boolean, date (ISO yyyy-mm-dd string in v). */
+  /** Type hint: number, string, boolean, date (ISO yyyy-mm-dd string in v), error literal. */
   t?: CellType;
+  /** Array-formula range anchored at this cell (e.g. "C1:C5"); only on the anchor cell of an array formula. */
+  ar?: string;
 }
 
-export type HAlign = "left" | "center" | "right";
-export type VAlign = "top" | "middle" | "bottom";
+export type HAlign = "left" | "center" | "right" | "justify" | "fill" | "centerContinuous" | "distributed";
+export type VAlign = "top" | "middle" | "bottom" | "justify" | "distributed";
+export type BorderLineStyle = "thin" | "medium" | "thick" | "dashed" | "dotted" | "double" | "hair" | "mediumDashed" | "dashDot" | "mediumDashDot" | "dashDotDot" | "mediumDashDotDot" | "slantDashDot";
+export interface BorderEdge { style: BorderLineStyle; color?: string }
+/** Per-edge borders (xlsx fidelity). When present they take precedence over the legacy `border` shorthand. */
+export interface CellBorders { top?: BorderEdge; right?: BorderEdge; bottom?: BorderEdge; left?: BorderEdge; diagonal?: BorderEdge; diagonalUp?: boolean; diagonalDown?: boolean }
 export type BorderSpec = "none" | "thin" | "medium" | "thick" | "bottom" | "top" | "outline" | "all";
 
 export type NumFmt = "General" | "0" | "0.00" | "#,##0" | "#,##0.00" | "$#,##0.00" | "$#,##0" | "0%" | "0.00%" | "yyyy-mm-dd" | "mmm d yyyy" | "m/d/yyyy" | "text" | (string & {});
@@ -43,6 +49,21 @@ export interface CellStyle {
   border?: BorderSpec;
   fontSize?: number;
   fontFamily?: string;
+  /** Underline variant beyond a single underline. */
+  underlineStyle?: "double" | "singleAccounting" | "doubleAccounting";
+  vertAlign?: "superscript" | "subscript";
+  borders?: CellBorders;
+  indent?: number;
+  /** Text rotation in degrees (0–180 per OOXML, 255 = vertical stacked). */
+  rotation?: number;
+  shrink?: boolean;
+  /** Non-solid fill pattern (OOXML patternType); `fill` is the pattern foreground, `fillBg` its background. */
+  fillPattern?: string;
+  fillBg?: string;
+  /** Cell protection: Excel's default is locked; stored only when unlocked (false). */
+  locked?: boolean;
+  /** Hide the formula when the sheet is protected. */
+  hideFormula?: boolean;
 }
 
 export type ChartType = "bar" | "line" | "pie" | "area" | "scatter";
@@ -59,6 +80,10 @@ export interface SheetChart {
   position: { x: number; y: number; w: number; h: number };
   hasHeader?: boolean;
   stacked?: boolean;
+  /** Bar orientation for bar charts (default column / vertical bars). */
+  horizontal?: boolean;
+  /** Imported chart provenance: the original chart part and a fingerprint of this model at import time. Unchanged charts keep their original part on export. */
+  xlsx?: { part: string; fp: string };
 }
 
 export type CFRule =
@@ -70,13 +95,26 @@ export type CFRule =
   | { kind: "dueBefore"; date: string /* yyyy-mm-dd or "today" */; days?: number }
   | { kind: "top"; count: number; bottom?: boolean }
   | { kind: "blank" }
-  | { kind: "duplicate" };
+  | { kind: "duplicate" }
+  /** Generic OOXML cellIs rule; formulas are Excel expressions (constants or references relative to the range's top-left cell). */
+  | { kind: "cellIs"; operator: CFOperator; formulas: string[] }
+  /** Formula rule written for the range's top-left cell; relative references shift per cell. */
+  | { kind: "expression"; formula: string }
+  | { kind: "colorScale"; stops: CFStop[] }
+  | { kind: "dataBar"; color: string; min?: Omit<CFStop, "color">; max?: Omit<CFStop, "color"> }
+  /** An imported rule this model does not interpret (preserved verbatim on export when the workbook keeps its original styles part). */
+  | { kind: "raw"; xml: string };
+
+export type CFOperator = "greaterThan" | "lessThan" | "between" | "notBetween" | "equal" | "notEqual" | "greaterThanOrEqual" | "lessThanOrEqual";
+export interface CFStop { type: "min" | "max" | "num" | "percent" | "percentile" | "formula"; value?: string; color: string }
 
 export interface ConditionalFormat {
   id: string;
   range: string;
   rule: CFRule;
   style: CellStyle;
+  priority?: number;
+  stopIfTrue?: boolean;
 }
 
 export interface FilterCriteria {
@@ -94,13 +132,32 @@ export interface SheetFilter {
 export interface DataValidation {
   id: string;
   range: string;
-  kind: "list" | "number" | "date";
+  kind: "list" | "number" | "date" | "whole" | "decimal" | "textLength" | "time" | "custom";
   list?: string[];
+  /** List source as a range/formula instead of literal values (e.g. "Lists!$A$1:$A$9"). */
+  listSource?: string;
   min?: number;
   max?: number;
+  operator?: "between" | "notBetween" | "equal" | "notEqual" | "greaterThan" | "lessThan" | "greaterThanOrEqual" | "lessThanOrEqual";
+  /** Raw OOXML formulas when the rule is not expressible with min/max (custom rules, cell references). */
+  formula1?: string;
+  formula2?: string;
   allowBlank?: boolean;
+  /** Input prompt. */
   message?: string;
+  promptTitle?: string;
+  errorTitle?: string;
+  error?: string;
+  errorStyle?: "stop" | "warning" | "information";
+  /** OOXML showDropDown=1 hides the in-cell dropdown. */
+  hideDropDown?: boolean;
 }
+
+export interface Hyperlink { ref: string; target?: string; location?: string; tooltip?: string; display?: string }
+export interface CellNote { author?: string; text: string }
+
+/** Per-sheet print settings (xlsx pageSetup / margins / print titles). Unset fields inherit Workbook.pageSetup. */
+export type SheetPageSetup = Partial<PageSetup>;
 
 export interface Sheet {
   id: string;
@@ -117,6 +174,25 @@ export interface Sheet {
   /** Tab color (hex). */
   color?: string;
   hidden?: boolean;
+  veryHidden?: boolean;
+  /** Hidden rows (1-based row numbers) and columns (letters). */
+  hiddenRows?: number[];
+  hiddenCols?: string[];
+  /** Default column width / row height in pixels (xlsx sheetFormatPr); unset = app defaults. */
+  defaultColWidth?: number;
+  defaultRowHeight?: number;
+  /** Whole-column / whole-row default styles (xlsx <col style>, <row s customFormat>). */
+  colStyles?: Record<string, StyleId>;
+  rowStyles?: Record<string, StyleId>;
+  /** Active cell and selected ranges saved with the sheet view. */
+  selection?: { activeCell: string; sqref: string };
+  view?: { showGridLines?: boolean; zoom?: number; rightToLeft?: boolean };
+  hyperlinks?: Hyperlink[];
+  /** Cell notes (xlsx comments), keyed by A1 ref. */
+  notes?: Record<string, CellNote>;
+  pageSetup?: SheetPageSetup;
+  /** Sheet-scoped defined names (name → reference). */
+  localNames?: Record<string, string>;
 }
 
 export interface PageSetup {
@@ -129,6 +205,36 @@ export interface PageSetup {
   fitToPage?: boolean;
   gridlines?: boolean;
   repeatHeaderRows?: number;
+  /** Print titles columns, e.g. "A:B". */
+  repeatCols?: string;
+  scale?: number;
+  fitToWidth?: number;
+  fitToHeight?: number;
+  /** OOXML paperSize id when it is not one of the named papers. */
+  paperSize?: number;
+  headerMargin?: number;
+  footerMargin?: number;
+  centerHorizontally?: boolean;
+  centerVertically?: boolean;
+}
+
+/** A defined name this model does not resolve as a range (constants, formulas, external refs); written back verbatim. */
+export interface ExtraName { name: string; value: string; sheet?: string; hidden?: boolean; comment?: string }
+
+/**
+ * Provenance of a workbook imported from an .xlsx package. The package itself stays in the blob store
+ * (doc.meta.originalBlobId); export rewrites only parts whose model changed (see xlsx/writer.ts).
+ */
+export interface XlsxSource {
+  sha256: string;
+  /** Model sheet id → original worksheet part and model fingerprint at import. */
+  sheets: Record<string, { part: string; fp: string }>;
+  /** Model style id → original cellXfs index, valid while the style's key is unchanged. */
+  styleXf: Record<StyleId, { xf: number; key: string }>;
+  /** Fingerprint of the workbook-level model (sheet list, names, states) at import. */
+  workbookFp: string;
+  /** The package uses the 1904 date system (serials are written relative to it). */
+  date1904?: boolean;
 }
 
 export interface Workbook {
@@ -138,6 +244,9 @@ export interface Workbook {
   styles: Record<StyleId, CellStyle>;
   namedRanges: Record<string, string>;
   pageSetup?: PageSetup;
+  /** Defined names that are not plain ranges (kept for fidelity). */
+  extraNames?: ExtraName[];
+  xlsxSource?: XlsxSource;
 }
 
 export const DEFAULT_COL_WIDTH = 104;
@@ -199,6 +308,7 @@ export function normalizeWorkbook(raw: unknown): Workbook {
       if (cc.v !== undefined) cell.v = cc.v;
       if (cc.s) cell.s = cc.s;
       if (cc.t) cell.t = cc.t;
+      if (cc.ar && cell.f) cell.ar = String(cc.ar);
       if (cell.f === undefined && (cell.v === undefined || cell.v === null) && !cell.s) continue;
       try { cells[toA1(parseA1(k).row, parseA1(k).col)] = cell; } catch { /* skip malformed key */ }
     }
@@ -216,6 +326,7 @@ export function normalizeWorkbook(raw: unknown): Workbook {
       validations: Array.isArray(p.validations) ? p.validations : [],
       color: p.color,
       hidden: p.hidden,
+      ...optionalSheetFields(p),
     };
   });
   return {
@@ -225,16 +336,52 @@ export function normalizeWorkbook(raw: unknown): Workbook {
     styles: r.styles && typeof r.styles === "object" ? r.styles : {},
     namedRanges: r.namedRanges && typeof r.namedRanges === "object" ? r.namedRanges : {},
     pageSetup: { ...DEFAULT_PAGE_SETUP, ...(r.pageSetup ?? {}) },
+    ...(Array.isArray(r.extraNames) && r.extraNames.length ? { extraNames: r.extraNames } : {}),
+    ...(r.xlsxSource && typeof r.xlsxSource === "object" ? { xlsxSource: r.xlsxSource } : {}),
   };
+}
+
+/** Pass through the optional xlsx-fidelity sheet fields (only when present, so older content stays byte-stable). */
+function optionalSheetFields(p: Partial<Sheet>): Partial<Sheet> {
+  const out: Partial<Sheet> = {};
+  if (p.veryHidden) out.veryHidden = true;
+  if (Array.isArray(p.hiddenRows) && p.hiddenRows.length) out.hiddenRows = p.hiddenRows.map(Number).filter((n) => n > 0);
+  if (Array.isArray(p.hiddenCols) && p.hiddenCols.length) out.hiddenCols = p.hiddenCols.map((c) => String(c).toUpperCase());
+  if (typeof p.defaultColWidth === "number" && p.defaultColWidth > 0) out.defaultColWidth = p.defaultColWidth;
+  if (typeof p.defaultRowHeight === "number" && p.defaultRowHeight > 0) out.defaultRowHeight = p.defaultRowHeight;
+  if (p.colStyles && Object.keys(p.colStyles).length) out.colStyles = p.colStyles;
+  if (p.rowStyles && Object.keys(p.rowStyles).length) out.rowStyles = p.rowStyles;
+  if (p.selection && typeof p.selection.activeCell === "string") out.selection = p.selection;
+  if (p.view && typeof p.view === "object" && Object.keys(p.view).length) out.view = p.view;
+  if (Array.isArray(p.hyperlinks) && p.hyperlinks.length) out.hyperlinks = p.hyperlinks;
+  if (p.notes && Object.keys(p.notes).length) out.notes = p.notes;
+  if (p.pageSetup && Object.keys(p.pageSetup).length) out.pageSetup = p.pageSetup;
+  if (p.localNames && Object.keys(p.localNames).length) out.localNames = p.localNames;
+  return out;
 }
 
 // ------------------------------------------------------------- styles
 
-const STYLE_KEYS: (keyof CellStyle)[] = ["bold", "italic", "underline", "strike", "align", "valign", "wrap", "numFmt", "fill", "color", "border", "fontSize", "fontFamily"];
+const STYLE_KEYS: (keyof CellStyle)[] = ["bold", "italic", "underline", "strike", "align", "valign", "wrap", "numFmt", "fill", "color", "border", "fontSize", "fontFamily", "underlineStyle", "vertAlign", "borders", "indent", "rotation", "shrink", "fillPattern", "fillBg", "locked", "hideFormula"];
+
+/** `locked` is meaningful only when false (Excel's default is locked), so false is kept and true dropped. */
+function keepStyleValue(k: keyof CellStyle, v: unknown): boolean {
+  if (k === "locked") return v === false;
+  if (v === undefined || v === null || v === false || v === "") return false;
+  if (typeof v === "object" && !Object.keys(v as object).length) return false;
+  if (k === "indent" || k === "rotation") return v !== 0;
+  return true;
+}
+
+function stableJson(v: unknown): string {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
+  return `{${Object.keys(v as object).sort().filter((k) => (v as Record<string, unknown>)[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stableJson((v as Record<string, unknown>)[k])}`).join(",")}}`;
+}
 
 export function styleKey(st: CellStyle): string {
   const parts: string[] = [];
-  for (const k of STYLE_KEYS) { const v = st[k]; if (v !== undefined && v !== null && v !== false && v !== "") parts.push(`${k}=${String(v)}`); }
+  for (const k of STYLE_KEYS) { const v = st[k]; if (keepStyleValue(k, v)) parts.push(`${k}=${typeof v === "object" ? stableJson(v) : String(v)}`); }
   return parts.join("|");
 }
 
@@ -249,7 +396,7 @@ export function internStyle(styles: Record<StyleId, CellStyle>, st: CellStyle): 
   let id = `s${n}`;
   while (styles[id]) { n++; id = `s${n}`; }
   const clean: CellStyle = {};
-  for (const k of STYLE_KEYS) { const v = st[k]; if (v !== undefined && v !== null && v !== false && v !== "") (clean as Record<string, unknown>)[k] = v; }
+  for (const k of STYLE_KEYS) { const v = st[k]; if (keepStyleValue(k, v)) (clean as Record<string, unknown>)[k] = v; }
   styles[id] = clean;
   return id;
 }
@@ -265,6 +412,9 @@ export function mergeStyle(base: CellStyle, patch: Partial<Record<keyof CellStyl
     if (v === null || v === undefined) delete (out as Record<string, unknown>)[k];
     else (out as Record<string, unknown>)[k] = v;
   }
+  // the border shorthand and per-edge borders are alternatives: setting one replaces the other
+  if ("border" in patch && !("borders" in patch)) delete out.borders;
+  if ("borders" in patch && patch.borders && !("border" in patch)) delete out.border;
   return out;
 }
 
@@ -300,8 +450,11 @@ export function gridDimensions(sheet: Sheet): { rows: number; cols: number } {
   return { rows: Math.max(MIN_ROWS, u.rows + 100, maxChartRow + 20), cols: Math.max(MIN_COLS, u.cols + 10, maxChartCol + 4) };
 }
 
-export function colWidth(sheet: Sheet, col: number): number { return sheet.colWidths[colToLetter(col)] ?? DEFAULT_COL_WIDTH; }
-export function rowHeight(sheet: Sheet, row: number): number { return sheet.rowHeights[String(row + 1)] ?? DEFAULT_ROW_HEIGHT; }
+export function colWidth(sheet: Sheet, col: number): number { return sheet.colWidths[colToLetter(col)] ?? sheet.defaultColWidth ?? DEFAULT_COL_WIDTH; }
+export function rowHeight(sheet: Sheet, row: number): number { return sheet.rowHeights[String(row + 1)] ?? sheet.defaultRowHeight ?? DEFAULT_ROW_HEIGHT; }
+/** Hidden-state helpers (0-based indexes). */
+export function isRowHidden(sheet: Sheet, row: number): boolean { return Boolean(sheet.hiddenRows?.includes(row + 1)); }
+export function isColHidden(sheet: Sheet, col: number): boolean { return Boolean(sheet.hiddenCols?.includes(colToLetter(col))); }
 
 /** Resolve a range string on a sheet, allowing named ranges and sheet prefixes. Returns the sheet the range lives on. */
 export function resolveRange(wb: Workbook, range: string, defaultSheet?: Sheet): { sheet: Sheet; range: RangeRef } {

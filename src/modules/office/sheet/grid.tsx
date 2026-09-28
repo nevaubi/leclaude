@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { OfficeComment } from "@/lib/types/domain";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { colToLetter, formulaReferences, normalizeRange, parseRange, rangeToA1, toA1, type RangeRef } from "./a1";
+import { colToLetter, formulaReferences, letterToCol, normalizeRange, parseRange, rangeToA1, toA1, type RangeRef } from "./a1";
 import { conditionalStyles, mergeMap, renderCell } from "./cell-render";
 import { COMMON_FUNCTIONS } from "./engine";
 import { COL_HEADER_HEIGHT, colWidth, currentRegion, gridDimensions, NUMBER_FORMATS, PAPER_SIZES, ROW_HEADER_WIDTH, rowHeight, usedRange, type DataValidation, type Sheet } from "./model";
@@ -78,8 +78,9 @@ export function SheetGrid({ comments, onOpenComment, onAddComment, onInsertChart
   const dragRef = React.useRef<{ mode: "select" | "fill" | "refInsert"; base?: string; anchor?: CellPos } | null>(null);
 
   const dims = React.useMemo(() => { const d = gridDimensions(sheet); return { rows: d.rows + extraRows, cols: d.cols + extraCols }; }, [sheet, extraRows, extraCols]);
-  const hiddenRows = React.useMemo(() => filteredRows(sheet, (ref) => computed[sheet.id]?.[ref]?.v ?? undefined), [sheet, computed]);
-  const colSize = React.useCallback((i: number) => (resizing?.axis === "col" && resizing.index === i ? resizing.current : colWidth(sheet, i)), [sheet, resizing]);
+  const hiddenRows = React.useMemo(() => { const h = filteredRows(sheet, (ref) => computed[sheet.id]?.[ref]?.v ?? undefined); for (const r of sheet.hiddenRows ?? []) h.add(r - 1); return h; }, [sheet, computed]);
+  const hiddenCols = React.useMemo(() => new Set((sheet.hiddenCols ?? []).map((c) => letterToCol(c))), [sheet.hiddenCols]);
+  const colSize = React.useCallback((i: number) => (hiddenCols.has(i) ? 0 : resizing?.axis === "col" && resizing.index === i ? resizing.current : colWidth(sheet, i)), [sheet, hiddenCols, resizing]);
   const rowSize = React.useCallback((i: number) => (hiddenRows.has(i) ? 0 : resizing?.axis === "row" && resizing.index === i ? resizing.current : rowHeight(sheet, i)), [sheet, hiddenRows, resizing]);
   const colStarts = React.useMemo(() => prefix(dims.cols, colSize), [dims.cols, colSize]);
   const rowStarts = React.useMemo(() => prefix(dims.rows, rowSize), [dims.rows, rowSize]);

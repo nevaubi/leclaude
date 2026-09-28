@@ -4,6 +4,12 @@ import type { SearchHit } from "../types";
 import type { ResearchSource } from "../engine/types";
 import type { SourceTrustContext } from "../engine/trust";
 
+/** Where the reader should land: a 1-based paragraph (reader numbering) and/or a quotation to find. */
+export interface ReaderFocus {
+  paragraph?: number;
+  quote?: string;
+}
+
 /** Shared page-level actions so the answer, the panels and the map stay in sync (hover a source anywhere → the cited sentence lights up). */
 export interface ResearchActions {
   sources: Record<string, ResearchSource>;
@@ -16,7 +22,8 @@ export interface ResearchActions {
   setHoverN: (n: number | null) => void;
   hoverSourceId: string | null;
   setHoverSourceId: (id: string | null) => void;
-  openSource: (s: ResearchSource | SearchHit) => void;
+  /** Open the reader; `focus` scrolls to a pinpoint paragraph ([n ¶k]) or the paragraph holding a verified quote. */
+  openSource: (s: ResearchSource | SearchHit, focus?: ReaderFocus) => void;
   copyCite: (hit: SearchHit) => void;
   pinSource: (s: ResearchSource) => void;
   pinPassage: (text: string, sourceId?: string) => void;

@@ -241,17 +241,20 @@ describe("proposal operations", () => {
 });
 
 describe("snapshot", () => {
-  it("renders an outline with ids, layouts and bodies", () => {
+  it("renders a compact outline with ids, layouts, placeholders and word counts; details only for the focused slide", () => {
     const deck = deckOf();
     const snap = parseSnapshot(buildSnapshot(deck, { title: "Deck" }));
     const text = renderSnapshot(snap, null);
-    expect(text).toMatch(/Slide 1 \[sl_[A-Za-z0-9_-]+\] layout=title — Title: AFFF bellwether: case strategy/);
-    expect(text).toMatch(/Slide 3 \[sl_[A-Za-z0-9_-]+\] layout=bullets/);
-    expect(text).toContain("role=body");
-    expect(text).toContain("Notes: Spine of the deck.");
+    expect(text).toMatch(/S1 \[sl_[A-Za-z0-9_-]+\] title — "AFFF bellwether: case strategy"/);
+    expect(text).toMatch(/S3 \[sl_[A-Za-z0-9_-]+\] bullets — "Three themes" title#el_[A-Za-z0-9_-]+ · body#el_[A-Za-z0-9_-]+ \d+w 4b · notes 4w/);
+    expect(text).not.toContain("role=body"); // no element dump without focus
     expect(() => parseSnapshot({})).toThrow();
     const scoped = renderSnapshot(snap, { id: `slide:${deck.slides[2].id}`, label: "Slide 3", kind: "slide", ref: deck.slides[2].id });
+    expect(scoped).toContain("FOCUSED SLIDE DETAIL");
     expect(scoped.split("\n").filter((l) => l.includes("role=body")).length).toBe(1);
+    expect(scoped).toContain("Notes: Spine of the deck.");
+    // prompt size: outline stays far smaller than a full element dump
+    expect(text.length).toBeLessThan(4000);
   });
 });
 

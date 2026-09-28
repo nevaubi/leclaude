@@ -46,6 +46,12 @@ export interface ResearchLane {
   dependsOn?: string[];
   /** Wall-clock budget for the lane; the scheduler aborts it past this. */
   timeoutMs?: number;
+  /**
+   * Soft dependencies: the lane starts immediately and, after its own first retrieval wave, waits (bounded)
+   * for these lanes' retrieval results to build targeted queries (e.g. the contrary lane targets the cases the
+   * controlling lane found). Unlike `dependsOn`, it never delays the lane's first evidence.
+   */
+  after?: string[];
 }
 
 export type LaneStatus = "queued" | "retrieving" | "reading" | "done" | "error" | "stopped" | "skipped" | "timeout";
@@ -96,6 +102,29 @@ export interface ResearchSource {
   /** Whether the source is part of the matter record (documents/depositions) or outside authority. */
   scope: "record" | "authority" | "internal" | "web";
   foundAt: number;
+  /** Stable, server-resolvable evidence id handed to the model (authority://…, matter://…, library://…, or a canonical URL). */
+  evidenceId?: string;
+  /** Citing-reference signal where the provider exposes one. Never an assertion of good law. */
+  treatment?: AuthorityTreatment;
+  /** Date/currentness flag computed from the source's date and kind. */
+  currentness?: Currentness;
+}
+
+export interface AuthorityTreatment {
+  /** "possibly_negative": citing opinions use negative-treatment language — review before relying. */
+  signal: "possibly_negative" | "no_negative_signal" | "unavailable";
+  citingCount?: number;
+  negativeCount?: number;
+  examples?: { title: string; cite?: string; date?: string; url?: string; phrase?: string }[];
+  checkedAt: string;
+  note: string;
+}
+
+export interface Currentness {
+  flag: "current" | "dated" | "proposed" | "undated";
+  label: string;
+  /** Age in whole years when the date is known. */
+  years?: number;
 }
 
 export interface ClaimVerdictView {
@@ -105,6 +134,10 @@ export interface ClaimVerdictView {
   sourceN: number | null;
   quote?: string;
   note?: string;
+  /** Set by the code-side quote check: true when the quote literally appears in the read source text. */
+  quoteVerified?: boolean;
+  /** 1-based paragraph (reader numbering) where the quote was found, for pinpoint click-through. */
+  paragraph?: number;
 }
 
 export interface VerificationSummary {
@@ -186,6 +219,10 @@ export interface ResearchMessage {
   /** Trust state derived at persist time from what was actually established for `artifactHash`. */
   trust?: TrustState;
   mode?: ResearchMode;
+  /** Jurisdiction-aware sub-questions the planner derived (fast model when available, deterministic otherwise). */
+  subQuestions?: string[];
+  /** True when no evidence was retrieved and the answer states that the sources reviewed do not establish the point. */
+  noAnswer?: boolean;
 }
 
 export interface ResearchPin {

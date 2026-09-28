@@ -56,9 +56,20 @@ export interface PdfAnnotation {
   resolved?: boolean;
   /** Set on redactions/stamps that were burned into the source blob. */
   applied?: boolean;
+  /** Last edit time (native annotations whose content changed are rewritten on export). */
+  modifiedAt?: string;
+  /**
+   * Present when the annotation already exists in the source PDF (read on import). `ref` is the object
+   * reference ("12 0 R"); `sig` the content signature at import. Unchanged native annotations are left in
+   * the file byte-for-byte; deleted ones are removed; changed ones are rewritten.
+   */
+  native?: { ref: string; subtype: string; sig: string; hasAppearance: boolean };
 }
 
 export type BatesPosition = "top-right" | "bottom-right" | "bottom-center" | "top-left" | "bottom-left" | "top-center";
+
+export type BatesFont = "Helvetica" | "Helvetica-Bold" | "Times-Roman" | "Times-Bold" | "Courier" | "Courier-Bold";
+export const BATES_FONTS: BatesFont[] = ["Helvetica", "Helvetica-Bold", "Times-Roman", "Times-Bold", "Courier", "Courier-Bold"];
 
 export interface BatesConfig {
   prefix: string;
@@ -66,10 +77,22 @@ export interface BatesConfig {
   digits: number;
   position: BatesPosition;
   fontSize?: number;
-  /** Optional confidentiality legend on the opposite corner ("CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER"). */
+  /** Standard font for the number and legend (default Helvetica). */
+  font?: BatesFont;
+  /** Optional confidentiality legend / endorsement on the opposite corner ("CONFIDENTIAL — SUBJECT TO PROTECTIVE ORDER"). Only set when the user chose one. */
   legend?: string;
+  /** Endorsement position (default: the corner opposite the number). */
+  legendPosition?: BatesPosition;
+  /** Display pages to stamp (default: every active page). Numbers still run consecutively over the stamped pages. */
+  pages?: number[];
   applied?: boolean;
+  /** First/last label once applied. */
+  first?: string;
+  last?: string;
 }
+
+/** Pending document information dictionary edits (applied on export / burn-in). */
+export interface PdfMetadataEdit { title?: string; author?: string; subject?: string; keywords?: string }
 
 export interface PdfDecorations {
   header?: { text: string; position?: "top-left" | "top-center" | "top-right"; fontSize?: number };
@@ -100,8 +123,12 @@ export interface PdfModel {
   annotations: PdfAnnotation[];
   bates?: BatesConfig;
   formValues?: Record<string, string | boolean>;
-  /** Cached extraction, keyed by source page number. */
-  textIndex?: { page: number; text: string }[];
+  /** Cached extraction, keyed by source page number. `needsOcr` marks image-only pages with no machine-readable text. */
+  textIndex?: { page: number; text: string; needsOcr?: boolean }[];
+  /** Flatten AcroForm fields into page content on export / burn-in. */
+  formFlatten?: boolean;
+  /** Pending metadata edits. */
+  metadata?: PdfMetadataEdit;
   decorations?: PdfDecorations;
   bookmarks?: PdfBookmark[];
   meta: {
@@ -116,6 +143,16 @@ export interface PdfModel {
     extractedAt?: string;
     producer?: string;
     hasForm?: boolean;
+    /** Page labels from the source (/PageLabels), by source page (index 0 = page 1). */
+    pageLabels?: string[];
+    /** Source document information dictionary. */
+    docInfo?: { title?: string; author?: string; subject?: string; keywords?: string; creator?: string; producer?: string; created?: string; modified?: string };
+    /** True once the source's own annotations were read into `annotations` (enables deletion of native ones). */
+    nativeAnnotations?: boolean;
+    /** Source pages with no machine-readable text but with images (need OCR; excluded from text claims). */
+    needsOcr?: number[];
+    /** Report of the last applied redaction pass (method per page and verification). */
+    lastRedaction?: unknown;
     [k: string]: unknown;
   };
 }
@@ -196,13 +233,20 @@ export function normalizeModel(raw: unknown): PdfModel {
     pageCount: typeof m.pageCount === "number" ? m.pageCount : normPages.filter((p) => !p.blank).length,
     pages: normPages,
     annotations,
-    bates: m.bates && typeof m.bates === "object" ? { prefix: String(m.bates.prefix ?? ""), start: Number(m.bates.start ?? 1), digits: Number(m.bates.digits ?? 6), position: m.bates.position ?? "bottom-right", fontSize: m.bates.fontSize, legend: m.bates.legend, applied: m.bates.applied } : undefined,
+    bates: m.bates && typeof m.bates === "object" ? stripUndefined({ prefix: String(m.bates.prefix ?? ""), start: Number(m.bates.start ?? 1), digits: Number(m.bates.digits ?? 6), position: m.bates.position ?? "bottom-right", fontSize: m.bates.fontSize, font: m.bates.font && BATES_FONTS.includes(m.bates.font) ? m.bates.font : undefined, legend: m.bates.legend, legendPosition: m.bates.legendPosition, pages: Array.isArray(m.bates.pages) ? m.bates.pages.map(Number).filter((n) => n >= 1) : undefined, applied: m.bates.applied, first: m.bates.first, last: m.bates.last }) : undefined,
     formValues: m.formValues && typeof m.formValues === "object" ? m.formValues : undefined,
-    textIndex: Array.isArray(m.textIndex) ? m.textIndex.filter((t) => t && typeof t.page === "number").map((t) => ({ page: t.page, text: String(t.text ?? "") })) : undefined,
+    formFlatten: m.formFlatten === true ? true : undefined,
+    metadata: m.metadata && typeof m.metadata === "object" ? m.metadata : undefined,
+    textIndex: Array.isArray(m.textIndex) ? m.textIndex.filter((t) => t && typeof t.page === "number").map((t) => (t.needsOcr ? { page: t.page, text: String(t.text ?? ""), needsOcr: true } : { page: t.page, text: String(t.text ?? "") })) : undefined,
     decorations: m.decorations && typeof m.decorations === "object" ? m.decorations : undefined,
     bookmarks: Array.isArray(m.bookmarks) ? m.bookmarks : undefined,
     meta: m.meta && typeof m.meta === "object" ? m.meta : {},
   };
+}
+
+function stripUndefined<T extends object>(o: T): T {
+  for (const k of Object.keys(o) as (keyof T)[]) if (o[k] === undefined) delete o[k];
+  return o;
 }
 
 /** Pages in display order, excluding deleted ones. */
@@ -256,6 +300,20 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.padEnd(6, "0");
   const n = parseInt(full.slice(0, 6), 16);
   return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
+}
+
+/**
+ * Native annotations the page canvas already paints (pdf.js renders the appearance stream, or synthesizes one for
+ * these markup types); the editor overlay only hit-tests them so they are not drawn twice.
+ */
+export function drawnByCanvas(a: PdfAnnotation): boolean {
+  if (!a.native || a.type === "note" || a.type === "redaction" || a.type === "link") return false;
+  return a.native.hasAppearance || ["highlight", "underline", "strikeout", "rect", "ellipse", "freehand"].includes(a.type);
+}
+
+/** True when the source page is image-only (no machine-readable text); text-based claims must exclude it. */
+export function pageNeedsOcr(model: PdfModel, source: number): boolean {
+  return Boolean(model.textIndex?.find((t) => t.page === source)?.needsOcr) || Boolean(model.meta.needsOcr?.includes(source));
 }
 
 /** Plain text of the whole (active) document from the cached index, with page markers. */

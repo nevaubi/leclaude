@@ -4,7 +4,7 @@
  * page markers, truncated per page and overall.
  */
 import type { OfficeScope } from "@/modules/office/shared/types";
-import { ANNOTATION_LABEL, activePages, annotationStats, normalizeModel, sourceToDisplay, type PdfModel } from "./model";
+import { ANNOTATION_LABEL, activePages, annotationStats, normalizeModel, pageNeedsOcr, sourceToDisplay, type PdfModel } from "./model";
 
 export interface PdfSnapshot {
   model: PdfModel;
@@ -54,6 +54,12 @@ export function renderSnapshot(s: PdfSnapshot, scope: OfficeScope | null): strin
   const head: string[] = [];
   head.push(`TITLE: ${s.title}`);
   head.push(`PAGES: ${pages.length} active (${model.pages.filter((p) => p.deleted).length} deleted, ${pages.filter((p) => p.blank).length} blank inserted). Page numbers below are DISPLAY numbers (current order). Sizes: ${summarizeSizes(pages)}.`);
+  if (model.sourceBlobId) head.push(`SOURCE VERSION: ${model.sourceBlobId} (edits are proposed against this version).`);
+  const ocr = pages.map((p, i) => (!p.blank && pageNeedsOcr(model, p.index) ? i + 1 : 0)).filter(Boolean);
+  if (ocr.length) head.push(`NEEDS OCR: pages ${ocr.join(", ")} are image-only (no machine-readable text; no OCR engine configured). Exclude them from text-based claims.`);
+  const labels = model.meta.pageLabels;
+  if (labels?.length && labels.some((l, i) => l !== String(i + 1))) head.push(`PAGE LABELS: ${pages.slice(0, 40).map((p, i) => `${i + 1}=${labels[p.index - 1] ?? "?"}`).join(", ")}${pages.length > 40 ? ", …" : ""} (answer with display numbers; mention the label when the user uses it).`);
+  if (model.meta.docInfo && Object.values(model.meta.docInfo).some(Boolean)) head.push(`PROPERTIES: ${Object.entries(model.meta.docInfo).filter(([k, v]) => v && ["title", "author", "subject", "keywords"].includes(k)).map(([k, v]) => `${k}="${String(v).slice(0, 80)}"`).join(", ")}${model.metadata ? `; pending edits ${JSON.stringify(model.metadata)}` : ""}`);
   if (model.meta.originalName) head.push(`FILE: ${model.meta.originalName}${model.meta.sourceSize ? ` (${Math.round(Number(model.meta.sourceSize) / 1024)} KB)` : ""}`);
   if (!model.textIndex?.length) head.push("TEXT: not extracted yet (call get_pages_text; the server extracts on demand).");
   if (model.bates) head.push(`BATES: ${model.bates.prefix}${String(model.bates.start).padStart(model.bates.digits, "0")} onward, ${model.bates.position}${model.bates.applied ? " (burned into source)" : " (pending export)"}${model.bates.legend ? `, legend "${model.bates.legend}"` : ""}`);
@@ -62,7 +68,7 @@ export function renderSnapshot(s: PdfSnapshot, scope: OfficeScope | null): strin
   if (model.meta.outline?.length) head.push(`OUTLINE: ${flattenOutline(model.meta.outline).slice(0, 30).join(" | ")}`);
   if (model.bookmarks?.length) head.push(`BOOKMARKS (added): ${model.bookmarks.map((b) => `p.${sourceToDisplay(model, b.page) ?? "?"} ${b.title}`).join(" | ")}`);
   head.push(`ANNOTATIONS: ${stats.total} total, ${stats.unresolved} open — ${Object.entries(stats.byType).map(([t, n]) => `${n} ${ANNOTATION_LABEL[t as keyof typeof ANNOTATION_LABEL].toLowerCase()}`).join(", ") || "none"}.`);
-  const annLines = model.annotations.slice(0, 60).map((a) => `  [${a.id}] p.${sourceToDisplay(model, a.page) ?? "deleted"} ${a.type}${a.text ? ` "${a.text.slice(0, 80)}"` : ""}${a.quote ? ` quote="${a.quote.slice(0, 60)}"` : ""}${a.reason ? ` reason=${a.reason}` : ""} by ${a.author}${a.resolved ? " (resolved)" : ""}${a.applied ? " (applied)" : ""}`);
+  const annLines = model.annotations.slice(0, 60).map((a) => `  [${a.id}] p.${sourceToDisplay(model, a.page) ?? "deleted"} ${a.type}${a.text ? ` "${a.text.slice(0, 80)}"` : ""}${a.quote ? ` quote="${a.quote.slice(0, 60)}"` : ""}${a.reason ? ` reason=${a.reason}` : ""} by ${a.author}${a.native ? " (in PDF)" : ""}${a.resolved ? " (resolved)" : ""}${a.applied ? " (applied)" : ""}`);
   if (annLines.length) head.push(annLines.join("\n"));
   if (s.comments?.length) head.push(`COMMENTS: ${s.comments.filter((c) => !c.resolved).slice(0, 20).map((c) => `[${c.id}] ${c.anchor} ${c.author}: "${c.body.slice(0, 100)}"`).join(" | ")}`);
   if (s.currentPage) head.push(`VIEWER: user is looking at page ${s.currentPage}.`);
@@ -75,7 +81,8 @@ export function renderSnapshot(s: PdfSnapshot, scope: OfficeScope | null): strin
   const perPage = scoped ? 12_000 : PAGE_CHARS;
   for (const p of list) {
     const display = pages.indexOf(p) + 1;
-    const raw = p.blank ? "(blank inserted page)" : pageText(model, p.index);
+    const needsOcr = !p.blank && pageNeedsOcr(model, p.index);
+    const raw = p.blank ? "(blank inserted page)" : needsOcr ? "(NEEDS OCR — image-only page; no machine-readable text. Do not make text-based claims about it.)" : pageText(model, p.index);
     const t = raw.length > perPage ? `${raw.slice(0, perPage)} … [truncated ${raw.length - perPage} chars; use get_pages_text for the full page]` : raw || "(no text on this page — scanned image or empty)";
     const block = `=== Page ${display}${p.rotation ? ` (rotated ${p.rotation}°)` : ""} ===\n${t}`;
     if (block.length > budget) { body.push(`… [${list.length - list.indexOf(p)} more pages omitted; use get_pages_text]`); break; }

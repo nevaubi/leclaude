@@ -2,14 +2,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { Color, FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
-import { Highlight } from "@tiptap/extension-highlight";
-import { TextAlign } from "@tiptap/extension-text-align";
-import { Subscript } from "@tiptap/extension-subscript";
-import { Superscript } from "@tiptap/extension-superscript";
-import { TableKit } from "@tiptap/extension-table";
-import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Typography } from "@tiptap/extension-typography";
 import { CharacterCount } from "@tiptap/extension-character-count";
 import { Placeholder } from "@tiptap/extensions";
@@ -35,7 +27,9 @@ import { CommentsSidebar, commentAnchorPos } from "./comments-sidebar";
 import { DEFAULT_SETTINGS, FONT_FAMILIES, LANGUAGES, MARGIN_PRESETS, PAGE_SIZES, settingsForTemplate, type DocSettings } from "./constants";
 import { DiagramDialog, PromptDialog, type PromptRequest } from "./dialogs";
 import { collectFootnotes, docStats, emptyDoc, estimatePages, newId, type DocSection, type PMNode } from "./doc-model";
-import { BlockId, CommentMark, FindHighlights, FootnoteMark, LegalOrderedList, PageBreak, ParagraphAttrs, ParagraphGutter, SmallCaps, TrackChanges, WordImage, collectEditorChanges, findBlockPos, type EditorChange, type TrackChangesStorage } from "./extensions";
+import { FindHighlights, ParagraphGutter, collectEditorChanges, findBlockPos, type EditorChange, type TrackChangesStorage } from "./extensions";
+import { wordSchemaExtensions } from "./schema-extensions";
+import { isDocxMeta, type DocxImportedComment, type DocxMeta } from "./ooxml/types";
 import { buildTemplateSection, tableOfContents, type TemplateSectionId } from "./sections";
 import { computeOutline, WordSidebar, type OutlineItem, type SidebarTab } from "./sidebar";
 import { buildSnapshot } from "./snapshot";
@@ -112,7 +106,16 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
   const [cursor, setCursor] = React.useState<CursorInfo>({ paraIndex: 0, paraId: null, total: 0, headingId: null, headingText: "", selectionText: "", selectionBlockIds: [], sectionText: "", paraText: "" });
   const [words, setWords] = React.useState(0);
   const [footnotes, setFootnotes] = React.useState<{ id: string; text: string; index: number }[]>([]);
-  const [comments, setComments] = React.useState<OfficeComment[]>([]);
+  const [dbComments, setComments] = React.useState<OfficeComment[]>([]);
+  /** Comments that came with an imported .docx: kept in doc.meta.docx.comments with their Word author/date. */
+  const [importedComments, setImportedComments] = React.useState<DocxImportedComment[]>([]);
+  const importedCommentsRef = React.useRef<DocxImportedComment[]>([]);
+  importedCommentsRef.current = importedComments;
+  const importedIds = React.useMemo(() => new Set(importedComments.map((c) => c.id)), [importedComments]);
+  const comments = React.useMemo<OfficeComment[]>(() => [
+    ...importedComments.map((c) => ({ id: c.id, docId: id, anchor: c.anchor, quote: c.quote, body: c.text, authorName: c.author, createdAt: c.date ?? "", resolved: c.resolved, replies: [] })),
+    ...dbComments,
+  ], [importedComments, dbComments, id]);
   const [activeComment, setActiveComment] = React.useState<string | null>(null);
   const [showResolved, setShowResolved] = React.useState(false);
   const [layoutKey, setLayoutKey] = React.useState(0);
@@ -138,19 +141,9 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     immediatelyRender: false,
     editable: false,
     extensions: [
-      StarterKit.configure({ orderedList: false, heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer" } }, undoRedo: { newGroupDelay: 400 } }),
-      LegalOrderedList,
-      TextStyle, Color, FontFamily, FontSize,
-      Highlight.configure({ multicolor: true }),
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Subscript, Superscript,
-      TableKit.configure({ table: { resizable: true, lastColumnResizable: true } }),
-      WordImage,
-      TaskList, TaskItem.configure({ nested: true }),
+      ...wordSchemaExtensions({ trackChanges: true, author: "You" }),
       Typography, CharacterCount,
       Placeholder.configure({ placeholder: "Start drafting, or press ⌘/ to ask the assistant…" }),
-      BlockId, ParagraphAttrs, PageBreak, FootnoteMark, CommentMark, SmallCaps,
-      TrackChanges.configure({ enabled: true, author: "You" }),
       ParagraphGutter, FindHighlights,
     ],
     editorProps: {
@@ -213,6 +206,8 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
     setReady(true);
     scheduleDerived(editor);
     scheduleCursor(editor);
+    const docxMeta = (doc.meta as { docx?: unknown } | undefined)?.docx;
+    if (isDocxMeta(docxMeta)) setImportedComments(docxMeta.comments ?? []);
     if (doc.id !== "new") void office.comments.list().then(setComments).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, doc, ready]);
@@ -254,6 +249,16 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
 
   // ---- comments ---------------------------------------------------------------
   const refreshComments = React.useCallback(async () => { try { setComments(await office.comments.list()); } catch { /* ignore */ } }, [office]);
+  /** Persist a change to the imported .docx comments (resolution, replies, deletion) in doc.meta.docx. */
+  const updateImportedComments = React.useCallback(async (fn: (cs: DocxImportedComment[]) => DocxImportedComment[]) => {
+    const meta = (officeRef.current.doc?.meta as { docx?: unknown } | undefined)?.docx;
+    if (!isDocxMeta(meta)) return;
+    const next = fn(importedCommentsRef.current);
+    setImportedComments(next);
+    importedCommentsRef.current = next;
+    const docx: DocxMeta = { ...meta, comments: next };
+    await officeRef.current.save({ meta: { docx } });
+  }, []);
   const addCommentAtSelection = React.useCallback(async () => {
     if (!editor) return;
     const { from, to, empty } = editor.state.selection;
@@ -517,9 +522,9 @@ export function WordEditorPage({ id, templateId, matterId, matters, initialMode 
                 </div>
                 {commentsOpen && editor && ready && (
                   <CommentsSidebar editor={editor} comments={comments} activeId={activeComment} onActive={setActiveComment} onLocate={locateComment} canvasRef={canvasRef} layoutKey={layoutKey} showResolved={showResolved} onShowResolved={setShowResolved} onClose={() => setCommentsOpen(false)}
-                    onReply={async (cid, body) => { await office.comments.update(cid, { reply: body }); await refreshComments(); }}
-                    onResolve={async (cid, resolved) => { await office.comments.update(cid, { resolved }); await refreshComments(); toast.success(resolved ? "Comment resolved" : "Comment reopened", { duration: 1200 }); }}
-                    onDelete={async (cid) => { await office.comments.remove(cid); editor.commands.command(({ tr, state, dispatch }) => { state.doc.descendants((n, p) => { if (n.isText && n.marks.some((mk) => mk.type.name === "comment" && mk.attrs.id === cid)) tr.removeMark(p, p + n.nodeSize, state.schema.marks.comment); }); tr.setMeta("trackChanges", "ignore"); dispatch?.(tr); return true; }); await refreshComments(); }}
+                    onReply={async (cid, body) => { if (importedIds.has(cid)) { await updateImportedComments((cs) => cs.map((c) => (c.id === cid ? { ...c, text: `${c.text}\n${authorName}: ${body}` } : c))); return; } await office.comments.update(cid, { reply: body }); await refreshComments(); }}
+                    onResolve={async (cid, resolved) => { if (importedIds.has(cid)) await updateImportedComments((cs) => cs.map((c) => (c.id === cid ? { ...c, resolved } : c))); else { await office.comments.update(cid, { resolved }); await refreshComments(); } toast.success(resolved ? "Comment resolved" : "Comment reopened", { duration: 1200 }); }}
+                    onDelete={async (cid) => { if (importedIds.has(cid)) await updateImportedComments((cs) => cs.filter((c) => c.id !== cid)); else await office.comments.remove(cid); editor.commands.command(({ tr, state, dispatch }) => { state.doc.descendants((n, p) => { if (n.isText && n.marks.some((mk) => mk.type.name === "comment" && mk.attrs.id === cid)) tr.removeMark(p, p + n.nodeSize, state.schema.marks.comment); }); tr.setMeta("trackChanges", "ignore"); dispatch?.(tr); return true; }); await refreshComments(); }}
                   />
                 )}
               </div>

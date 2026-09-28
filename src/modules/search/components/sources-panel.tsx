@@ -75,6 +75,9 @@ export function SourceRow({ s, compact }: { s: ResearchSource; compact?: boolean
             {s.cite && <span className="font-mono text-foreground/80">{s.cite}</span>}
             {meta && <span>{meta}</span>}
             <AuthorityBadge authority={s.authority} />
+            {s.treatment?.signal === "possibly_negative" && <Tip label={<span className="block max-w-xs">{s.treatment.note}{s.treatment.examples?.length ? <span className="mt-1 block opacity-80">{s.treatment.examples.map((e) => `${e.title}${e.phrase ? ` (“${e.phrase}”)` : ""}`).join("; ")}</span> : null}</span>}><Badge variant="warning" className="cursor-help py-0" data-treatment="possibly_negative">Treatment: review</Badge></Tip>}
+            {s.treatment?.signal === "no_negative_signal" && <Tip label={s.treatment.note}><span className="cursor-help text-[10px] text-muted-foreground" data-treatment="no_negative_signal">no negative signal</span></Tip>}
+            {s.currentness && (s.currentness.flag === "dated" || s.currentness.flag === "proposed") && <Tip label={s.currentness.label}><Badge variant="muted" className="cursor-help py-0" data-currentness={s.currentness.flag}>{s.currentness.flag === "proposed" ? "Proposed" : `${s.currentness.years}y old`}</Badge></Tip>}
             {s.scope === "record" && <Badge variant="info" className="py-0">Record</Badge>}
             {s.scope === "internal" && <Badge variant="accent" className="py-0">Library</Badge>}
           </div>

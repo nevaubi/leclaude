@@ -20,9 +20,13 @@ import { SOURCE_LABEL, type ReadResult, type SearchHit } from "../types";
 import { Highlighted, SOURCE_ICON } from "./result-card";
 import { NoKeyCard } from "./no-key-card";
 import { CiteCheckTable, runCiteCheck, type CiteCheckResponse } from "./citecheck";
+import { paragraphOfQuote, splitParagraphs } from "../engine/paragraphs";
+import type { ReaderFocus } from "./research-context";
 
 export interface ReaderDrawerProps {
   hit: SearchHit | null;
+  /** Pinpoint target: paragraph k of `splitParagraphs(text)` (1-based) and/or a quote to locate. */
+  focus?: ReaderFocus | null;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCite: (hit: SearchHit) => void;
@@ -78,7 +82,16 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
     return () => ctrl.abort();
   }, [p.open, hit]);
 
-  const paragraphs = React.useMemo(() => (result?.text ?? "").split(/\n+/).map((s) => s.trim()).filter(Boolean), [result]);
+  // Same split as the engine's evidence blocks, so "[n ¶k]" lands on paragraph k.
+  const paragraphs = React.useMemo(() => splitParagraphs(result?.text ?? ""), [result]);
+  const focusIdx = React.useMemo(() => {
+    const f = p.focus;
+    if (!f || !paragraphs.length) return null;
+    const byQuote = f.quote ? paragraphOfQuote(result?.text ?? "", f.quote) : null;
+    const n = byQuote ?? f.paragraph ?? null;
+    return n != null && n >= 1 && n <= paragraphs.length ? n - 1 : null;
+  }, [p.focus, paragraphs, result]);
+  const focusMissing = Boolean(p.focus && (p.focus.paragraph != null || p.focus.quote) && paragraphs.length && focusIdx == null);
   const findTerms = React.useMemo(() => (find.trim().length >= 2 ? [find.trim()] : []), [find]);
   const matches = React.useMemo(() => {
     if (!findTerms.length) return [] as number[];
@@ -92,6 +105,7 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
   const virtualizer = useVirtualizer({ count: paragraphs.length, getScrollElement: () => parentRef.current, estimateSize: () => 72, overscan: 12 });
   React.useEffect(() => { if (matches.length) virtualizer.scrollToIndex(matches[Math.min(matchIdx, matches.length - 1)], { align: "center" }); }, [matchIdx, matches, virtualizer]);
   React.useEffect(() => { setMatchIdx(0); }, [find]);
+  React.useEffect(() => { if (focusIdx != null && tab === "text") requestAnimationFrame(() => virtualizer.scrollToIndex(focusIdx, { align: "center" })); }, [focusIdx, tab, virtualizer]);
 
   const generateHeadnotes = async () => {
     if (!result || !hit) return;
@@ -184,19 +198,23 @@ export function ReaderDrawer(p: ReaderDrawerProps) {
                       {find && <span className="tabular text-[11px] text-muted-foreground">{matches.length ? `${Math.min(matchIdx + 1, matches.length)} / ${matches.length} paragraphs` : "no matches"}</span>}
                       {find && <><Button variant="ghost" size="icon-xs" disabled={!matches.length} onClick={() => setMatchIdx((i) => (i - 1 + matches.length) % matches.length)} aria-label="Previous match"><ChevronUp className="size-3.5" /></Button><Button variant="ghost" size="icon-xs" disabled={!matches.length} onClick={() => setMatchIdx((i) => (i + 1) % matches.length)} aria-label="Next match"><ChevronDown className="size-3.5" /></Button><Button variant="ghost" size="icon-xs" onClick={() => setFind("")} aria-label="Clear"><X className="size-3.5" /></Button></>}
                       <div className="flex-1" />
-                      {p.terms.length > 0 && <span className="hidden text-[10.5px] text-muted-foreground sm:inline">query terms highlighted</span>}
+                      {focusIdx != null && <button onClick={() => virtualizer.scrollToIndex(focusIdx, { align: "center" })} className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[10.5px] font-medium text-primary cursor-pointer" data-focus-paragraph={focusIdx + 1}>Pinpoint ¶{focusIdx + 1}</button>}
+                      {focusMissing && <span className="text-[10.5px] text-warning-foreground dark:text-warning" data-focus-missing>{p.focus?.quote ? "Quoted passage not found in this text" : `¶${p.focus?.paragraph} is not in this text`}</span>}
+                      {p.terms.length > 0 && focusIdx == null && !focusMissing && <span className="hidden text-[10.5px] text-muted-foreground sm:inline">query terms highlighted</span>}
                     </div>
-                    <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-4 scrollbar-thin font-serif text-[14px] leading-[1.7]">
+                    <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto py-4 pl-9 pr-6 scrollbar-thin font-serif text-[14px] leading-[1.7]">
                       {paragraphs.length === 0 ? <div className="text-sm text-muted-foreground">No text was returned for this source.</div> : (
                         <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
                           {virtualizer.getVirtualItems().map((vi) => {
                             const para = paragraphs[vi.index];
                             const isHeading = para.length < 90 && /^[A-Z0-9 .,'’&()-]+$|^(I|II|III|IV|V|VI|VII|VIII|IX|X)+\.|^§/.test(para);
                             const current = matches.length ? matches[Math.min(matchIdx, matches.length - 1)] === vi.index : false;
+                            const pinpoint = focusIdx === vi.index;
                             return (
-                              <div key={vi.key} data-index={vi.index} ref={virtualizer.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vi.start}px)` }}>
-                                <p className={cn("pb-3 whitespace-pre-wrap break-words", isHeading && "font-sans text-[12.5px] font-semibold tracking-wide text-foreground/90", current && "rounded-md bg-primary/5 ring-1 ring-primary/30 px-1 -mx-1")}>
-                                  <Highlighted text={para} terms={findTerms.length ? findTerms : p.terms} />
+                              <div key={vi.key} data-index={vi.index} ref={virtualizer.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vi.start}px)` }} className="group/para relative">
+                                <span aria-hidden className={cn("absolute -left-5 top-[3px] select-none font-sans text-[9.5px] tabular text-muted-foreground/0 transition-colors group-hover/para:text-muted-foreground/70", pinpoint && "text-primary")}>¶{vi.index + 1}</span>
+                                <p data-paragraph={vi.index + 1} className={cn("pb-3 whitespace-pre-wrap break-words", isHeading && "font-sans text-[12.5px] font-semibold tracking-wide text-foreground/90", (current || pinpoint) && "rounded-md bg-primary/5 ring-1 ring-primary/30 px-1 -mx-1")}>
+                                  <Highlighted text={para} terms={findTerms.length ? findTerms : pinpoint && p.focus?.quote ? [p.focus.quote.slice(0, 80)] : p.terms} />
                                 </p>
                               </div>
                             );

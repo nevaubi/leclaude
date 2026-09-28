@@ -7,6 +7,8 @@ import { jurisdictionByKey } from "./jurisdictions";
 import { answerHash } from "./engine/binding";
 import { sourceFromHit, toProvenanceSources } from "./engine/sources";
 import { messageTrustState } from "./engine/trust";
+import { planSubQuestions } from "./engine/planner";
+import { currentnessOf } from "./engine/treatment";
 import type { ResearchMessage, ResearchSource, ResearchThread } from "./engine/types";
 import type { SavedSearch, SearchHit, SearchRun, SearchSettings } from "./types";
 
@@ -307,22 +309,25 @@ Plaintiffs rely on *Wyeth*'s statement that FDA approval of a label is not concl
     settings: base({ sources: ["caselaw", "dockets", "library", "ediscovery"], jurisdiction: "4th-circuit", matterId: MATTERS.afff }),
     createdAt: "2026-09-08T11:15:48.000Z", durationMs: 6640,
     counts: { caselaw: 9, dockets: 5, library: 3, ediscovery: 6 }, totals: { caselaw: 141, dockets: 27, library: 3, ediscovery: 6 },
-    synthesis: `## Answer
-The *Boyle* defense is available in principle to MilSpec AFFF manufacturers — MIL-F-24385 is a reasonably precise specification — but it fails at the third prong if the manufacturer knew of PFAS hazards the Navy did not, which is exactly what the MDL record suggests [1][2]. The defense also supports federal-officer removal under 28 U.S.C. § 1442(a)(1), which requires only a colorable defense [3][4].
+    synthesis: `## Question Presented
+Whether a manufacturer that sold AFFF to the Navy under MIL-F-24385 can invoke the government contractor defense in the Fourth Circuit, and whether that defense supports federal-officer removal.
+
+## Short Answer
+In principle, yes: *Boyle* displaces state design-defect law when the United States approved reasonably precise specifications, the product conformed, and the supplier warned of dangers it knew and the government did not [1 ¶12]. The defense fails at the third prong if the manufacturer knew of PFAS hazards the Navy did not, which is what the MDL record suggests [2]. For removal under 28 U.S.C. § 1442(a)(1), only a colorable defense is required [3 ¶18][4].
 
 ## Analysis
-Boyle's three elements are conjunctive [1]. The Fourth Circuit in *Sawyer* confirmed the low "colorable" bar for removal but left the merits to the district court [3]. The MDL court's 2022 summary-judgment order found genuine disputes on whether the Navy was warned [VERIFY]. Internal documents from the Hale and Pryce custodial files discussing "known bioaccumulation" (MFC-0038102) will be central to the disclosure prong.
+*Boyle* frames the three conditions as conjunctive: "(1) the United States approved reasonably precise specifications; (2) the equipment conformed to those specifications; and (3) the supplier warned the United States about the dangers in the use of the equipment that were known to the supplier but not to the United States" [1 ¶12]. The Fourth Circuit in *Sawyer* confirmed the low "colorable" bar for removal but left the merits to the district court [3 ¶18]. The MDL court's 2022 summary-judgment order found genuine disputes on whether the Navy was warned [VERIFY].
 
-## Jurisdictional caveats
-Removal is federal; the merits of the defense are applied uniformly as federal common law but the underlying tort is state law.
+### The record in this matter
+Internal documents from the Hale and Pryce custodial files discussing "known bioaccumulation" (MFC-0038102) will be central to the disclosure prong [2].
 
-## Contrary authority
-Plaintiffs argue AFFF sold to municipal fire departments outside the MilSpec channel is not covered at all, and that commercial-formulation choices (fluorosurfactant chemistry) were not dictated by the specification.
+## Contrary Authority
+Plaintiffs argue AFFF sold to municipal fire departments outside the MilSpec channel is not covered at all, and that commercial-formulation choices were not dictated by the specification. No decision adopting that argument was found among the sources reviewed.
 
-## Next steps
+## Open Issues
+- *Boyle* (1988) is dated; confirm subsequent treatment before relying on it.
 - Separate MilSpec vs. commercial sales by lot in the production database.
 - Depose the former NAVSEA specification manager on what the Navy knew.
-- Review the ECF filings in the 2022 bellwether SJ briefing for the evidence relied on.
 
 ## Sources
 [1] Boyle v. United Technologies Corp., 487 U.S. 500 (1988).
@@ -390,11 +395,21 @@ export function citeMapFromSynthesis(synthesis: string | undefined, hits: Search
 
 const SEED_LANE = "lane_seed";
 
+/** Planner sub-questions for seeded boolean queries (the deterministic planner phrases natural-language questions). */
+const SEED_SUBQUESTIONS: Record<string, string[]> = {
+  run_seed_govk_06: [
+    "What are the elements of the government contractor defense, and does Boyle bind in the 4th Circuit?",
+    "What authority rejects, distinguishes or limits the defense for AFFF sold outside the MilSpec channel?",
+    "What does federal-officer removal under 28 U.S.C. § 1442(a)(1) require of a contractor?",
+    "What does the record in the AFFF matter show on the disclosure prong?",
+  ],
+};
+
 function threadFromRun(r: SearchRun, index: number): { thread: ResearchThread; run: SearchRun } {
   const hits = r.topHits ?? [];
   const citeMap = citeMapFromSynthesis(r.synthesis, hits);
   const nOf = new Map(Object.entries(citeMap).map(([n, id]) => [id, Number(n)] as const));
-  const sources: ResearchSource[] = hits.map((h, i): ResearchSource => ({ ...sourceFromHit(h, SEED_LANE, new Date(r.createdAt).getTime() + i * 400), read: true, chars: 18_000 + i * 2_300, readMs: 900 + i * 210, cached: i % 2 === 0, excerpt: h.snippet, n: nOf.get(h.id) }));
+  const sources: ResearchSource[] = hits.map((h, i): ResearchSource => { const s = { ...sourceFromHit(h, SEED_LANE, new Date(r.createdAt).getTime() + i * 400), read: true, chars: 18_000 + i * 2_300, readMs: 900 + i * 210, cached: i % 2 === 0, excerpt: h.snippet, n: nOf.get(h.id) }; return { ...s, currentness: currentnessOf(s, new Date(r.createdAt).getTime()) }; });
   const verifyMarks = (r.synthesis?.match(/\[VERIFY/g) ?? []).length;
   const cited = Object.keys(citeMap).length;
   const hasAnswer = Boolean(r.synthesis);
@@ -411,6 +426,7 @@ function threadFromRun(r: SearchRun, index: number): { thread: ResearchThread; r
     id: `msg_seed_${index}_a`, role: "assistant", content: r.synthesis ?? "", createdAt: r.createdAt, runId: r.id, stats, verification: verification ? { ...verification, verdicts: [] } : undefined, provenance, banner: r.aiStatus === "no_api_key" ? "no-api-key" : null, followUps, citeMap,
     lanes: [{ id: SEED_LANE, name: "Controlling authority", kind: "controlling", status: "done", sources: sources.length, read: sources.length, durationMs: r.durationMs, round: 1 }],
     artifactHash, artifactVersion: hasAnswer ? 1 : undefined, metrics, mode: r.settings.fast ? "fast" : "deep",
+    subQuestions: hasAnswer ? SEED_SUBQUESTIONS[r.id] ?? (/\b(AND|OR|NOT)\b|"/.test(r.query) ? undefined : planSubQuestions({ question: r.query, settings: r.settings, mode: r.settings.fast ? "fast" : "deep", hasMatter: Boolean(r.matterId) })) : undefined,
     terminal: hasAnswer ? (verifyMarks ? "partial" : "succeeded") : "partial",
     stop: hasAnswer ? "coverage_sufficient" : "hard_limit",
     failure: hasAnswer ? undefined : "not_configured",

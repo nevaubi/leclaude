@@ -315,6 +315,10 @@ export const FootnoteMark = Mark.create({
   addAttributes: () => ({
     id: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute("data-footnote-id"), renderHTML: (a: Record<string, unknown>) => ({ "data-footnote-id": a.id }) },
     text: { default: "", parseHTML: (el: HTMLElement) => el.getAttribute("data-footnote-text"), renderHTML: (a: Record<string, unknown>) => ({ "data-footnote-text": a.text }) },
+    /** "footnote" | "endnote" (imported .docx notes keep their kind). */
+    kind: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute("data-note-kind"), renderHTML: (a: Record<string, unknown>) => (a.kind ? { "data-note-kind": a.kind } : {}) },
+    /** w:id of the note in the imported package (the export keeps the original note when its text is unchanged). */
+    sourceId: { default: null, rendered: false },
   }),
   parseHTML: () => [{ tag: "span[data-footnote-id]" }],
   renderHTML: ({ HTMLAttributes }) => ["span", mergeAttributes(HTMLAttributes, { class: "fn-anchor" }), 0],
@@ -359,8 +363,12 @@ export const PageBreak = Node.create({
   atom: true,
   selectable: true,
   draggable: true,
+  addAttributes: () => ({
+    /** Page setup of the section that ends at this break (section break); null for a plain page break. */
+    section: { default: null, rendered: false },
+  }),
   parseHTML: () => [{ tag: "div[data-page-break]" }],
-  renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-page-break": "", class: "page-break", contenteditable: "false" }), ["span", {}, "Page break"]],
+  renderHTML: ({ HTMLAttributes, node }) => ["div", mergeAttributes(HTMLAttributes, { "data-page-break": "", class: node.attrs.section ? "page-break section-break" : "page-break", contenteditable: "false" }), ["span", {}, node.attrs.section ? `Section break (${String((node.attrs.section as { orientation?: string }).orientation ?? "next page")})` : "Page break"]],
   addCommands() {
     return { insertPageBreak: () => ({ chain }) => chain().insertContent({ type: this.name, attrs: { id: nanoid(8) } }).run() };
   },
@@ -605,6 +613,81 @@ export function findBlockPos(doc: PMNode, id: string): { node: PMNode; pos: numb
   });
   return found;
 }
+
+// ---------------------------------------------------------------------------
+// .docx fidelity: imported properties that must survive editing
+// ---------------------------------------------------------------------------
+
+/**
+ * `styleId` (Word paragraph style) and `docx` (raw source properties: pPr, numbering, tblPr, trPr, tcPr, grid…)
+ * on blocks. `docx` is not copied on Enter (keepOnSplit false) so a split never duplicates a section break.
+ */
+export const DocxAttrs = Extension.create({
+  name: "docxAttrs",
+  addGlobalAttributes() {
+    return [
+      { types: ["paragraph", "heading"], attributes: {
+        styleId: { default: null, parseHTML: (el) => el.getAttribute("data-style"), renderHTML: (a) => (a.styleId ? { "data-style": a.styleId } : {}) },
+        docx: { default: null, keepOnSplit: false, rendered: false },
+      } },
+      { types: ["bulletList", "orderedList", "taskList", "table", "tableRow", "tableCell", "tableHeader", "image"], attributes: { docx: { default: null, keepOnSplit: false, rendered: false } } },
+    ];
+  },
+});
+
+/** Raw w:rPr of an imported run (unmapped run properties survive edits) and its character style for display. */
+export const DocxRunMark = Mark.create({
+  name: "docxRun",
+  inclusive: true,
+  excludes: "",
+  addAttributes: () => ({
+    rpr: { default: null, rendered: false },
+    rStyle: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute("data-rstyle"), renderHTML: (a: Record<string, unknown>) => (a.rStyle ? { "data-rstyle": a.rStyle } : {}) },
+  }),
+  parseHTML: () => [{ tag: "span[data-rstyle]" }],
+  renderHTML: ({ HTMLAttributes }) => ["span", mergeAttributes(HTMLAttributes, { class: "docx-run" }), 0],
+});
+
+/** All caps (w:caps). */
+export const CapsMark = Mark.create({
+  name: "caps",
+  parseHTML: () => [{ tag: "span.all-caps" }, { style: "text-transform", getAttrs: (v) => (String(v) === "uppercase" ? {} : false) }],
+  renderHTML: ({ HTMLAttributes }) => ["span", mergeAttributes(HTMLAttributes, { class: "all-caps" }), 0],
+});
+
+/**
+ * Inline OOXML the editor cannot model as text but must keep in place: field codes (begin/separate/end with the
+ * instruction), bookmarks, inline drawings/objects, symbols, math, page/column breaks inside a paragraph.
+ * Bookmarks and field delimiters render as zero-width anchors; drawings and objects as a small labelled chip.
+ */
+export const DocxInline = Node.create({
+  name: "docxInline",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: false,
+  addAttributes: () => ({
+    kind: { default: "object" },
+    xml: { default: null, rendered: false },
+    rpr: { default: null, rendered: false },
+    instr: { default: null, rendered: false },
+    name: { default: null, rendered: false },
+    bid: { default: null, rendered: false },
+    image: { default: null, rendered: false },
+    dirty: { default: null, rendered: false },
+    simple: { default: null, rendered: false },
+    label: { default: null, rendered: false },
+  }),
+  parseHTML: () => [{ tag: "span[data-docx-inline]" }],
+  renderHTML: ({ node }) => {
+    const kind = String(node.attrs.kind ?? "object");
+    const image = node.attrs.image as { src?: string; width?: number | null } | null;
+    if (kind === "drawing" && image?.src) return ["img", { "data-docx-inline": kind, src: image.src, class: "docx-inline-img", style: image.width ? `width:${Math.min(Number(image.width), 640)}px` : "", alt: String(node.attrs.label ?? "Image") }];
+    const visible = ["drawing", "object", "sym", "math", "ptab", "pageBreak", "columnBreak"].includes(kind);
+    const label = kind === "sym" ? String(node.attrs.label ?? "") : kind === "pageBreak" ? "⤓" : kind === "fieldBegin" ? "" : String(node.attrs.label ?? kind);
+    return ["span", { "data-docx-inline": kind, class: visible ? "docx-inline docx-inline-chip" : "docx-inline docx-inline-anchor", title: kind === "fieldBegin" ? `Field: ${String(node.attrs.instr ?? "").trim()}` : kind === "bookmarkStart" ? `Bookmark ${String(node.attrs.name ?? "")}` : String(node.attrs.label ?? kind), contenteditable: "false" }, visible ? label : "\u200b"];
+  },
+});
 
 /** Make an empty slice helper available for callers that need it. */
 export const emptySlice = Slice.empty;

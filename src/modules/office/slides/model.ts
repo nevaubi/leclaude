@@ -60,11 +60,33 @@ export interface ChartSpec {
   unit?: string; // "$", "%", "ng/L"
 }
 
+export interface TableBorder { color?: string; width?: number /* pt */; none?: boolean }
+
+export interface TableCell {
+  text: string;
+  gridSpan?: number;
+  rowSpan?: number;
+  /** Covered by a merge from the left / from above (OOXML hMerge / vMerge). */
+  hMerge?: boolean;
+  vMerge?: boolean;
+  fill?: string;
+  borders?: { l?: TableBorder; r?: TableBorder; t?: TableBorder; b?: TableBorder };
+  bold?: boolean;
+  align?: "left" | "center" | "right";
+}
+
 export interface TableSpec {
   header: string[];
   rows: string[][];
   /** Column width fractions (sum ≈ 1). */
   colWidths?: number[];
+  /** Full cell grid (header row first) with merges, fills and borders; texts mirror header/rows. */
+  cells?: TableCell[][];
+  /** Row heights as fractions of the table height. */
+  rowHeights?: number[];
+  /** OOXML table look flags. */
+  firstRow?: boolean;
+  bandRow?: boolean;
 }
 
 export interface DeckElement {
@@ -88,6 +110,126 @@ export interface DeckElement {
   name?: string;
   locked?: boolean;
   groupId?: string;
+  /** Mirror the element (imported from / exported to OOXML a:xfrm flipH / flipV). */
+  flipH?: boolean;
+  flipV?: boolean;
+  /** Image crop as fractions of the source bitmap trimmed from each edge (OOXML a:srcRect). */
+  crop?: { l: number; t: number; r: number; b: number };
+  /** Exact text body of an imported shape (paragraph levels, bullets, runs). `rich.markdown` is the markdown the
+   *  element had at import: while `text` still equals it the exporter writes these paragraphs verbatim. */
+  rich?: RichText;
+  /** Link to the source shape of an imported .pptx (package-preserving export). Never authored by the model. */
+  ooxml?: ElementOoxml;
+}
+
+// ---------------------------------------------------------------------------
+// OOXML fidelity metadata (imported decks)
+// ---------------------------------------------------------------------------
+
+export interface RichRun {
+  text: string;
+  /** Explicit run properties from the source (points; booleans; "#RRGGBB" or "scheme:accent1"). */
+  size?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string;
+  font?: string;
+  link?: string;
+  /** a:br line break (text is "") or a:fld field type (slidenum, datetime…). */
+  br?: boolean;
+  field?: string;
+}
+
+export interface RichParagraph {
+  level: number;
+  /** Explicit bullet on the paragraph; "inherit" = none specified (placeholder/master decides). */
+  bullet: "char" | "number" | "none" | "inherit";
+  bulletChar?: string;
+  numScheme?: string;
+  align?: "left" | "center" | "right" | "justify";
+  /** Points (spcPts) or percent (spcPct, as "120%"). */
+  spaceBefore?: string;
+  spaceAfter?: string;
+  lineSpacing?: string;
+  runs: RichRun[];
+}
+
+export interface RichText {
+  paragraphs: RichParagraph[];
+  /** The element's markdown at import; when `text` differs the paragraphs are stale and are regenerated. */
+  markdown: string;
+  autofit?: "norm" | "shape" | "none";
+  fontScale?: number;
+  anchor?: "t" | "ctr" | "b";
+  wrap?: boolean;
+  /** Insets in EMU [l, t, r, b] when explicit. */
+  insets?: [number, number, number, number];
+}
+
+export interface EmuRect { x: number; y: number; cx: number; cy: number; rot?: number; flipH?: boolean; flipV?: boolean }
+
+export interface ElementOoxml {
+  /** p:cNvPr id of the source shape (unique on the slide). */
+  spid: number;
+  kind: "sp" | "pic" | "cxnSp" | "graphicFrame";
+  name?: string;
+  ph?: { type?: string; idx?: string };
+  /** Absolute slide geometry in EMU (after group transforms). */
+  emu: EmuRect;
+  /** True when the source shape had no a:xfrm (geometry inherited from the layout/master). */
+  inherited?: boolean;
+  /** Composed transform of enclosing groups (EMU), for writing child coordinates back. */
+  group?: { spids: number[]; offX: number; offY: number; chOffX: number; chOffY: number; scaleX: number; scaleY: number };
+  /** Import-time geometry and style in canvas units, used to diff user edits. */
+  base: { x: number; y: number; w: number; h: number; rotation?: number; flipH?: boolean; flipV?: boolean; style: ElementStyle; src?: string; crop?: DeckElement["crop"] };
+  /** Fingerprint of the element at import (see fingerprint.ts); equal ⇒ the source XML is written verbatim. */
+  fp: string;
+  media?: string;
+  chartPart?: string;
+  /** SmartArt/OLE/unknown frames: only geometry may be rewritten. */
+  opaque?: boolean;
+  /** Hash of the element's data (text/table/chart/src/crop) at import. */
+  dataFp?: string;
+}
+
+export interface SlideOoxml {
+  /** Package part of the source slide ("ppt/slides/slide3.xml"). */
+  part: string;
+  layoutPart?: string;
+  layoutName?: string;
+  /** Fingerprint of the slide content (without notes) at import. */
+  fp: string;
+  /** Package id (meta.pptx.pkgId) and hash of the source part: a slide is only written from the package it came from. */
+  pkg?: string;
+  xmlHash?: string;
+  notes0: string;
+  hidden0: boolean;
+  transition0?: DeckSlide["transition"];
+  background0?: SlideBackground;
+}
+
+export interface PptxPlaceholderInfo { type: string; idx?: string; name?: string; emu?: EmuRect }
+export interface PptxLayoutInfo { part: string; name: string; type?: string; master: string; placeholders: PptxPlaceholderInfo[] }
+
+export interface PptxMeta {
+  sourceFile: string;
+  /** sha256 of the source package; the exporter only reuses a stored package whose bytes match. */
+  sha256?: string;
+  /** Stable id of the imported package (sha256 when known). */
+  pkgId: string;
+  slideSize: { cx: number; cy: number };
+  /** Canvas mapping: px = emu * scale + off. */
+  map: { scale: number; offX: number; offY: number };
+  layouts: PptxLayoutInfo[];
+  themePart?: string;
+  /** Scheme colors (hex) and fonts of the source theme. */
+  scheme?: Record<string, string>;
+  fonts?: { major: string; minor: string };
+  /** Fingerprint of the imported DeckTheme; a different theme on export patches the theme part. */
+  themeFp: string;
+  sections?: string[];
+  warnings?: string[];
 }
 
 export interface SlideBackground { color?: string; imageUrl?: string }
@@ -101,6 +243,9 @@ export interface DeckSlide {
   transition?: "none" | "fade" | "push" | "wipe";
   hidden?: boolean;
   name?: string;
+  /** PowerPoint section this slide belongs to. */
+  section?: string;
+  ooxml?: SlideOoxml;
 }
 
 export interface DeckTheme {
@@ -119,7 +264,7 @@ export interface DeckContent {
   theme: DeckTheme;
   size: { w: 1280; h: 720 };
   slides: DeckSlide[];
-  meta?: { createdWith?: string; sourceFile?: string };
+  meta?: { createdWith?: string; sourceFile?: string; pptx?: PptxMeta };
 }
 
 // ---------------------------------------------------------------------------
@@ -351,28 +496,66 @@ export function unionRect(rects: Rect[]): Rect {
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
 
+/** Relative advance widths (em) for a Helvetica/Calibri-like face; deterministic, no DOM. */
+function charEm(c: string): number {
+  if (c === " ") return 0.28;
+  if (/[iljI|.,;:!'`]/.test(c)) return 0.26;
+  if (/[ftr()[\]{}\-"]/.test(c)) return 0.36;
+  if (/[mwMW@%]/.test(c)) return 0.86;
+  if (/[A-Z]/.test(c)) return 0.66;
+  if (/[0-9$#&?*+=<>~^_]/.test(c)) return 0.56;
+  if (/[a-z]/.test(c)) return 0.52;
+  if (/[\u2014\u2013]/.test(c)) return c === "\u2014" ? 1 : 0.56;
+  return c.charCodeAt(0) > 0x2e80 ? 1 : 0.56;
+}
+
+/** Width of a string in px at a font size (px) for a face. */
+export function measureText(text: string, pxSize: number, face: string, bold = false): number {
+  const mono = /Consolas|Courier|Mono/i.test(face);
+  const serif = /(Georgia|Times|Cambria|Garamond|Serif)/i.test(face);
+  let em = 0;
+  for (const c of text) em += mono ? 0.6 : charEm(c);
+  return em * pxSize * (serif ? 0.97 : 1) * (bold && !mono ? 1.06 : 1);
+}
+
+/** Greedy word wrap: number of lines a paragraph needs in a width. */
+export function wrapLineCount(text: string, width: number, pxSize: number, face: string, bold = false): number {
+  const words = text.split(/(\s+)/).filter((w) => w.length);
+  if (!words.length) return 1;
+  let lines = 1, cur = 0;
+  const space = measureText(" ", pxSize, face, bold);
+  for (const w of words) {
+    if (/^\s+$/.test(w)) { cur += space; continue; }
+    const ww = measureText(w, pxSize, face, bold);
+    if (cur > 0 && cur + ww > width) { lines++; cur = 0; }
+    if (ww > width) { lines += Math.floor(ww / width); cur = ww % width; } else cur += ww;
+  }
+  return lines;
+}
+
 /**
- * Rough text-fit estimate: how many wrapped lines the text needs at a font size
- * versus how many fit in the box. Used by restyle/review and the overflow badge.
+ * Deterministic text-fit estimate: wrapped lines the text needs at its font size (greedy word wrap with per-glyph
+ * widths) versus the lines that fit in the box. Drives the overflow badge, the agent's verify step and fit_text.
  */
-export function estimateTextFit(el: DeckElement, theme: DeckTheme): { needed: number; available: number; overflow: boolean; fontSize: number } {
+export function estimateTextFit(el: DeckElement, theme: DeckTheme): { needed: number; available: number; overflow: boolean; fontSize: number; neededPx: number; availablePx: number } {
   const fontSize = el.style.fontSize ?? 18;
   const pxSize = fontSize * PT_TO_PX;
   const pad = el.style.padding ?? 8;
   const face = resolveFontFace(el.style.fontFamily, theme);
-  const charW = pxSize * (/(Georgia|Times|Cambria|Garamond)/.test(face) ? 0.5 : /Consolas|Courier/.test(face) ? 0.6 : 0.52);
   const lineH = pxSize * (el.style.lineHeight ?? 1.25);
   const usableW = Math.max(20, el.w - pad * 2);
   const lines = parseMarkdownLite(el.text);
   let needed = 0;
   for (const l of lines) {
     const text = l.runs.map((r) => r.text).join("");
+    const bold = Boolean(el.style.bold) || (l.runs.length > 0 && l.runs.every((r) => r.bold || !r.text.trim()));
     const indentPx = l.indent * 28 + (l.kind !== "para" ? 26 : 0);
-    const perLine = Math.max(4, Math.floor((usableW - indentPx) / charW));
-    needed += Math.max(1, Math.ceil(text.length / perLine));
+    needed += wrapLineCount(text, Math.max(20, usableW - indentPx), pxSize, face, bold);
   }
-  const available = Math.max(1, Math.floor((el.h - pad * 2) / lineH));
-  return { needed, available, overflow: needed > available, fontSize };
+  const availablePx = Math.max(0, el.h - pad * 2);
+  const available = Math.max(1, Math.floor((availablePx + 0.5) / lineH));
+  const neededPx = needed * lineH;
+  return { needed, available, overflow: needed > available, fontSize, neededPx, availablePx };
 }
 
 /** Largest font size (≥ min) at which the text fits the box. */
@@ -395,7 +578,10 @@ export function normalizeSlide(raw: unknown, index = 0): DeckSlide {
   const s = (raw && typeof raw === "object" ? raw : {}) as Partial<DeckSlide>;
   const layout = (SLIDE_LAYOUTS as string[]).includes(String(s.layout)) ? (s.layout as SlideLayout) : "blank";
   const elements = Array.isArray(s.elements) ? s.elements.map((e, i) => normalizeElement(e, i)) : [];
-  return { id: typeof s.id === "string" && s.id ? s.id : `sl_seed_${index}_${nanoid(4)}`, layout, background: s.background, elements, notes: typeof s.notes === "string" ? s.notes : "", transition: s.transition, hidden: Boolean(s.hidden), name: s.name };
+  const out: DeckSlide = { id: typeof s.id === "string" && s.id ? s.id : `sl_seed_${index}_${nanoid(4)}`, layout, background: s.background, elements, notes: typeof s.notes === "string" ? s.notes : "", transition: s.transition, hidden: Boolean(s.hidden), name: s.name };
+  if (typeof s.section === "string") out.section = s.section;
+  if (s.ooxml && typeof s.ooxml === "object" && typeof s.ooxml.part === "string") out.ooxml = s.ooxml;
+  return out;
 }
 
 export function normalizeElement(raw: unknown, index = 0): DeckElement {
@@ -412,13 +598,27 @@ export function normalizeElement(raw: unknown, index = 0): DeckElement {
     src: typeof e.src === "string" ? e.src : undefined,
     alt: typeof e.alt === "string" ? e.alt : undefined,
     shape: e.shape,
-    table: e.table && Array.isArray(e.table.header) ? { header: e.table.header.map(String), rows: (e.table.rows ?? []).map((r) => (Array.isArray(r) ? r.map(String) : [])), colWidths: e.table.colWidths } : undefined,
+    table: e.table && Array.isArray(e.table.header) ? normalizeTable(e.table) : undefined,
     chart: e.chart && Array.isArray(e.chart.categories) ? { type: (["bar", "line", "pie"] as string[]).includes(e.chart.type) ? e.chart.type : "bar", categories: e.chart.categories.map(String), series: (e.chart.series ?? []).map((s) => ({ name: String(s.name ?? "Series"), values: (s.values ?? []).map((v) => Number(v) || 0) })), title: e.chart.title, showLegend: e.chart.showLegend, showValues: e.chart.showValues, unit: e.chart.unit } : undefined,
     role: e.role,
     name: e.name,
     locked: e.locked,
     groupId: e.groupId,
+    ...(e.flipH ? { flipH: true } : {}),
+    ...(e.flipV ? { flipV: true } : {}),
+    ...(e.crop && typeof e.crop === "object" ? { crop: { l: num(e.crop.l, 0), t: num(e.crop.t, 0), r: num(e.crop.r, 0), b: num(e.crop.b, 0) } } : {}),
+    ...(e.rich && typeof e.rich === "object" && Array.isArray(e.rich.paragraphs) ? { rich: e.rich } : {}),
+    ...(e.ooxml && typeof e.ooxml === "object" && typeof e.ooxml.spid === "number" ? { ooxml: e.ooxml } : {}),
   };
+}
+
+function normalizeTable(t: TableSpec): TableSpec {
+  const out: TableSpec = { header: t.header.map(String), rows: (t.rows ?? []).map((r) => (Array.isArray(r) ? r.map(String) : [])), colWidths: t.colWidths };
+  if (Array.isArray(t.cells)) out.cells = t.cells;
+  if (Array.isArray(t.rowHeights)) out.rowHeights = t.rowHeights;
+  if (t.firstRow !== undefined) out.firstRow = t.firstRow;
+  if (t.bandRow !== undefined) out.bandRow = t.bandRow;
+  return out;
 }
 
 function num(v: unknown, d: number) { const n = Number(v); return Number.isFinite(n) ? n : d; }

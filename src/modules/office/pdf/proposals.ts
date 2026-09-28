@@ -4,9 +4,21 @@
  * and the editor store (client, which applies accepted proposals as undoable
  * edits). Every op is pure: `applyOp` returns a new model.
  */
-import { activePages, displayToSource, newAnnotationId, newPageId, normalizeModel, type BatesConfig, type PdfAnnotation, type PdfBookmark, type PdfDecorations, type PdfModel, type PdfPage } from "./model";
+import { activePages, displayToSource, newAnnotationId, newPageId, normalizeModel, type BatesConfig, type PdfAnnotation, type PdfBookmark, type PdfDecorations, type PdfMetadataEdit, type PdfModel, type PdfPage } from "./model";
 
-export type PdfOp =
+/**
+ * The document state a proposal was computed against. A proposal whose base no longer matches is STALE and is
+ * rejected (never silently re-targeted): the source bytes changed (burn-in, merge, redaction apply, Bates set) or
+ * an annotation it edits/removes is gone.
+ */
+export interface OpBase { sourceBlobId?: string; annotationIds?: string[] }
+
+export class StaleProposalError extends Error {
+  constructor(message: string) { super(`Stale proposal: ${message}`); this.name = "StaleProposalError"; }
+}
+
+export type PdfOp = (
+
   | { op: "add_annotations"; annotations: PdfAnnotation[] }
   | { op: "update_annotation"; id: string; patch: Partial<PdfAnnotation> }
   | { op: "remove_annotations"; ids: string[] }
@@ -22,7 +34,11 @@ export type PdfOp =
   | { op: "remove_bookmark"; id: string }
   | { op: "set_decorations"; decorations: PdfDecorations | null }
   | { op: "append_pages"; pages: PdfPage[]; sourceBlobId: string; pageCount: number }
-  | { op: "replace_model"; model: PdfModel };
+  | { op: "replace_model"; model: PdfModel }
+  | { op: "set_metadata"; metadata: PdfMetadataEdit }
+  | { op: "flatten_form"; flatten: boolean }
+  | { op: "add_bookmarks"; bookmarks: PdfBookmark[] }
+) & { base?: OpBase };
 
 export function opTitle(op: PdfOp): string {
   switch (op.op) {
@@ -42,12 +58,16 @@ export function opTitle(op: PdfOp): string {
     case "set_decorations": return op.decorations ? "Set header/footer/watermark" : "Clear header/footer/watermark";
     case "append_pages": return `Append ${op.pages.length} page${op.pages.length === 1 ? "" : "s"}`;
     case "replace_model": return "Replace document";
+    case "set_metadata": return `Set document properties (${Object.keys(op.metadata).join(", ")})`;
+    case "flatten_form": return op.flatten ? "Flatten form fields on export" : "Keep form fields editable";
+    case "add_bookmarks": return `Add ${op.bookmarks.length} bookmark${op.bookmarks.length === 1 ? "" : "s"}`;
   }
 }
 
 /** Apply one operation, returning a new model (input untouched). Throws on invalid targets. */
 export function applyOp(model: PdfModel, raw: PdfOp | Record<string, unknown>): PdfModel {
   const op = raw as PdfOp;
+  checkBase(model, op);
   const next: PdfModel = { ...model, pages: [...model.pages].sort((a, b) => a.order - b.order).map((p) => ({ ...p })), annotations: model.annotations.map((a) => ({ ...a })), bookmarks: model.bookmarks ? [...model.bookmarks] : undefined, meta: { ...model.meta } };
   const known = new Set(next.pages.map((p) => p.index));
   const requirePages = (list: number[]) => { for (const n of list) if (!known.has(n)) throw new Error(`No page with source number ${n}`); };
@@ -148,8 +168,35 @@ export function applyOp(model: PdfModel, raw: PdfOp | Record<string, unknown>): 
     }
     case "replace_model":
       return normalizeModel(op.model);
+    case "set_metadata": {
+      const md: PdfMetadataEdit = { ...(next.metadata ?? {}) };
+      for (const k of ["title", "author", "subject", "keywords"] as const) if (typeof op.metadata[k] === "string") md[k] = op.metadata[k]!.slice(0, 1000);
+      next.metadata = md;
+      return next;
+    }
+    case "flatten_form":
+      next.formFlatten = op.flatten || undefined;
+      return next;
+    case "add_bookmarks": {
+      for (const b of op.bookmarks) if (!known.has(b.page)) throw new Error(`No page with source number ${b.page}`);
+      const ids = new Set(op.bookmarks.map((b) => b.id));
+      next.bookmarks = [...(next.bookmarks ?? []).filter((b) => !ids.has(b.id)), ...op.bookmarks];
+      return next;
+    }
     default:
       throw new Error(`Unknown operation ${(op as { op?: string }).op ?? "?"}`);
+  }
+}
+
+/** Reject proposals computed against another version of the document. */
+export function checkBase(model: PdfModel, op: PdfOp) {
+  const base = op.base;
+  if (!base) return;
+  if (base.sourceBlobId && model.sourceBlobId && base.sourceBlobId !== model.sourceBlobId && op.op !== "replace_model") throw new StaleProposalError("the PDF source changed after this edit was proposed (it was applied, merged or re-stamped); ask the assistant again");
+  if (base.annotationIds?.length) {
+    const have = new Set(model.annotations.map((a) => a.id));
+    const missing = base.annotationIds.filter((id) => !have.has(id));
+    if (missing.length) throw new StaleProposalError(`annotation${missing.length === 1 ? "" : "s"} ${missing.slice(0, 3).join(", ")} no longer exist${missing.length === 1 ? "s" : ""}`);
   }
 }
 

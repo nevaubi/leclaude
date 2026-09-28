@@ -5,6 +5,7 @@
  */
 import type { Citation, CitationCheck as EvidenceCitationCheck, CitationState } from "@/lib/evidence/types";
 import { extractCitations, type ExtractedCitation } from "../citations";
+import { citedNumbers } from "./markers";
 import type { CitationCrossCheck, ResearchSource } from "./types";
 
 /** Normalise "550 U.S. 544, 555" → "550u.s.544" (pin cite dropped, whitespace removed) so cites compare reliably. */
@@ -38,8 +39,7 @@ export function crossCheckCitations(answer: string, sources: ResearchSource[]): 
     else if (src) checks.push({ citation: c.citation, matched: false, sourceN: src.n });
     else { checks.push({ citation: c.citation, matched: false }); unmatched.push(c); }
   }
-  const nums = new Set<number>();
-  for (const m of answer.matchAll(/\[(\d{1,2})\]/g)) nums.add(Number(m[1]));
+  const nums = citedNumbers(answer);
   const byN = new Map(sources.map((s) => [s.n, s] as const));
   const unreadCitedNs = Array.from(nums).filter((n) => { const s = byN.get(n); return s && !s.read; }).sort((a, b) => a - b);
   return { checks, unmatched, unreadCitedNs };

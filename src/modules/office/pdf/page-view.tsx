@@ -6,7 +6,7 @@
  */
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { STAMP_PRESETS, type PdfAnnotation, type PdfPage, type PdfPoint, type PdfRect } from "./model";
+import { STAMP_PRESETS, drawnByCanvas, pageNeedsOcr, type PdfAnnotation, type PdfPage, type PdfPoint, type PdfRect } from "./model";
 import { cssRectToPdf, loadPdfjs, pointToPdf, rectToViewport, type PDFDocumentProxy, type PDFPageProxy, type PageViewport } from "./pdfjs";
 import { usePdfStore, type Tool } from "./store";
 import { mergeLineRects } from "./text-search";
@@ -46,6 +46,7 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
   const tool = usePdfStore((s) => s.tool);
   const darkInvert = usePdfStore((s) => s.darkInvert);
   const annotations = usePdfStore((s) => s.model.annotations);
+  const needsOcr = usePdfStore((s) => pageNeedsOcr(s.model, page.index));
   const selectedId = usePdfStore((s) => s.selectedAnnotationId);
   const hits = usePdfStore((s) => s.search.hits);
   const hitIndex = usePdfStore((s) => s.search.index);
@@ -228,6 +229,7 @@ export function PageView({ page, display, pdfDoc, scale, width, height, onOpenAn
         </div>
       )}
       {page.blank && <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground/60">Blank page</div>}
+      {needsOcr && <div className="pointer-events-none absolute left-2 top-2 z-10 rounded border bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" title="Image-only page: no machine-readable text. It is excluded from search, quotes and summaries until OCR is available.">Needs OCR</div>}
       <div ref={textRef} className={cn("textLayer absolute left-0 top-0", isDrawing || tool === "hand" ? "pointer-events-none" : "")} style={{ width, height }} onMouseUp={commitSelection} />
       {viewport && (
         <svg className="absolute left-0 top-0" width={width} height={height} style={{ pointerEvents: "none" }} aria-hidden>
@@ -260,6 +262,11 @@ function AnnotationShape({ a, vp, scale, selected, flashing, interactive, onPoin
     </g>
   ) : null;
   let body: React.ReactNode = null;
+  if (drawnByCanvas(a)) {
+    // Already in the PDF and painted by the page canvas: keep a transparent hit area so it can be selected, edited or deleted.
+    body = rects.map((c, i) => <rect key={i} x={c.left} y={c.top} width={c.width} height={c.height} fill="rgba(255,255,255,.01)" />);
+    return <g {...common} data-annotation={a.id}><title>{`${a.type}${a.text ? `: ${a.text}` : ""} — ${a.author} (in PDF)`}</title>{body}{handles}</g>;
+  }
   switch (a.type) {
     case "highlight": body = rects.map((c, i) => <rect key={i} x={c.left} y={c.top} width={c.width} height={c.height} fill={a.color} opacity={a.opacity} style={{ mixBlendMode: "multiply" }} />); break;
     case "underline": body = rects.map((c, i) => <rect key={i} x={c.left} y={c.top + c.height - Math.max(1.5, 1.6 * scale)} width={c.width} height={Math.max(1.5, 1.6 * scale)} fill={a.color} opacity={a.opacity} />); break;
