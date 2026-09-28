@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
  * First-run state for /intel: the intelligence layer has no records because no source has run.
  * Says how to connect one (Settings → Data & automation) instead of rendering empty tables.
  */
-export function IntelEmptyState({ enabledSources, totalSources }: { enabledSources: number; totalSources: number }) {
+export function IntelEmptyState({ enabledSources, totalSources, children }: { enabledSources: number; totalSources: number; children?: React.ReactNode }) {
   return (
     <div className="flex h-full min-h-0 items-start justify-center overflow-auto p-6 md:pt-16" role="status">
       <div className="w-full max-w-[520px]">
@@ -25,6 +25,7 @@ export function IntelEmptyState({ enabledSources, totalSources }: { enabledSourc
           <Button size="sm" asChild><Link href="/settings#sources">Connect a source</Link></Button>
           <span className="text-[11.5px] text-muted-foreground">{enabledSources} of {totalSources} sources enabled</span>
         </div>
+        {children}
       </div>
     </div>
   );

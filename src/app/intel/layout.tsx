@@ -4,6 +4,7 @@ import { Radar } from "lucide-react";
 import { PageTopbar } from "@/components/shell/page-topbar";
 import { IntelNav } from "@/modules/intel/components/intel-nav";
 import { IntelEmptyState } from "@/modules/intel/components/intel-empty";
+import { MatterCoverageBand } from "@/modules/intel/components/matter-coverage-band";
 import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { intelDocuments, intelSources } from "@/modules/intel/store";
 
@@ -23,7 +24,9 @@ export default async function IntelLayout({ children }: { children: React.ReactN
     return (
       <div className="flex h-full min-h-0 flex-col">
         <PageTopbar icon={<Radar />} title="Intelligence" />
-        <IntelEmptyState enabledSources={sources.filter((s) => s.enabled).length} totalSources={sources.length} />
+        <IntelEmptyState enabledSources={sources.filter((s) => s.enabled).length} totalSources={sources.length}>
+          <MatterCoverageBand variant="empty" className="mt-6 rounded-md border" />
+        </IntelEmptyState>
       </div>
     );
   }

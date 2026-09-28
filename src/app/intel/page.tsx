@@ -7,7 +7,9 @@ import { intelAnalysisBootstrap } from "@/modules/intel/analysis/bootstrap";
 import { listEntities } from "@/modules/intel/analysis/entities";
 import { analysisStatus } from "@/modules/intel/analysis/insights";
 import { EntityExplorer } from "@/modules/intel/components/entity-explorer";
+import { MatterCoverageBand } from "@/modules/intel/components/matter-coverage-band";
 import { intelSources } from "@/modules/intel/store";
+import { scheduleAutoConfigure } from "@/modules/intel/autoconfig";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Intelligence" };
@@ -20,6 +22,7 @@ export const metadata: Metadata = { title: "Intelligence" };
 export default async function IntelPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await pageDb();
   intelAnalysisBootstrap();
+  scheduleAutoConfigure();
   const sp = await searchParams;
   const me = currentUser();
   const list = listEntities({ watchedBy: me.id, limit: 2000 });
@@ -30,6 +33,7 @@ export default async function IntelPage({ searchParams }: { searchParams: Promis
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageTopbar icon={<Radar />} title="Intelligence" context={`${list.total.toLocaleString()} entities · ${status.documents.toLocaleString()} records · ${status.relations.toLocaleString()} relations`} />
+      <MatterCoverageBand />
       <EntityExplorer initial={list} userId={me.id} status={status} sources={{ total: sources.length, enabled: sources.filter((s) => s.enabled).length }} initialParams={initialParams.toString()} />
     </div>
   );
