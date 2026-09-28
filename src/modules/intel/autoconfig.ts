@@ -26,7 +26,8 @@ import type { IntelAdapterId, IntelSource } from "./types";
  * volumes, then runs are enqueued (never executed inline here).
  */
 
-export const AUTOCONFIG_KEY = "intel:autoconfig";
+import { AUTOCONFIG_KEY } from "./search-provenance";
+export { AUTOCONFIG_KEY };
 export const AUTO_FLAG_KEY = "intel:autoconfig:auto-v1";
 const SYSTEM_ACTOR = { id: "svc_intel_autoconfig", name: "Intelligence setup (automatic)" };
 

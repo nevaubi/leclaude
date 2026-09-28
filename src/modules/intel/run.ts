@@ -5,6 +5,7 @@ import { aiConfig } from "@/lib/ai/config";
 import { getAdapter } from "./adapters";
 import { BudgetExhausted, emptyResult, errorFrom, type AdapterContext, type AdapterLogger, type IngestInput, type IntelAdapter } from "./adapters/types";
 import { defaultProviders, type IntelProviders } from "./providers";
+import { mattersForSearch, linkSourceRecordsToMatters } from "./search-provenance";
 import { findByExternalId, ingestDocument, intelWatches } from "./store";
 import type { AdapterResult, IntelJobLogLine, IntelSource } from "./types";
 
@@ -64,6 +65,7 @@ export async function runSource(source: IntelSource, opts: RunSourceOptions = {}
   const d = db();
   const scope = source.scope ?? {};
   const matters: Matter[] = scope.matterIds?.length ? scope.matterIds.map((id) => d.matters.get(id)).filter((m): m is Matter => Boolean(m)) : d.matters.find((m) => m.status === "active");
+  const servedMatters = new Set(matters.map((m) => m.id));
   const maxDocs = opts.maxDocs ?? DEFAULT_MAX_DOCS;
   let touched = 0;
   const embed = opts.embed ?? aiConfig().hasKey;
@@ -88,6 +90,9 @@ export async function runSource(source: IntelSource, opts: RunSourceOptions = {}
       if (touched >= maxDocs) throw new BudgetExhausted();
       if (opts.signal?.aborted) throw new DOMException("Aborted", "AbortError");
       touched++;
+      // Records found by a search derived from a matter belong to that matter (limited to the matters this run serves).
+      const linked = mattersForSearch(source.adapter, { query: typeof input.meta?.query === "string" ? input.meta.query : undefined, docketNumber: input.docketNumber }).filter((id) => servedMatters.has(id));
+      if (linked.length) input = { ...input, matterIds: Array.from(new Set([...(input.matterIds ?? []), ...linked])) };
       const r = await ingestDocument({ ...input, sourceId: input.sourceId ?? source.id, adapter: input.adapter ?? source.adapter, text: (input.text ?? "").slice(0, DEFAULT_MAX_TEXT) }, { embed, chunkSize: opts.chunkSize, now });
       if (r.status === "added") result.added++; else if (r.status === "updated") result.updated++; else result.skipped++;
       result.chunks = (result.chunks ?? 0) + (r.textChanged ? r.chunks : 0);
@@ -129,6 +134,10 @@ export async function runSource(source: IntelSource, opts: RunSourceOptions = {}
     else if ((e as Error)?.name === "AbortError") result.errors.push({ code: "cancelled", message: "Run cancelled", retryable: true, fatal: true, at: new Date().toISOString() });
     else { const err = errorFrom(e, { fatal: true, label: adapter.name }); result.errors.push(err); logger.error(`Run failed: ${err.message}`, { code: err.code }); }
   }
+  try {
+    const linked = linkSourceRecordsToMatters(source.id, source.adapter, servedMatters);
+    if (linked) ctx.note(`Linked ${linked} earlier record(s) to the matters their searches came from.`);
+  } catch (e) { logger.warn(`Linking records to matters failed: ${(e as Error).message}`); }
   result.errors = result.errors.slice(0, 50);
   result.durationMs = Date.now() - started;
   logger.info(`Finished: ${result.added} added, ${result.updated} updated, ${result.skipped} unchanged, ${result.errors.length} error(s)`, { durationMs: result.durationMs });

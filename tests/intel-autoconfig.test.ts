@@ -281,3 +281,25 @@ describe("one-time automatic apply", () => {
     expect(await maybeAutoConfigure()).toBeNull();
   });
 });
+
+describe("search provenance", () => {
+  it("links records to the matters whose searches found them, exactly and within the served matters", async () => {
+    const { mattersForSearch, linkSourceRecordsToMatters } = await import("@/modules/intel/search-provenance");
+    const { ingestDocument, intelDocuments } = await import("@/modules/intel/store");
+    resetIntel();
+    const plan = (matterId: string, caseLaw: string[], dockets: string[] = []) => ({ matterId, matterName: matterId, caseLaw: caseLaw.map((text) => ({ text, origin: "model" as const })), courts: [], dockets, mdls: [], judges: [], regulatory: [], statutes: [], products: [], news: [], method: "model" as const });
+    db().kv.set(AUTOCONFIG_KEY, { plans: [plan("m_a", ['"refusal to deal" AND smartphone']), plan("m_b", ["tying AND app store"], ["2:24-cv-04055"])], changes: [], jobs: [] } satisfies AutoconfigState);
+    expect(mattersForSearch("courtlistener-opinions", { query: '"Refusal to deal"   AND smartphone' })).toEqual(["m_a"]);
+    expect(mattersForSearch("courtlistener-opinions", { query: "refusal to deal" })).toEqual([]);
+    expect(mattersForSearch("courtlistener-dockets", { docketNumber: "2:24-cv-04055" })).toEqual(["m_b"]);
+    expect(mattersForSearch("federal-register", { query: "tying AND app store" })).toEqual([]);
+    const a = await ingestDocument({ sourceId: "src_test_op", adapter: "courtlistener-opinions", kind: "opinion", title: "Op A", externalId: "cl:test:a", dates: {}, text: "text a", meta: { query: '"refusal to deal" AND smartphone' } }, { embed: false });
+    const b = await ingestDocument({ sourceId: "src_test_op", adapter: "courtlistener-opinions", kind: "opinion", title: "Op B", externalId: "cl:test:b", dates: {}, text: "text b", meta: { query: "tying AND app store" } }, { embed: false });
+    // m_b is not served by this run: only m_a is linked.
+    expect(linkSourceRecordsToMatters("src_test_op", "courtlistener-opinions", new Set(["m_a"]))).toBe(1);
+    expect(intelDocuments().get(a.doc.id)!.matterIds).toEqual(["m_a"]);
+    expect(intelDocuments().get(b.doc.id)!.matterIds).toEqual([]);
+    expect(linkSourceRecordsToMatters("src_test_op", "courtlistener-opinions", new Set(["m_a"]))).toBe(0);
+    for (const d of [a.doc, b.doc]) intelDocuments().delete(d.id);
+  });
+});
