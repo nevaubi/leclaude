@@ -23,6 +23,9 @@ async function readEvents(res: Response): Promise<Ev[]> {
 describe("office agent route without an API key", () => {
   let POST: (req: Request) => Promise<Response>;
   beforeAll(async () => {
+    // Seed before the request so seeding's own audit events are not attributed to the agent turn.
+    const { db } = await import("@/lib/db");
+    db();
     const { createOfficeAgentHandler } = await import("@/modules/office/shared/route-factory");
     POST = createOfficeAgentHandler<{ text: string }>({
       kind: "word",
