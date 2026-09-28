@@ -5,7 +5,7 @@
  */
 import * as React from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
-import { PT_TO_PX, SLIDE_H, SLIDE_W, fontStack, isDark, parseMarkdownLite, resolveColor, resolveFontFace, type ChartSpec, type DeckElement, type DeckSlide, type DeckTheme, type TextLine } from "./model";
+import { PT_TO_PX, SLIDE_H, SLIDE_W, fontStack, isDark, parseMarkdownLite, resolveColor, resolveFontFace, type ChartSpec, type DeckElement, type DeckSlide, type DeckTheme, type TableBorder, type TableCell, type TextLine } from "./model";
 
 export interface SlideViewProps {
   slide: DeckSlide;
@@ -39,7 +39,7 @@ export function elementBoxStyle(e: DeckElement, theme: DeckTheme, extra: React.C
     top: e.y,
     width: e.w,
     height: e.type === "line" ? Math.max(1, e.h) : e.h,
-    transform: e.rotation ? `rotate(${e.rotation}deg)` : undefined,
+    transform: [e.rotation ? `rotate(${e.rotation}deg)` : "", e.flipH ? "scaleX(-1)" : "", e.flipV && e.type !== "line" ? "scaleY(-1)" : ""].filter(Boolean).join(" ") || undefined,
     transformOrigin: "center center",
     opacity: e.style.opacity ?? 1,
     boxSizing: "border-box",
@@ -168,10 +168,15 @@ function ImageView({ e, theme, base }: { e: DeckElement; theme: DeckTheme; base:
   if (!e.src) {
     return <div data-el-id={e.id} style={{ ...base, borderRadius: radius, border: `2px dashed ${resolveColor("muted", theme, "#999")}`, background: resolveColor(st.fill ?? "surface", theme, "#F3F4F6"), display: "flex", alignItems: "center", justifyContent: "center", color: resolveColor("muted", theme, "#666"), fontSize: 16 }}>{e.alt || "Image placeholder"}</div>;
   }
+  const c = e.crop;
+  const cropped = c && (c.l || c.t || c.r || c.b);
+  // A crop (OOXML srcRect) shows the inner part of the bitmap stretched to the box, like PowerPoint.
+  const cw = cropped ? Math.max(0.01, 1 - c.l - c.r) : 1, ch = cropped ? Math.max(0.01, 1 - c.t - c.b) : 1;
   return (
     <div data-el-id={e.id} style={{ ...base, borderRadius: radius, overflow: "hidden", background: resolveColor(st.fill, theme, "transparent"), border: st.stroke ? `${st.strokeWidth ?? 1}px solid ${resolveColor(st.stroke, theme, "#999")}` : undefined }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={e.src} alt={e.alt ?? ""} draggable={false} style={{ width: "100%", height: "100%", objectFit: st.fit ?? "contain", display: "block" }} />
+      {cropped ? <img src={e.src} alt={e.alt ?? ""} draggable={false} style={{ position: "absolute", width: `${100 / cw}%`, height: `${100 / ch}%`, left: `${(-c.l / cw) * 100}%`, top: `${(-c.t / ch) * 100}%`, maxWidth: "none", display: "block" }} />
+        : <img src={e.src} alt={e.alt ?? ""} draggable={false} style={{ width: "100%", height: "100%", objectFit: st.fit ?? "contain", display: "block" }} />}
     </div>
   );
 }
@@ -188,14 +193,32 @@ function TableView({ e, theme }: { e: DeckElement; theme: DeckTheme }) {
   const cols = Math.max(1, t.header.length);
   const widths = t.colWidths && t.colWidths.length === cols ? t.colWidths : Array.from({ length: cols }, () => 1 / cols);
   const total = widths.reduce((a, b) => a + b, 0) || 1;
+  const grid = t.cells && t.cells.length === t.rows.length + 1 && t.cells.every((r) => r.length === cols) ? t.cells : null;
+  const texts = [t.header, ...t.rows];
+  const heights = t.rowHeights && t.rowHeights.length === texts.length ? t.rowHeights : null;
+  const cellStyle = (ri: number, cell: TableCell | undefined): React.CSSProperties => {
+    const header = ri === 0 && t.firstRow !== false;
+    const b = cell?.borders;
+    const side = (x: TableBorder | undefined) => (x?.none ? "none" : x?.color ? `${Math.max(1, (x.width ?? 1) * PT_TO_PX)}px solid ${resolveColor(x.color, theme, "#999")}` : border);
+    return {
+      background: cell?.fill ? resolveColor(cell.fill, theme, "transparent") : header ? headerFill : st.banded !== false && ri % 2 === 0 && ri > 0 ? band : undefined,
+      color: header ? headerColor : undefined, fontWeight: header || cell?.bold ? 700 : undefined, textAlign: cell?.align ?? "left",
+      padding: header ? "8px 10px" : "7px 10px", verticalAlign: header ? "middle" : "top", overflowWrap: "anywhere", whiteSpace: "pre-line",
+      borderLeft: side(b?.l), borderRight: side(b?.r), borderTop: side(b?.t), borderBottom: side(b?.b),
+    };
+  };
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontFamily: fontStack(resolveFontFace(st.fontFamily, theme)), fontSize, color: resolveColor(st.color, theme, theme.colors.fg), lineHeight: 1.25 }}>
+    <table style={{ width: "100%", height: heights ? "100%" : undefined, borderCollapse: "collapse", tableLayout: "fixed", fontFamily: fontStack(resolveFontFace(st.fontFamily, theme)), fontSize, color: resolveColor(st.color, theme, theme.colors.fg), lineHeight: 1.25 }}>
       <colgroup>{widths.map((w, i) => <col key={i} style={{ width: `${(w / total) * 100}%` }} />)}</colgroup>
-      <thead><tr>{t.header.map((h, i) => <th key={i} style={{ background: headerFill, color: headerColor, fontWeight: 700, textAlign: "left", padding: "8px 10px", border, verticalAlign: "middle" }}>{h}</th>)}</tr></thead>
       <tbody>
-        {t.rows.map((r, ri) => (
-          <tr key={ri} style={{ background: st.banded !== false && ri % 2 === 1 ? band : undefined }}>
-            {Array.from({ length: cols }, (_, ci) => <td key={ci} style={{ padding: "7px 10px", border, verticalAlign: "top", overflowWrap: "anywhere" }}>{r[ci] ?? ""}</td>)}
+        {texts.map((r, ri) => (
+          <tr key={ri} style={{ height: heights ? `${heights[ri] * 100}%` : undefined }}>
+            {Array.from({ length: cols }, (_, ci) => {
+              const cell = grid?.[ri][ci];
+              if (cell?.hMerge || cell?.vMerge) return null;
+              const Tag = ri === 0 && t.firstRow !== false ? "th" : "td";
+              return <Tag key={ci} colSpan={cell?.gridSpan} rowSpan={cell?.rowSpan} style={cellStyle(ri, cell)}>{r[ci] ?? ""}</Tag>;
+            })}
           </tr>
         ))}
       </tbody>
