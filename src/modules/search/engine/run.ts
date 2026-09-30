@@ -67,6 +67,21 @@ type Send = (e: ResearchStreamEvent) => void;
 
 const MAX_ROUNDS_DEEP = 3;
 
+/**
+ * Hard wall for one research run, under the serverless function limit (300s): past it the platform kills the function
+ * and nothing is saved. Every stage below is sized against the time left so the run always reaches its terminal event
+ * and persistence. RESEARCH_WALL_MS overrides it on hosts with longer limits.
+ */
+export function researchWallMs(env: Readonly<Record<string, string | undefined>> = process.env): number {
+  const v = Number(env.RESEARCH_WALL_MS);
+  return Number.isFinite(v) && v >= 60_000 ? v : DEFAULT_WALL_MS;
+}
+const DEFAULT_WALL_MS = 265_000;
+/** Time kept back from the lanes for synthesis and verification. */
+const RESERVE_AFTER_LANES_MS = 120_000;
+/** A later round only starts with at least this much time left (lanes + synthesis + verification). */
+const MIN_ROUND_MS = 150_000;
+
 /** Inputs to the terminal/stop decision, kept explicit so the mapping is testable on its own. */
 export interface OutcomeInput {
   aborted: boolean;
@@ -141,6 +156,17 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   const createdThread = !existing;
   const aborted = () => Boolean(signal?.aborted);
   const metrics = new MetricsRecorder(requestedAt);
+  const wallMs = Math.min(policy.runTimeMs, deps.wallMs ?? researchWallMs());
+  const wallAt = startedAt + wallMs;
+  const remaining = () => wallAt - Date.now();
+  /** Stage budgets below are written for the default wall and scale with the effective one (1:1 in production). */
+  const scale = Math.min(1, wallMs / DEFAULT_WALL_MS);
+  const ms = (n: number) => n * scale;
+  /** A stage signal: the client's signal plus a stage deadline; `timedOut` tells a deadline from a client abort. */
+  const stage = (budget: number) => {
+    const timer = AbortSignal.timeout(Math.round(Math.max(ms(1_000), budget)));
+    return { signal: signal ? AbortSignal.any([signal, timer]) : timer, timedOut: () => timer.aborted && !aborted() };
+  };
 
   const emitter = createEmitter<ResearchStreamEvent>(runId, send);
   // Treatment checks start the moment a case is read (in parallel with the other lanes), bounded in number and time.
@@ -224,10 +250,10 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   });
 
   /** One verification pass over the current answer text, bound to its hash; quotes and read-state are then checked in code. */
-  const runVerification = async (pass: number, verifiable: ResearchSource[]): Promise<VerificationSummary> => {
+  const runVerification = async (pass: number, verifiable: ResearchSource[], stageSignal: AbortSignal | undefined = signal): Promise<VerificationSummary> => {
     const hash = artifactHash;
     emit({ type: "verification.started", artifactHash: hash, sources: verifiable.length, pass });
-    const v = await timedModelCall(metrics, () => withRetry(() => deps.verify({ answer, sources: verifyInput(verifiable), signal }), modelRetry));
+    const v = await timedModelCall(metrics, () => withRetry(() => deps.verify({ answer, sources: verifyInput(verifiable), signal: stageSignal }), { ...modelRetry, signal: stageSignal }));
     agents++;
     const raw = toSummary(v, verifiable, hash, pass);
     const checked = checkClaimEvidence(answer, raw.verdicts, numbered, textOf);
@@ -244,9 +270,12 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
 
   try {
     for (let round = 1; round <= maxRounds && !aborted(); round++) {
-      if (round > 1 && Date.now() - startedAt > policy.runTimeMs) { timeExceeded = true; break; }
+      if (round > 1 && (Date.now() - startedAt > policy.runTimeMs || remaining() < ms(MIN_ROUND_MS))) { timeExceeded = true; break; }
       rounds = round;
-      const lanes: ResearchLane[] = planLanes({ question, settings, mode, hasMatter: Boolean(matter), round, refinements });
+      // Lanes get what is left after keeping time back for synthesis and verification (never below 25s).
+      const laneCap = Math.max(ms(25_000), remaining() - ms(RESERVE_AFTER_LANES_MS));
+      const lanes: ResearchLane[] = planLanes({ question, settings, mode, hasMatter: Boolean(matter), round, refinements })
+        .map((l) => ({ ...l, timeoutMs: Math.min(l.timeoutMs ?? policy.laneTimeoutMs, laneCap) }));
       emit({ type: "plan.created", round, reason: round === 1 ? undefined : "coverage was thin; refined queries", lanes });
       // Fast-model planning runs concurrently with the first retrieval wave (lanes start on deterministic queries).
       if (round === 1 && mode === "deep" && deps.hasKey && deps.planQueries) {
@@ -273,7 +302,7 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
         {
           concurrency: policy.laneConcurrency,
           signal,
-          defaultTimeoutMs: policy.laneTimeoutMs,
+          defaultTimeoutMs: Math.min(policy.laneTimeoutMs, laneCap),
           onQueueWait: (ms) => metrics.addQueueWait(ms),
           skipped: (lane) => {
             emit({ type: "lane.completed", laneId: lane.id, status: "skipped", durationMs: 0, sources: 0, read: 0, failure: "cancelled" });
@@ -352,15 +381,19 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
         content: [{ type: "input_text", text: [prior ? `Conversation so far:\n${prior}` : "", laneNotes.length ? `${LANE_NOTE_HEADER}\n${laneNotes.join("\n\n")}` : "", context, `Before writing, identify the exact passages in the numbered sources that answer each sub-question; quote them verbatim in the Analysis with [n ¶k] pinpoints. Where the sources are silent, write "${NO_ANSWER_SENTENCE}"`, `Research question: ${question}`].filter(Boolean).join("\n\n") }],
       } as ResponseInputItem];
       let draft = "";
+      let streamed = "";
       let tail = "";
       const sourceCount = numbered.length;
+      // Synthesis keeps ~45s back for verification; past its deadline the streamed text is kept as a partial answer.
+      const synthStage = stage(Math.max(ms(30_000), remaining() - ms(45_000)));
       try {
         const res = await timedModelCall(metrics, () => deps.synthesize({
           instructions: synthesisInstructionsText,
           input: synthInput,
           evidence,
-          signal,
+          signal: synthStage.signal,
           onDelta: (d) => {
+            streamed += d;
             emit({ type: "answer.delta", delta: d });
             if (!metrics.has("firstSourceBacked")) {
               tail = (tail + d).slice(-20);
@@ -371,11 +404,18 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
         draft = typeof res === "string" ? res : res.text;
         agents++;
       } catch (e) {
-        if (isAbortError(e)) break;
-        if (e instanceof AIConfigError) { noKey = true; break; }
-        failure = classifyFailure(e);
-        failureMessage = `Synthesis failed: ${providerMessage(e)}`;
-        break;
+        if (synthStage.timedOut()) {
+          timeExceeded = true;
+          if (!streamed.trim()) { failure = "timeout"; failureMessage = "Synthesis did not finish within the run's time budget"; break; }
+          draft = `${streamed.trimEnd()}\n\n_The answer was cut short by the run's time limit; the part above is what was written from the sources._`;
+          agents++;
+        } else if (isAbortError(e)) break;
+        else {
+          if (e instanceof AIConfigError) { noKey = true; break; }
+          failure = classifyFailure(e);
+          failureMessage = `Synthesis failed: ${providerMessage(e)}`;
+          break;
+        }
       }
       answer = draft.trim();
       publishVersion(answer, "draft");
@@ -384,16 +424,24 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
       // --- verification loop (hash-bound) ----------------------------------------
       verificationUnavailable = null;
       const verifiable = verifiableSources();
-      if (verifiable.length && answer) {
+      if (verifiable.length && answer && remaining() < ms(25_000)) {
+        timeExceeded = true;
+        verificationUnavailable = "Verification was skipped because the run's time budget was spent; the claims are not checked";
+        emit({ type: "verification.unavailable", artifactHash, reason: verificationUnavailable, failure: "timeout" });
+      } else if (verifiable.length && answer) {
+        const verifyStage = stage(Math.max(ms(20_000), remaining() - ms(15_000)));
         try {
-          const first = await runVerification(1, verifiable);
+          const first = await runVerification(1, verifiable, verifyStage.signal);
           verification = first;
-          if (!aborted() && first.unsupported + first.contradicted > 0) {
+          if (!aborted() && first.unsupported + first.contradicted > 0 && remaining() < ms(60_000)) {
+            emit({ type: "correction.completed", artifactHash, changed: false, note: "Not enough time was left for a correction pass; unsupported claims are flagged in the verdicts." });
+          } else if (!aborted() && first.unsupported + first.contradicted > 0) {
             const draftHash = artifactHash;
             emit({ type: "correction.started", artifactHash: draftHash, unsupported: first.unsupported, contradicted: first.contradicted });
             try {
               const correctionInput = `ANSWER:\n${answer}\n\nSOURCES (read):\n${verifiable.map((s) => { const b = evidence[(s.n ?? 0) - 1]; return b ? `[${s.n}] ${b.title}\n${evidenceText(b).slice(0, 5000)}` : renderSourcesForPrompt([s], texts, { maxCharsPerSource: 4000 }); }).join("\n\n")}\n\nVERDICTS:\n${first.verdicts.map((x) => `- [${x.status}] ${x.claim}${x.sourceN ? ` (source [${x.sourceN}])` : ""}${x.quote ? ` — "${x.quote}"` : ""}${x.note ? ` — ${x.note}` : ""}`).join("\n")}`;
-              const revisedRaw = await timedModelCall(metrics, () => withRetry(() => deps.correct({ instructions: CORRECTION_INSTRUCTIONS, input: correctionInput, signal }), modelRetry));
+              const correctStage = stage(Math.max(ms(20_000), remaining() - ms(40_000)));
+              const revisedRaw = await timedModelCall(metrics, () => withRetry(() => deps.correct({ instructions: CORRECTION_INSTRUCTIONS, input: correctionInput, signal: correctStage.signal }), { ...modelRetry, signal: correctStage.signal }));
               agents++;
               const revised = revisedRaw.trim();
               const changed = revised.length > 0 && revised !== answer;
@@ -404,9 +452,10 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
                 // The answer changed, so the verdicts for the draft hash no longer count: re-verify the revised text.
                 if (!aborted()) {
                   try {
-                    verification = await runVerification(2, verifiable);
+                    const reverify = stage(Math.max(ms(15_000), remaining() - ms(10_000)));
+                    verification = await runVerification(2, verifiable, reverify.signal);
                   } catch (e) {
-                    if (isAbortError(e)) break;
+                    if (isAbortError(e) && aborted()) break;
                     verificationUnavailable = `The revised answer could not be re-verified (${providerMessage(e)}); the verdicts shown are for the earlier draft`;
                     emit({ type: "verification.unavailable", artifactHash, reason: verificationUnavailable, failure: classifyFailure(e) });
                   }
@@ -415,13 +464,14 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
                 emit({ type: "correction.completed", artifactHash: draftHash, changed: false, note: "Verification flagged claims but the correction pass made no changes; unsupported claims remain marked in the verdicts." });
               }
             } catch (e) {
-              if (isAbortError(e)) break;
-              emit({ type: "correction.completed", artifactHash: draftHash, changed: false, note: `Correction pass unavailable (${providerMessage(e)}); unsupported claims are flagged in the verdicts.` });
+              if (isAbortError(e) && aborted()) break;
+              emit({ type: "correction.completed", artifactHash: draftHash, changed: false, note: `Correction pass unavailable (${isAbortError(e) ? "time budget spent" : providerMessage(e)}); unsupported claims are flagged in the verdicts.` });
             }
           }
         } catch (e) {
-          if (isAbortError(e)) break;
-          verificationUnavailable = `Verification unavailable: ${providerMessage(e)}`;
+          if (isAbortError(e) && aborted()) break;
+          if (verifyStage.timedOut()) timeExceeded = true;
+          verificationUnavailable = `Verification unavailable: ${verifyStage.timedOut() ? "the run's time budget was spent" : providerMessage(e)}`;
           emit({ type: "verification.unavailable", artifactHash, reason: verificationUnavailable, failure: classifyFailure(e) });
         }
       } else if (answer) {
@@ -437,13 +487,15 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
       emit({ type: "round.completed", round, complete: coverage.complete, reason: coverage.reason });
       if (coverage.complete) break;
       refinements = coverage.refinements;
+      if (remaining() < ms(MIN_ROUND_MS)) { timeExceeded = true; break; }
       if (coverage.gaps.length) {
         try {
-          const modelRefinements = await timedModelCall(metrics, () => deps.refine({ question, gaps: coverage!.gaps, laneKinds: lanes.map((l) => l.kind), signal }));
+          const refineStage = stage(ms(15_000));
+          const modelRefinements = await timedModelCall(metrics, () => deps.refine({ question, gaps: coverage!.gaps, laneKinds: lanes.map((l) => l.kind), signal: refineStage.signal }));
           for (const [k, qs] of Object.entries(modelRefinements) as [LaneKind, string[]][]) if (qs?.length) refinements[k] = Array.from(new Set([...(refinements[k] ?? []), ...qs])).slice(0, 3);
         } catch (e) {
-          if (isAbortError(e)) break;
-          /* deterministic refinements are enough */
+          if (isAbortError(e) && aborted()) break;
+          /* deterministic refinements are enough (also when the refine call ran out of time) */
         }
       }
     }
@@ -456,7 +508,10 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
     const cross = crossCheckCitations(answer, numbered);
     let remote = new Set<string>();
     if (cross.unmatched.length) {
-      try { remote = new Set((await deps.verifyCitationsRemote(cross.unmatched.map((c) => c.citation).join("; "), signal)).map(normCite)); } catch { /* offline: everything stays unresolved/requires review */ }
+      if (remaining() > ms(12_000)) {
+        const citeStage = stage(Math.min(ms(12_000), remaining() - ms(8_000)));
+        try { remote = new Set((await deps.verifyCitationsRemote(cross.unmatched.map((c) => c.citation).join("; "), citeStage.signal)).map(normCite)); } catch { /* offline or out of time: everything stays unresolved/requires review */ }
+      }
     }
     citationChecks = withCitationStates(cross.checks, remote);
     citationCheck = buildCitationCheck(artifactHash, citationChecks);
@@ -479,7 +534,10 @@ export async function runResearch(input: RunResearchInput, send: Send, signal: A
   let followUps: string[] = [];
   if (!aborted()) {
     if (!noKey && answer) {
-      try { followUps = await timedModelCall(metrics, () => deps.followUps({ question, answer, matterLine, signal })); } catch { followUps = []; }
+      if (remaining() > ms(10_000)) {
+        const followStage = stage(Math.min(ms(10_000), remaining() - ms(5_000)));
+        try { followUps = await timedModelCall(metrics, () => deps.followUps({ question, answer, matterLine, signal: followStage.signal })); } catch { followUps = []; }
+      }
     }
     if (!followUps.length) followUps = fallbackFollowUps(question, settings, matter);
   }

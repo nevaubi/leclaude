@@ -58,6 +58,8 @@ export interface EngineDeps {
   planQueries?(input: { question: string; context: string; laneKinds: LaneKind[]; signal?: AbortSignal }): Promise<ResearchPlan>;
   /** Citing-reference treatment signal for a case (never an assertion of good law). */
   citing?(input: { opinionId: number; signal?: AbortSignal }): Promise<AuthorityTreatment>;
+  /** Overrides the run wall (researchWallMs); stage budgets scale with it. Tests only. */
+  wallMs?: number;
   /** Resolve one reporter citation without substitution. */
   resolveCitation?(citation: string, signal?: AbortSignal): Promise<CitationResolution>;
 }
